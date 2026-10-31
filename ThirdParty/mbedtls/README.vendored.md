@@ -26,9 +26,16 @@ submodule). Only the library is taken; the release's `tests/`, `programs/`, `doc
 
 ## Configuration
 
-Upstream's defaults, unchanged: `include/mbedtls/mbedtls_config.h` and
-`tf-psa-crypto/include/psa/crypto_config.h`. No defines are passed; the source list is the one
-upstream's own CMake configures with those defaults (115 files). To change the configuration, set
+Upstream's defaults in `include/mbedtls/mbedtls_config.h` and
+`tf-psa-crypto/include/psa/crypto_config.h`, unedited, with one change passed as defines: the
+threading layer is on (`MBEDTLS_THREADING_C`, 2026-10-30), since the engine reaches the crypto
+layer from more than one thread and upstream requires it then. `MBEDTLS_THREADING_PTHREAD` on
+Linux, the Deck and the web; `MBEDTLS_THREADING_ALT` on Windows, its types in
+`ThirdParty/mbedtls-house/threading_alt.h` (outside this copy) and its functions installed by the
+engine's backend (`Code/Foundation/Net.Tls.MbedTLS`). The source list is the one upstream's own
+CMake configures with the defaults, except Everest: only `Hacl_Curve25519_joined.c` and `x25519.c`,
+as upstream builds it (the parts never build alone; MSVC refuses the 128-bit one). To change the
+configuration further, set
 `MBEDTLS_CONFIG_FILE` / `TF_PSA_CRYPTO_CONFIG_FILE` (or the `_USER_` variants) on the target rather
 than editing the vendored headers, so an update is a plain copy.
 

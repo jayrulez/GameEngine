@@ -173,6 +173,38 @@ TEST_CASE("tls: the client refuses a certificate for another name, an untrusted 
     }
 }
 
+// One backend serves more than one thread (a run's HTTP client on its worker while the game thread
+// joins over wss): the crypto layer's shared state is guarded (MBEDTLS_THREADING_C). Two threads
+// make sessions and shake hands at once, each a series of times, all from one backend.
+TEST_CASE("tls: one backend, two threads shaking hands at once")
+{
+    const TlsCertificate cert = Certificate(u8"game.example");
+    UniquePtr<ITlsBackend> backend = CreateMbedTlsBackend(DefaultAllocator());
+    TlsServerConfig serverConfig;
+    serverConfig.certificateChainPem = cert.certificatePem;
+    serverConfig.privateKeyPem = cert.privateKeyPem;
+    const TlsClientConfig clientConfig = Trusting(cert, u8"game.example");
+    i32 opened[2] = {0, 0};
+    const auto shake = [&](i32& count)
+    {
+        for (u32 i = 0; i < 12; ++i)
+        {
+            UniquePtr<ITlsSession> client = backend->CreateClient(clientConfig);
+            UniquePtr<ITlsSession> server = backend->CreateServer(serverConfig);
+            (void)client->Write(Bytes(u8"ping"));
+            Pump(*client, *server);
+            if (client->State() == TlsState::Open && server->State() == TlsState::Open && ReadAll(*server) == StringView(u8"ping"))
+                ++count;
+        }
+    };
+    Thread a([&]() { shake(opened[0]); });
+    Thread b([&]() { shake(opened[1]); });
+    a.Join();
+    b.Join();
+    CHECK(opened[0] == 12);
+    CHECK(opened[1] == 12);
+}
+
 TEST_CASE("tls: a close is seen by the peer")
 {
     const TlsCertificate cert = Certificate(u8"localhost");

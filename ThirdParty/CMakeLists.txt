@@ -523,6 +523,23 @@ target_include_directories(mbedtls PRIVATE
 if(WIN32)
     target_link_libraries(mbedtls PUBLIC ws2_32 bcrypt)
 endif()
+# Thread-safe: the crypto layer keeps global state (its random generator, its key store) and the
+# engine reaches it from more than one thread (a run's HTTP client on its worker, the game thread's
+# wss joins and gateway). Mbed TLS: "You must enable this option if TF-PSA-Crypto runs in a
+# multithreaded environment." pthreads where they exist; on Windows the alternate layer, whose
+# types are mbedtls-house/threading_alt.h and whose functions the engine's backend installs. The
+# web links no Threads package (that would turn on wasm threads); its pthread mutexes are libc's.
+target_compile_definitions(mbedtls PUBLIC MBEDTLS_THREADING_C)
+if(WIN32)
+    target_compile_definitions(mbedtls PUBLIC MBEDTLS_THREADING_ALT)
+    target_include_directories(mbedtls SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/mbedtls-house)
+else()
+    target_compile_definitions(mbedtls PUBLIC MBEDTLS_THREADING_PTHREAD)
+    if(NOT EMSCRIPTEN)
+        find_package(Threads REQUIRED)
+        target_link_libraries(mbedtls PUBLIC Threads::Threads)
+    endif()
+endif()
 set_target_properties(mbedtls PROPERTIES C_STANDARD 99
                                          POSITION_INDEPENDENT_CODE ON
                                          OUTPUT_NAME thirdparty_mbedtls)

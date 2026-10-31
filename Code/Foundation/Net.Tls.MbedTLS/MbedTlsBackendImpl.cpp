@@ -14,6 +14,7 @@ module;
 #include <mbedtls/pk.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/x509_crt.h>
+#include <mbedtls/threading.h>
 
 module foundation.net.tls.mbedtls;
 
@@ -35,7 +36,61 @@ namespace foundation::net
         }
 
         // PSA must be up before any key or session; it is idempotent.
-        bool EnsureCrypto() { return psa_crypto_init() == PSA_SUCCESS; }
+#if defined(MBEDTLS_THREADING_ALT)
+        // Windows: Mbed TLS's alternate threading layer (no pthreads), over Win32's slim lock and
+        // condition variable (the types: ThirdParty/mbedtls-house/threading_alt.h).
+        int MutexInit(mbedtls_platform_mutex_t* m)
+        {
+            ::InitializeSRWLock(m);
+            return 0;
+        }
+        void MutexDestroy(mbedtls_platform_mutex_t*) {}
+        int MutexLock(mbedtls_platform_mutex_t* m)
+        {
+            ::AcquireSRWLockExclusive(m);
+            return 0;
+        }
+        int MutexUnlock(mbedtls_platform_mutex_t* m)
+        {
+            ::ReleaseSRWLockExclusive(m);
+            return 0;
+        }
+        int CondInit(mbedtls_platform_condition_variable_t* c)
+        {
+            ::InitializeConditionVariable(c);
+            return 0;
+        }
+        void CondDestroy(mbedtls_platform_condition_variable_t*) {}
+        int CondSignal(mbedtls_platform_condition_variable_t* c)
+        {
+            ::WakeConditionVariable(c);
+            return 0;
+        }
+        int CondBroadcast(mbedtls_platform_condition_variable_t* c)
+        {
+            ::WakeAllConditionVariable(c);
+            return 0;
+        }
+        int CondWait(mbedtls_platform_condition_variable_t* c, mbedtls_platform_mutex_t* m)
+        {
+            return ::SleepConditionVariableSRW(c, m, INFINITE, 0) ? 0 : MBEDTLS_ERR_THREADING_USAGE_ERROR;
+        }
+#endif
+
+        // The crypto library, started once, thread-safely (a static's initialisation): on Windows
+        // the threading functions first, as Mbed TLS requires, before any other call.
+        bool EnsureCrypto()
+        {
+            static const bool started = []()
+            {
+#if defined(MBEDTLS_THREADING_ALT)
+                mbedtls_threading_set_alt(&MutexInit, &MutexDestroy, &MutexLock, &MutexUnlock, &CondInit, &CondDestroy, &CondSignal,
+                                          &CondBroadcast, &CondWait);
+#endif
+                return psa_crypto_init() == PSA_SUCCESS;
+            }();
+            return started;
+        }
 
         mbedtls_ssl_protocol_version ToMbed(TlsVersion v)
         {

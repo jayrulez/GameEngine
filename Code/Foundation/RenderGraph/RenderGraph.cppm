@@ -772,9 +772,28 @@ export namespace foundation::rendergraph
             }
         }
 
+        // Each pass waits for what it must follow on every resource it touches: a read waits for
+        // the last earlier writer of what it reads (read after write); a write waits for the last
+        // earlier writer (write after write) and for every earlier reader since that writer (write
+        // after read). Edges only point back in declaration order, so the declared order always
+        // satisfies them: the sort may move independent passes, never one hazard past another.
         void BuildDependencies()
         {
-            for (usize passIdx = 0; passIdx < m_passes.Size(); ++passIdx)
+            const usize passCount = m_passes.Size();
+            Array<Array<RGResourceAccess>> inputs(*m_allocator);
+            Array<Array<RGResourceAccess>> outputs(*m_allocator);
+            for (usize i = 0; i < passCount; ++i)
+            {
+                inputs.PushBack(Array<RGResourceAccess>(*m_allocator));
+                outputs.PushBack(Array<RGResourceAccess>(*m_allocator));
+                if (!m_passes[i]->isCulled)
+                {
+                    m_passes[i]->GetInputs(inputs[i]);
+                    m_passes[i]->GetOutputs(outputs[i]);
+                }
+            }
+
+            for (usize passIdx = 0; passIdx < passCount; ++passIdx)
             {
                 RenderGraphPass* pass = m_passes[passIdx];
                 if (pass->isCulled)
@@ -782,51 +801,70 @@ export namespace foundation::rendergraph
                     continue;
                 }
 
-                Array<RGResourceAccess> readAccesses;
-                pass->GetInputs(readAccesses);
-
-                for (const RGResourceAccess& readAccess : readAccesses)
+                for (const RGResourceAccess& readAccess : inputs[passIdx])
                 {
-                    if (!readAccess.handle.IsValid() ||
-                        readAccess.handle.index >= m_resources.Size())
+                    if (!IsTrackedAccess(readAccess))
                     {
                         continue;
                     }
-                    RenderGraphResource* res = m_resources[readAccess.handle.index];
-                    const u32 totalMips = res != nullptr ? res->TotalMipLevels() : 1u;
-                    const u32 totalLayers = res != nullptr ? res->TotalArrayLayers() : 1u;
-
                     for (usize j = passIdx; j-- > 0;)
                     {
-                        RenderGraphPass* writer = m_passes[j];
-                        if (writer->isCulled)
-                        {
-                            continue;
-                        }
-                        Array<RGResourceAccess> writerOutputs;
-                        writer->GetOutputs(writerOutputs);
-
-                        bool overlaps = false;
-                        for (const RGResourceAccess& writerAccess : writerOutputs)
-                        {
-                            if (writerAccess.handle == readAccess.handle &&
-                                (readAccess.subresource.IsAll() ||
-                                 writerAccess.subresource.IsAll() ||
-                                 readAccess.subresource.Overlaps(writerAccess.subresource,
-                                                                 totalMips, totalLayers)))
-                            {
-                                overlaps = true;
-                                break;
-                            }
-                        }
-                        if (overlaps)
+                        if (!m_passes[j]->isCulled && AnyOverlap(outputs[j], readAccess))
                         {
                             AddDependencyIfNew(*pass, PassHandle{static_cast<u32>(j)});
                             break;
                         }
                     }
                 }
+
+                for (const RGResourceAccess& writeAccess : outputs[passIdx])
+                {
+                    if (!IsTrackedAccess(writeAccess))
+                    {
+                        continue;
+                    }
+                    for (usize j = passIdx; j-- > 0;)
+                    {
+                        if (m_passes[j]->isCulled)
+                        {
+                            continue;
+                        }
+                        const bool wrote = AnyOverlap(outputs[j], writeAccess);
+                        if (wrote || AnyOverlap(inputs[j], writeAccess))
+                        {
+                            AddDependencyIfNew(*pass, PassHandle{static_cast<u32>(j)});
+                        }
+                        if (wrote) // readers before it are ordered before it already
+                        {
+                            break;
+                        }
+                    }
+                }
             }
+        }
+
+        [[nodiscard]] bool IsTrackedAccess(const RGResourceAccess& access) const noexcept
+        {
+            return access.handle.IsValid() && access.handle.index < m_resources.Size();
+        }
+
+        // Whether any of `accesses` touches the resource and subresources `access` does.
+        [[nodiscard]] bool AnyOverlap(const Array<RGResourceAccess>& accesses,
+                                      const RGResourceAccess& access) const noexcept
+        {
+            const RenderGraphResource* res = m_resources[access.handle.index];
+            const u32 totalMips = res != nullptr ? res->TotalMipLevels() : 1u;
+            const u32 totalLayers = res != nullptr ? res->TotalArrayLayers() : 1u;
+            for (const RGResourceAccess& other : accesses)
+            {
+                if (other.handle == access.handle &&
+                    (access.subresource.IsAll() || other.subresource.IsAll() ||
+                     access.subresource.Overlaps(other.subresource, totalMips, totalLayers)))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         static void AddDependencyIfNew(RenderGraphPass& pass, PassHandle dep)

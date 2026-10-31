@@ -198,3 +198,82 @@ TEST_CASE("rg.dep: writer chain orders correctly")
     CHECK(PassName(graph, 1) == u8"Process");
     CHECK(PassName(graph, 2) == u8"FinalRead");
 }
+
+// A pass that overwrites a resource must come after the earlier passes that read it (write after
+// read), even when it has no inputs of its own and the reader waits on something else: here the
+// reader waits on "Lit" while "Overwrite" is free to run at once.
+TEST_CASE("rg.dep: a later overwrite waits for an earlier reader (write after read)")
+{
+    RenderGraph graph(DefaultAllocator(), nullptr);
+    graph.BeginFrame(0);
+    const RGHandle lit =
+        graph.CreateTransient(u8"Lit", RGTextureDesc(rhi::TextureFormat::RGBA8Unorm));
+    const RGHandle history = graph.ImportTarget(u8"History", nullptr, nullptr);
+    const RGHandle out =
+        graph.CreateTransient(u8"Out", RGTextureDesc(rhi::TextureFormat::RGBA8Unorm));
+
+    graph.AddRenderPass(u8"Light",
+                        [&](PassBuilder& b)
+                        {
+                            b.SetColorTarget(0, lit, rhi::LoadOp::Clear, rhi::StoreOp::Store);
+                            b.NeverCull();
+                        });
+    graph.AddRenderPass(u8"Resolve",
+                        [&](PassBuilder& b)
+                        {
+                            b.ReadTexture(lit);
+                            b.ReadTexture(history); // last frame's content
+                            b.SetColorTarget(0, out, rhi::LoadOp::Clear, rhi::StoreOp::Store);
+                            b.NeverCull();
+                        });
+    graph.AddRenderPass(u8"Overwrite",
+                        [&](PassBuilder& b)
+                        {
+                            b.SetColorTarget(0, history, rhi::LoadOp::Clear, rhi::StoreOp::Store);
+                            b.NeverCull();
+                        });
+
+    REQUIRE(graph.Compile().IsOk());
+    REQUIRE(graph.ExecutionOrder().Size() == 3u);
+    CHECK(PassName(graph, 0) == u8"Light");
+    CHECK(PassName(graph, 1) == u8"Resolve");
+    CHECK(PassName(graph, 2) == u8"Overwrite");
+}
+
+// Two passes that overwrite one resource keep their declared order (write after write), so the
+// later declaration's content is what follows: the first writer waits on "Input", the second does
+// not.
+TEST_CASE("rg.dep: two overwrites of one resource keep their declared order (write after write)")
+{
+    RenderGraph graph(DefaultAllocator(), nullptr);
+    graph.BeginFrame(0);
+    const RGHandle input =
+        graph.CreateTransient(u8"Input", RGTextureDesc(rhi::TextureFormat::RGBA8Unorm));
+    const RGHandle target = graph.ImportTarget(u8"Target", nullptr, nullptr);
+
+    graph.AddRenderPass(u8"MakeInput",
+                        [&](PassBuilder& b)
+                        {
+                            b.SetColorTarget(0, input, rhi::LoadOp::Clear, rhi::StoreOp::Store);
+                            b.NeverCull();
+                        });
+    graph.AddRenderPass(u8"FirstWrite",
+                        [&](PassBuilder& b)
+                        {
+                            b.ReadTexture(input);
+                            b.SetColorTarget(0, target, rhi::LoadOp::Clear, rhi::StoreOp::Store);
+                            b.NeverCull();
+                        });
+    graph.AddRenderPass(u8"SecondWrite",
+                        [&](PassBuilder& b)
+                        {
+                            b.SetColorTarget(0, target, rhi::LoadOp::Clear, rhi::StoreOp::Store);
+                            b.NeverCull();
+                        });
+
+    REQUIRE(graph.Compile().IsOk());
+    REQUIRE(graph.ExecutionOrder().Size() == 3u);
+    CHECK(PassName(graph, 0) == u8"MakeInput");
+    CHECK(PassName(graph, 1) == u8"FirstWrite");
+    CHECK(PassName(graph, 2) == u8"SecondWrite");
+}

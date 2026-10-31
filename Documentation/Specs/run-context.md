@@ -1,6 +1,8 @@
 # Runs: a type for one running game
 
-Status: PROPOSED, revised 2026-10-30 for the user's full review. Written on the Sedulous side
+Status: APPROVED 2026-10-30 (user: "execute the spec on a run branch"), the open questions taken
+as proposed: events for subsystem state, now rather than after 0.1, GameInstance deriving from
+RunBase. Built on branch `run`. Written on the Sedulous side
 2026-10-16 as "Run context"; adopted here and led here, Sedulous mirroring it through its port
 queue. Decided so far (user 2026-10-30): the name is `Run`; the run and its manager are interfaces
 (`IRun`, which `GameInstance` implements; `IRunManager`, which `DefaultApplication` implements);
@@ -108,7 +110,9 @@ D4. **`IRun`**, the interface a run is reached through, and **`RunBase`**, the h
     };
     ```
 
-    `RunBase : IRun` holds the id, name, state machine, bus and service table, with
+    `RunBase : IRun` holds the id, name, state machine, bus and service table (as built: a run
+    that registers its own members as services calls `Dispose()` in its own destructor, so their
+    stop hooks run while they exist), with
     `Add<T>(args...)` (constructs and owns, the run's allocator), `Register<T>(T&)` (borrows),
     `Remove<T>()`; owned services are destroyed in REVERSE order of registration; a type
     registered twice replaces (destroying an owned predecessor). `GameInstance` derives from it.
@@ -135,9 +139,11 @@ D6. **Pause is the host's pause**: the editor toolbar and a debugger break. A ga
     (`run.timeScale = 0`) is the game's business and is not a run pause: its music plays on, as
     `AudioSubsystem::SetRunPaused` documents today.
 
-D7. **`IRunManager`**, implemented by `DefaultApplication` (which already creates, releases and
-    enumerates the instances: `CreateInstance`, `ReleaseInstance`, `ForEachInstance`), and
-    **`RunRegistry`**, the helper that implements its bookkeeping once:
+D7. **`IRunManager`**, provided by `DefaultApplication` (which already creates, releases and
+    enumerates the instances: `CreateInstance`, `ReleaseInstance`, `ForEachInstance`) through the
+    **`RunRegistry`** it owns, the one implementation (as built: `RunRegistry : IRunManager`, so
+    the application forwards nothing; it adds each instance to its registry and hands the
+    registry to the subsystem manager):
 
     ```cpp
     class IRunListener
@@ -167,6 +173,11 @@ D7. **`IRunManager`**, implemented by `DefaultApplication` (which already create
 
     - Events go to listeners in subscription order, once per transition; destroying the focused
       run clears the focus (raising `OnFocusChanged(nullptr)`).
+    - As built: a run announces its transitions to one lifecycle listener
+      (`RunBase::SetLifecycleListener`), which the registry sets on each run it is given
+      (`RunRegistry::Add`) and fans out. A run's `Dispose` announces its destruction, which takes
+      it out of the registry: there is no separate remove to forget. A registry destroyed before
+      its runs detaches from them.
     - **Where subsystems find it:** `SubsystemManager::SetRunManager(run::IRunManager*)` and
       `RunManager()`. `DefaultApplication` sets it as it configures and clears it in its
       `OnShutdown`. Every subsystem reaches it through `Manager()->RunManager()`, an engine
@@ -295,7 +306,7 @@ only if the callback becomes a burden.
   context. Mechanical, its own commit, before or alongside P2.
 - **The subsystem manager's rename**: done (`Specs/subsystem-manager-rename.md`).
 
-## Open questions
+## Open questions (answered 2026-10-30, as proposed)
 
 1. **Events or services for subsystem state (D8).** Events keep ownership with the subsystem and
    avoid cross-tier teardown; services would give a scene's run direct access to its GUI tier

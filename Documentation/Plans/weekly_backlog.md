@@ -13,6 +13,61 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-10-31 (user, after a survey of the engine): transient textures reused within a frame
+
+The render graph pools transient textures across frames only (`TransientTexturePool.cppm`: an
+exact descriptor match, aged out after unused frames). `TryAcquire` takes the entry it hands out,
+so two transients in one frame never share a texture even when one's last pass precedes the
+other's first; `firstUsePass`/`lastUsePass` are recorded (`RenderGraph.cppm`, the lifetime pass)
+and nothing reads them. The work: alias transients with disjoint lifetimes over the execution
+order (return a texture to a per-frame free list after its last pass, or plan the assignment up
+front), keep the barrier solver right across the handover (the next user starts from Undefined, so
+its first access discards), and measure the memory it saves on the samples (a probe capture alone
+makes five G-buffer transients per face).
+
+## Queued 2026-10-31 (user, after a survey of the engine): input rebinding wired into the engine
+
+The rebind overlay exists in Foundation (`InputBindingOverrides`, `ApplyBindingOverrides`,
+`InputMap.cppm:242-330`: per-action replacement bindings over a pristine copy of the asset,
+persisted as a settings section, reset by removal) and only the InputActions sample uses it
+(`Samples/InputActions/main.cpp:251-288`). The work: the input subsystem applies a player's saved
+overlay when it binds the project's map, the player loads and saves it in the user's settings, and
+scripts get the calls a rebind screen needs (list an action's bindings, listen for the next input,
+set, reset, save), with tests through Code/Integration.
+
+## Queued 2026-10-31 (user, after a survey of the engine): script hot reload resets transient state
+
+To discuss: a script's reload during play re-instantiates each behaviour on the new class and
+re-applies its serialized overrides; everything the script set at run time is lost
+(`ScriptSubsystem.cppm:1070`, "transient script state resets; documented v1"). Questions: whether
+to carry the old instance's fields across (by name and type, through reflection), what happens to
+a field that changed type or went away, whether coroutines, timers and event subscriptions in
+flight survive or restart, how the Level and Game scripts differ from behaviours, and what the two
+backends can each offer (AngelScript and Luau hold state differently).
+
+## Queued 2026-10-31 (user, after a survey of the engine): more editor testing
+
+To discuss: most editor tests call widgets directly; pointer input is injected in a handful of
+editor test files, and no editor test target imports `foundation.gui.testing` (its Finder and
+Tester drive a GUI the way a user does; only Editor.App imports it, for the MCP input tools).
+Tests of that kind build a panel, press its buttons and read the texts; cost tests assert
+per-frame work budgets. Questions: which pages and dialogs get input-driven tests first, whether a
+headless editor fixture can host a page for a Tester, whether to add idle-frame cost budgets, and
+how these relate to the MCP-driven checks (`editor_click`, `editor_find`) done by hand today.
+
+## Queued 2026-10-31 (user, after a survey of the engine): native components that migrate their state
+
+To discuss: a native module's reload (game-native N6, Project > Reload Native Module,
+`EditorNativeModule.cppm`) stops every run, snapshots the open scenes through the wire format and
+restores them on the new module; a running game's state is not carried, by the spec's ruling
+(`Specs/game-native-code.md`, N6: run-bracketed reload only). Another design also reloads with
+play stopped, but captures the live components, restores their state through reflection and rolls
+back to the old binary when the new one fails to load or validate. Questions: whether a reload
+that fails to stage or load the new module should roll back to the old one (today it leaves none
+loaded, `EditorNativeModule.cppm:107-132`), whether the reload should start itself when a build
+finishes (it is a menu command today), and whether components should migrate through reflection
+rather than the scene snapshot (what that buys over the wire format, which already goes through
+the DataVersion gates).
 ## Queued 2026-10-30 (user, during the run spec): the scene event bus, and whether it is needed
 
 To discuss: whether a scene needs an event bus of its own at all, now that the run owns one

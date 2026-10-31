@@ -148,14 +148,13 @@ animated by Blender scripts.
 
 Watch it played on a Steam Deck: [PaperKid gameplay video](https://youtu.be/syJlmIirg_o).
 
-**Snowline** is a snowboard time trial with tricks, chosen for the engine features the earlier
-games do not use: generated terrain with splat-painted snow, rock and forest, scattered vegetation whose
-trees are solid, splines for the course line and the medal ghosts, an animation graph the rider
-drives by parameters, decals for its tracks, and jointed slalom flags. Three courses opened by
-medals: Meadow, Forest with its shortcut through the trees, and Ridge with a run of kickers, a gap
-over a crevasse and an avalanche chasing down the last stretch. Spins and grabs score on a combo,
-and your best run rides beside you as a ghost. The rider is modelled, rigged and animated by
-Blender scripts.
+**Snowline** is a snowboard time trial with tricks. It shows generated terrain with splat-painted
+snow, rock and forest, scattered vegetation whose trees are solid, splines for the course line and
+the medal ghosts, an animation graph the rider drives by parameters, decals for its tracks, and
+jointed slalom flags. Three courses opened by medals: Meadow, Forest with its shortcut through the
+trees, and Ridge with a run of kickers, a gap over a crevasse and an avalanche chasing down the last
+stretch. Spins and grabs score on a combo, and your best run rides beside you as a ghost. The rider
+is modelled, rigged and animated by Blender scripts.
 
 | Courses | Ridge, past the gap | A run's results |
 |:---:|:---:|:---:|
@@ -163,15 +162,14 @@ Blender scripts.
 
 Watch it played on a Steam Deck: [Snowline gameplay video](https://youtu.be/vlxxLiMEzp0).
 
-**Lamplight** is a night-time manor heist in pure stealth, chosen for what the others leave out:
-lamplight and lantern shadows, a light meter that reads the renderer's own lights (a guard's eye
-reads the same), guards on navigation rounds who see by their lantern's cone, hear footsteps on
-each surface and come to a thrown pebble, doors and gates to pick, walls that dither away between
-the camera and the thief, rain, reverb per room, and auto exposure from moonlit grounds into
-torch-lit cellars. Five levels, from the gardens to the vault on the upper floor, with
-checkpoints, loot, an alarm, and a ghost medal for never being seen. Everything in it, the thief
-and the guards included, is built by scripts: Blender for the models, a level generator for the
-scenes, generated sounds.
+**Lamplight** is a night-time manor heist in pure stealth. It shows lamplight and lantern shadows, a
+light meter that reads the renderer's own lights (a guard's eye reads the same), guards on
+navigation rounds who see by their lantern's cone, hear footsteps on each surface and come to a
+thrown pebble, doors and gates to pick, walls that dither away between the camera and the thief,
+rain, reverb per room, and auto exposure from moonlit grounds into torch-lit cellars. Five levels,
+from the gardens to the vault on the upper floor, with checkpoints, loot, an alarm, and a ghost
+medal for never being seen. Everything in it, the thief and the guards included, is built by
+scripts: Blender for the models, a level generator for the scenes, generated sounds.
 
 | The Gardens | The Ground Floor | Away like a ghost |
 |:---:|:---:|:---:|

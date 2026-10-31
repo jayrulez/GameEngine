@@ -21,6 +21,7 @@ import foundation.script;
 import foundation.script.facades; // ComponentOf<T> and RegisterExtra* (the script `.of` surface)
 import foundation.runtime;
 import engine.render; // RenderSubsystem::DebugScene (the IK components' debugDraw)
+import foundation.render; // render::debug::DebugDraw (what DebugScene returns)
 
 using namespace foundation::core;
 using namespace foundation::animation;

@@ -270,7 +270,20 @@ TEST_CASE("context menu: a text field offers cut, copy, paste and select all, li
     CHECK(menu->IsOpen());
     CHECK(menu->GetParent() == field.Get());
     REQUIRE(menu->ItemCount() == 4u);
-    // With nothing selected and no clipboard, only select all is enabled.
+    // With nothing selected and no clipboard, only select all is enabled. The menu's children are
+    // Cut, Copy, Paste, a separator, then Select all.
+    {
+        const auto itemAt = [&](core::usize i) { return core::Cast<MenuItem>(menu->GetChildAt(i)); };
+        REQUIRE(itemAt(0) != nullptr);
+        REQUIRE(itemAt(1) != nullptr);
+        REQUIRE(itemAt(2) != nullptr);
+        REQUIRE(itemAt(4) != nullptr);
+        CHECK_FALSE(itemAt(0)->IsEnabled()); // Cut
+        CHECK_FALSE(itemAt(1)->IsEnabled()); // Copy
+        CHECK_FALSE(itemAt(2)->IsEnabled()); // Paste
+        CHECK(itemAt(4)->GetText() == SV(u8"Select all"));
+        CHECK(itemAt(4)->IsEnabled());
+    }
     menu->Close();
     field->SelectAll();
     bed.d().InjectMouseDown(core::Float2{20.0f, 160.0f}, MouseButton::Right);

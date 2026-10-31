@@ -274,7 +274,7 @@ TEST_CASE("toolkit-codeeditview: CompletionEndToEnd")
     CHECK(!h.view->Completion().IsOpen());
     CHECK(h.view->Document().Line(2) == StringView(u8"counter"));
 
-    // Escape dismisses without inserting.
+    // On a new line, Escape dismisses the popup without inserting.
     h.Key(KeyCode::Return);
     h.Type(u8"co");
     REQUIRE(h.view->Completion().IsOpen());

@@ -19,6 +19,8 @@ module;
 module foundation.gui;
 
 import foundation.core;
+import foundation.i18n;
+import foundation.script;
 
 using namespace foundation::core;
 namespace core = foundation::core;

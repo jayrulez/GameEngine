@@ -10,6 +10,8 @@ module;
 
 module foundation.fonts;
 
+import foundation.core;
+
 using namespace foundation::core;
 
 namespace foundation::fonts

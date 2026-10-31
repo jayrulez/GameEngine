@@ -15,51 +15,49 @@ enables AI agents to build entire games, from initial project setup to fully pla
 
 ![The editor](Documentation/Images/Editor.png)
 
-## What is here
+## Features
 
-**Rendering.** A render graph over the RHI: forward PBR with a depth prepass and clustered
-lights; cascaded sun shadows and shadowed point and spot lights; image-based lighting and
-reflection probes; decals, sprites, particles, skinned and instanced meshes, terrain and
-vegetation; render textures for in-game cameras; and a post stack with ambient occlusion, SSR,
-screen-space GI, bloom, TAA, MSAA, FXAA, auto exposure and colour grading. A game's look is set
-once in shared environment and post profiles. Vulkan 1.3 is the primary desktop backend; WebGPU
-runs on the desktop through wgpu-native and in the browser as itself; Direct3D 12 runs on
-Windows. Shaders are HLSL, compiled through DXC, cross compiled to WGSL for the web, and cooked
-into packs.
-
-**Scene and engine.** Entities with hierarchical transforms, component managers per domain,
-prefabs with overrides, scene serialization, and the subsystems a game needs: physics (Jolt),
-navigation (Recast/Detour), audio (miniaudio, buses with effect chains), animation (skeletal
-clips, animation graphs, IK, root motion, property animation), particles, splines, terrain and
-vegetation, input maps, save data, networking with state replication, and world-space UI.
-
-**Scripting.** Gameplay code in AngelScript or Luau over the engine's reflected script facades:
-behaviours per entity, a level script per scene, a game script per run, coroutines and events,
-with a debugger in the editor. See [Documentation/Shipping/Scripting.md](Documentation/Shipping/Scripting.md).
-
-**Editor.** A project manager, scene hierarchy, a viewport with gizmos and per-domain tools
-(terrain sculpting and painting, vegetation, spline editing), inspectors from reflection, an
-asset browser over the import and cook pipeline, undo and redo, play in editor (several
-instances side by side), and a page per asset type: materials, meshes, textures, fonts, audio,
-animation clips and graphs, particles, input maps, GUI documents and style sheets, render
-profiles, and scripts.
-
-**Pipeline and shipping.** Importers (glTF, FBX and OBJ, images, audio, fonts), cooks per asset
-type, texture compression (BC7, ASTC), and an export that packages a project for the desktop
-player, the web or the Steam Deck from per-target presets and player templates; headless tools
-do all of it from the command line.
-
-**UI.** A retained-mode GUI with flex, grid and stack layouts, `.xml` markup and CSS sheets
-with a cascade, variables, transitions, animations and media queries, shaped and bidirectional
-text, keyboard and gamepad navigation, data binding, a game kit (screens and prompts), a vector
-graphics layer with SVG, distance field and coverage fonts, and an editor toolkit (docking,
-property grids, a code editor), every widget reachable from scripts.
-
-**Agent tooling.** An MCP host (`Tools.Mcp`) exposes the engine's reflection, the script API and
-project operations (import, cook, scene validation, export, health checks); the editor serves
-the same tools over HTTP for its open project, plus its pages and play in editor, where an agent
-plays the game with scripted input and reads back probes and screenshots.
-[AGENTS.md](AGENTS.md) is how an agent works on the engine itself.
+- **C++23 modules throughout:** every library is a named module, with no public headers.
+- **Rendering hardware interface (RHI)** with Vulkan 1.3 (primary), WebGPU (desktop through
+  wgpu-native, and the browser) and Direct3D 12 backends.
+- **Renderer:** a render graph driving forward PBR with a depth prepass and clustered lights;
+  cascaded sun shadows and shadowed point and spot lights; image-based lighting and reflection
+  probes; decals, sprites, particles, skinned and instanced meshes; render textures for in-game
+  cameras.
+- **Post-processing:** ambient occlusion, SSR, screen-space GI, bloom, TAA, MSAA, FXAA, auto
+  exposure and colour grading, set once per game in shared environment and post profiles.
+- **Shaders:** HLSL compiled through DXC, cross-compiled to WGSL for the web, cooked into packs,
+  and custom shaders per project.
+- **Scene system:** entities with hierarchical transforms, component managers per domain,
+  prefabs with overrides, and scene serialization.
+- **Gameplay systems:** physics (Jolt), navigation (Recast/Detour), audio (miniaudio, buses
+  with effect chains), input maps, save data, splines, terrain and vegetation.
+- **Animation:** skeletal clips, animation graphs, IK, root motion and property animation.
+- **Networking** with state replication.
+- **Scripting** in AngelScript or Luau over the engine's reflected facades: behaviours per entity,
+  a level script per scene and a game script per run, with coroutines, events and an in-editor
+  debugger. See [Documentation/Shipping/Scripting.md](Documentation/Shipping/Scripting.md).
+- **UI:** a retained-mode GUI with flex, grid and stack layouts, `.xml` markup, CSS sheets
+  (cascade, variables, transitions, animations, media queries), shaped bidirectional text,
+  keyboard and gamepad navigation, data binding, world-space UI, and a game kit for screens and
+  prompts, every widget reachable from scripts.
+- **Vector graphics and fonts:** a vector graphics layer with SVG, and distance field and
+  coverage fonts.
+- **Editor** (`Tools.Editor`): project manager, scene hierarchy, viewport with gizmos and
+  per-domain tools (terrain sculpting and painting, vegetation, splines), inspectors from
+  reflection, an asset browser, undo and redo, play in editor (several instances side by side),
+  and a page per asset type.
+- **Asset pipeline:** importers for glTF, FBX, OBJ, images, audio and fonts; cooks per asset
+  type; BC7 and ASTC texture compression.
+- **Export** to the desktop player, the web (WebAssembly with WebGPU) and the Steam Deck, from
+  per-target presets and player templates; headless tools do all of it from the command line.
+- **Agent tooling:** an MCP host (`Tools.Mcp`) exposes the engine's reflection, the script API
+  and project operations (import, cook, scene validation, export, health checks). The editor
+  serves the same tools over HTTP for its open project, plus its pages and play in editor, where
+  an agent plays the game with scripted input and reads back probes and screenshots.
+  [AGENTS.md](AGENTS.md) is how an agent works on the engine itself.
+- **Samples:** five sample games and a custom shaders gallery (below), and low-level C++ samples
+  per engine area.
 
 ## Building
 

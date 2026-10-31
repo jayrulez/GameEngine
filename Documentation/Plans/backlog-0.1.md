@@ -278,6 +278,33 @@ website and the flagship game.
   page, corrected against `Documentation/` and the source; this repository's `Documentation/`
   stays as the engine's development documentation. Started 2026-10-11: the home page and the
   introduction, with the outline in its README.
+
+  Where it stands (2026-10-31, paused by the user): every page was checked against the source and
+  rewritten plainly (docs 95cf7ba); the four screenshots from the old editor UI are replaced; 37
+  screenshots are in, through docs 26cc8a9. Still to capture, each under the section named:
+  - editor: the import dialog for a .glb (assets "Importing your own files"); the Snap step menu
+    (scene-viewport toolbar); the F3 overlay in a running game (profiler); paused at a breakpoint
+    with Call stack and Locals (debugging "Looking around");
+  - rendering: the Initializers right-click menu (particles); New Splat Weights and the terrain
+    tools menu (terrain "Making a terrain"); a Terrain Vegetation procedural layer with grass
+    (vegetation); Sky Mode HDREquirect in the scene row and a texture page's Preset menu on
+    Equirect Sky (skies); a profile row with Source = Profile, and a polished floor with and
+    without a probe (environment); one leaf card as Opaque, Masked and AlphaBlend (meshes
+    "Blending");
+  - scripting: the Script component with two behaviors, the scene's Level Script field, and the
+    Assets menu at New > Scripts;
+  - systems: the property animation panel (dopesheet and curve view) and a clip's Root motion
+    section (animation); the Physics section's Collision Groups grid and a Collision Shape
+    asset's inspector (physics); a style sheet page with its Previewed Over pane and a nameplate
+    in game (user interface);
+  - tools: the model viewer's model, Browse and Library tabs and its Preferences.
+  The capture recipe: the editor with `--mcp-port` on a scratch copy of a sample, pages opened
+  with `page_open`, dialogs through the command palette (`action_execute` cancels dialogs), shots
+  with `editor_screenshot`, cropped and placed under each section's first paragraph. One finding
+  waits for the user: Preferences' Templates help text (`Data/Editor/Preferences.xml`) says an
+  empty field means `$ENV_TEMPLATES_DIR`, else the editor's own folder, but `ResolveTemplatesRoot`
+  falls back to `<user data>/templates` (the editor's own player is offered as a template
+  besides, from its folder).
 - **The 0.1 release** (user 2026-10-09): the release itself, with
   - **a website** for the engine: started 2026-10-11 as `AssiduousEngine/website` (Astro, private
     source, published to the public `assiduousengine.github.io`, live at

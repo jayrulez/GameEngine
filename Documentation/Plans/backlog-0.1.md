@@ -111,6 +111,19 @@
 
 ## Engine
 
+- **Terrain lit as the forward lights** (user 2026-10-31): `terrain.ps.hlsl` lights with a
+  hard-coded ambient (`float3(0.28, 0.30, 0.34)`) and a sun term of `ndl * shadow` with no colour or
+  intensity, so terrain ignores the scene's sky, ambient and key light while everything on it
+  follows them. The scene's ambient is reachable: the terrain renderer gets the same render context
+  as the mesh renderer, and `ctx.ambient` is `scene->Ambient()`, the value `view.hlsli`'s `Ambient`
+  carries; it would go in `GpuTerrainView` / `TerrainView` (the pad after `LightDir` is free).
+  Taken alone it would darken terrain badly: in the forward, `Ambient` is a fill (default 0.03) on
+  top of the IBL diffuse and specular (`lighting.hlsli`, AmbientLight), and terrain has no IBL.
+  Light terrain with the forward's ambient model (the SH or IBL diffuse, the flat fill, AO) and the
+  key light's colour and intensity, ideally through `lighting.hlsli` rather than a copy, then
+  retune the terrain samples (Snowline, the terrain playground) with the user, since every terrain
+  scene's look changes.
+
 - **Windows on X11 stay composited, as a setting** (user 2026-10-30, from
   https://github.com/jayrulez/GameEngine/pull/15, closed): SDL asks X11 compositors to stand
   aside for its windows by default (`SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR`), so the

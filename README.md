@@ -25,7 +25,7 @@ enables AI agents to build entire games, from initial project setup to fully pla
   probes; decals, sprites, particles, skinned and instanced meshes; render textures for in-game
   cameras.
 - **Post-processing:** ambient occlusion, SSR, screen-space GI, bloom, TAA, MSAA, FXAA, auto
-  exposure and colour grading, set once per game in shared environment and post profiles.
+  exposure and colour grading. A game sets them in shared environment and post profiles.
 - **Shaders:** HLSL compiled through DXC, cross-compiled to WGSL for the web, cooked into packs,
   and custom shaders per project.
 - **Scene system:** entities with hierarchical transforms, component managers per domain,
@@ -40,7 +40,7 @@ enables AI agents to build entire games, from initial project setup to fully pla
 - **UI:** a retained-mode GUI with flex, grid and stack layouts, `.xml` markup, CSS sheets
   (cascade, variables, transitions, animations, media queries), shaped bidirectional text,
   keyboard and gamepad navigation, data binding, world-space UI, and a game kit for screens and
-  prompts, every widget reachable from scripts.
+  prompts. Scripts can create and control any widget.
 - **Vector graphics and fonts:** a vector graphics layer with SVG, and distance field and
   coverage fonts.
 - **Editor** (`Tools.Editor`): project manager, scene hierarchy, viewport with gizmos and
@@ -50,12 +50,13 @@ enables AI agents to build entire games, from initial project setup to fully pla
 - **Asset pipeline:** importers for glTF, FBX, OBJ, images, audio and fonts; cooks per asset
   type; BC7 and ASTC texture compression.
 - **Export** to the desktop player, the web (WebAssembly with WebGPU) and the Steam Deck, from
-  per-target presets and player templates; headless tools do all of it from the command line.
+  per-target presets and player templates. Headless tools can run all of it from the command
+  line.
 - **Agent tooling:** an MCP host (`Tools.Mcp`) exposes the engine's reflection, the script API
   and project operations (import, cook, scene validation, export, health checks). The editor
   serves the same tools over HTTP for its open project, plus its pages and play in editor, where
   an agent plays the game with scripted input and reads back probes and screenshots.
-  [AGENTS.md](AGENTS.md) is how an agent works on the engine itself.
+  [AGENTS.md](AGENTS.md) describes how an agent works on the engine itself.
 - **Samples:** five sample games and a custom shaders gallery (below), and low-level C++ samples
   per engine area.
 

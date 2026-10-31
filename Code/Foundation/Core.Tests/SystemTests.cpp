@@ -34,6 +34,51 @@ TEST_CASE("system: high-resolution time advances")
     CHECK(TicksToMilliseconds(t1 - t0) >= 1.0);
 }
 
+TEST_CASE("system: the wall clock is in Unix seconds, on FileStat's scale")
+{
+    const i64 now = GetUnixTime();
+    CHECK(now > 1767225600); // after 2026-01-01, when this was written
+    CHECK(now < 4102444800); // before 2100: seconds, not milliseconds
+
+    // A file written now has a modified time within a few seconds of the clock.
+    const char8_t* path = u8"scratch_sys_unix_time.bin";
+    const byte one[] = {static_cast<byte>(7)};
+    REQUIRE(WriteFile(path, Span<const byte>(one, 1)).IsOk());
+    u64 size = 0;
+    i64 modified = 0;
+    REQUIRE(FileStat(path, size, modified));
+    CHECK(modified >= now - 5);
+    CHECK(modified <= GetUnixTime() + 5);
+    (void)FileDelete(path);
+}
+
+TEST_CASE("system: CivilTimeOf reads a Unix time as a calendar date and a clock")
+{
+    const CivilTime epoch = CivilTimeOf(0);
+    CHECK(epoch.year == 1970);
+    CHECK(epoch.month == 1u);
+    CHECK(epoch.day == 1u);
+    const CivilTime leap = CivilTimeOf(951782400 + 3723); // 2000-02-29 01:02:03 UTC
+    CHECK(leap.year == 2000);
+    CHECK(leap.month == 2u);
+    CHECK(leap.day == 29u);
+    CHECK(leap.hour == 1u);
+    CHECK(leap.minute == 2u);
+    CHECK(leap.second == 3u);
+    const CivilTime before = CivilTimeOf(-1); // 1969-12-31 23:59:59
+    CHECK(before.year == 1969);
+    CHECK(before.month == 12u);
+    CHECK(before.day == 31u);
+    CHECK(before.hour == 23u);
+    static_assert(CivilTimeOf(1793491200).day == 1u); // 2026-11-01
+
+    // The local offset is a whole number of minutes, within the zones there are.
+    const i64 offset = GetLocalTimeOffset(GetUnixTime());
+    CHECK(offset % 60 == 0);
+    CHECK(offset >= -12 * 3600);
+    CHECK(offset <= 14 * 3600);
+}
+
 TEST_CASE("system: info queries are sane")
 {
     CHECK(LogicalCoreCount() >= 1u);

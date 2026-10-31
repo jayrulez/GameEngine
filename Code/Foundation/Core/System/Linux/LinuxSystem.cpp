@@ -41,6 +41,22 @@ namespace foundation::core::sys
         return 1'000'000'000ull; // GetTicks() is in nanoseconds
     }
 
+    std::int64_t GetUnixTime() noexcept
+    {
+        timespec ts{};
+        clock_gettime(CLOCK_REALTIME, &ts);
+        return static_cast<std::int64_t>(ts.tv_sec);
+    }
+
+    std::int64_t GetLocalTimeOffset(std::int64_t unixTime) noexcept
+    {
+        const time_t when = static_cast<time_t>(unixTime);
+        tm local{};
+        if (localtime_r(&when, &local) == nullptr)
+            return 0;
+        return static_cast<std::int64_t>(local.tm_gmtoff);
+    }
+
     void SleepMilliseconds(std::uint32_t milliseconds) noexcept
     {
         timespec req{};

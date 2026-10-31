@@ -41,6 +41,29 @@ namespace foundation::core::sys
         return static_cast<std::uint64_t>(frequency.QuadPart);
     }
 
+    std::int64_t GetUnixTime() noexcept
+    {
+        FILETIME now{};
+        GetSystemTimeAsFileTime(&now);
+        // FILETIME (100ns since 1601) -> seconds since the unix epoch.
+        const unsigned long long ft = (static_cast<unsigned long long>(now.dwHighDateTime) << 32) | now.dwLowDateTime;
+        return static_cast<std::int64_t>(ft / 10000000ull) - 11644473600ll;
+    }
+
+    std::int64_t GetLocalTimeOffset(std::int64_t unixTime) noexcept
+    {
+        // Through SYSTEMTIME so the zone's rule for that date (summer time or not) applies.
+        const unsigned long long ft = static_cast<unsigned long long>(unixTime + 11644473600ll) * 10000000ull;
+        FILETIME utcFile{static_cast<DWORD>(ft & 0xffffffffull), static_cast<DWORD>(ft >> 32)};
+        SYSTEMTIME utc{}, local{};
+        FILETIME localFile{};
+        if (!FileTimeToSystemTime(&utcFile, &utc) || !SystemTimeToTzSpecificLocalTime(nullptr, &utc, &local) ||
+            !SystemTimeToFileTime(&local, &localFile))
+            return 0;
+        const unsigned long long lt = (static_cast<unsigned long long>(localFile.dwHighDateTime) << 32) | localFile.dwLowDateTime;
+        return (static_cast<std::int64_t>(lt) - static_cast<std::int64_t>(ft)) / 10000000ll;
+    }
+
     void SleepMilliseconds(std::uint32_t milliseconds) noexcept { Sleep(milliseconds); }
 
     std::uint32_t LogicalCoreCount() noexcept

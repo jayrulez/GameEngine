@@ -21,6 +21,9 @@ namespace foundation::core::sys
     std::uint64_t GetTicks() noexcept;         // high-resolution monotonic counter
     std::uint64_t GetTickFrequency() noexcept; // counter ticks per second
     void SleepMilliseconds(std::uint32_t milliseconds) noexcept;
+    std::int64_t GetUnixTime() noexcept; // wall-clock seconds since 1970-01-01 UTC
+    // Seconds the user's time zone is ahead of UTC at `unixTime` (summer time included).
+    std::int64_t GetLocalTimeOffset(std::int64_t unixTime) noexcept;
 
     // --- System info -------------------------------------------------------
     std::uint32_t LogicalCoreCount() noexcept;

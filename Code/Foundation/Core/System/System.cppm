@@ -56,6 +56,50 @@ export namespace foundation::core
 
     [[nodiscard]] inline u64 GetTickFrequency() noexcept { return sys::GetTickFrequency(); }
 
+    // The wall clock: seconds since 1970-01-01 UTC, the scale FileStat's modified time uses. It can
+    // jump when the system's clock is set; measure durations with GetTicks.
+    [[nodiscard]] inline i64 GetUnixTime() noexcept { return sys::GetUnixTime(); }
+
+    // Seconds the user's time zone is ahead of UTC at `unixTime`: add it to a Unix time to read
+    // the local date and clock with CivilTimeOf.
+    [[nodiscard]] inline i64 GetLocalTimeOffset(i64 unixTime) noexcept { return sys::GetLocalTimeOffset(unixTime); }
+
+    // A date and a time of day on the proleptic Gregorian calendar.
+    struct CivilTime
+    {
+        i32 year = 1970;
+        u32 month = 1; // 1 to 12
+        u32 day = 1;   // 1 to 31
+        u32 hour = 0, minute = 0, second = 0;
+    };
+
+    // The calendar date and time `seconds` after 1970-01-01 00:00 (Howard Hinnant's
+    // civil_from_days): UTC for a Unix time, local time for one plus GetLocalTimeOffset.
+    [[nodiscard]] constexpr CivilTime CivilTimeOf(i64 seconds) noexcept
+    {
+        i64 days = seconds / 86400;
+        i64 rest = seconds % 86400;
+        if (rest < 0)
+        {
+            rest += 86400;
+            --days;
+        }
+        days += 719468;
+        const i64 era = (days >= 0 ? days : days - 146096) / 146097;
+        const i64 doe = days - era * 146097;
+        const i64 yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        const i64 doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        const i64 mp = (5 * doy + 2) / 153;
+        CivilTime out;
+        out.day = static_cast<u32>(doy - (153 * mp + 2) / 5 + 1);
+        out.month = static_cast<u32>(mp < 10 ? mp + 3 : mp - 9);
+        out.year = static_cast<i32>(yoe + era * 400 + (out.month <= 2 ? 1 : 0));
+        out.hour = static_cast<u32>(rest / 3600);
+        out.minute = static_cast<u32>(rest % 3600 / 60);
+        out.second = static_cast<u32>(rest % 60);
+        return out;
+    }
+
     [[nodiscard]] inline f64 TicksToSeconds(u64 ticks) noexcept
     {
         return static_cast<f64>(ticks) / static_cast<f64>(sys::GetTickFrequency());

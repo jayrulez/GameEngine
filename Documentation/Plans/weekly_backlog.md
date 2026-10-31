@@ -13,6 +13,19 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-10-30 (user, during the run spec): the scene event bus, and whether it is needed
+
+To discuss: whether a scene needs an event bus of its own at all, now that the run owns one
+(`IRun::Events()`, Specs/run-context.md D12). Today a scene BORROWS a bus by injection
+(`Scene::SetEventBus`, `SceneManager::SetSceneEventBus`, `Scene::Events()`): a run injects its
+own, and the editor's scene page injects a page bus with no run (`ScenePageImpl.cpp:90`,
+`m_pageEvents`) so behaviours simulate on a page. What reads it: the scripts' `scene.events`
+facade (`ScriptFacades.cppm:625, 636`) and the behaviours' `on<Event>` inbox bound through it
+(`ScriptSubsystem.cppm:699, 1472`). Questions: is a scene-level bus a distinct scope a game needs
+(events that stay within one scene), or only a path to the run's; could the page's simulation
+have a run of its own instead (the spec's D11 says pages have none); and what `scene.events`
+means to a script if the scene stops having one.
+
 ## Queued 2026-10-30 (user, during the run spec): where the application time scale lives
 
 To discuss: moving the application's time scale off `runtime::SubsystemManager`

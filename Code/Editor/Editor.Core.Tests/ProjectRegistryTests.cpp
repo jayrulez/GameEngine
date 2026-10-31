@@ -112,6 +112,135 @@ TEST_CASE("project-registry: remove deletes a row; the section round-trips the s
     RemoveDirectory(dir);
 }
 
+TEST_CASE("project-registry: an entry keeps when it was opened and its pin; the list keeps its order and last location")
+{
+    RegisterProjectRegistryTypes();
+    settings::Settings store(foundation::core::DefaultAllocator());
+    TouchRecentProject(store, u8"/projects/a", u8"A", u8"0.1.0", 1000);
+    CHECK(SetRecentProjectFavourite(store, u8"/projects/a", true));
+    CHECK_FALSE(SetRecentProjectFavourite(store, u8"/projects/none", true));
+    TouchRecentProject(store, u8"/projects/a", u8"A", u8"0.1.0", 2000); // opened again: the pin stays
+    RecentProjectsSettings& reg = store.Section<RecentProjectsSettings>();
+    REQUIRE(reg.entries.Size() == 1u);
+    CHECK(reg.entries[0].lastOpened == 2000);
+    CHECK(reg.entries[0].favourite);
+    reg.sortByName = true;
+    reg.lastLocation = String(u8"/home/me/Games");
+
+    // Opened without a time: now, by the wall clock.
+    const i64 before = GetUnixTime();
+    TouchRecentProject(store, u8"/projects/b", u8"B", u8"0.1.0");
+    CHECK(reg.Find(u8"/projects/b")->lastOpened >= before);
+
+    // They round-trip the store.
+    const StringView dir = u8"scratch_registry_fields_test";
+    (void)CreateDirectory(dir);
+    vfs::NativeFileSystem fs(dir, DefaultAllocator());
+    REQUIRE(SaveEditorSettings(*fs.AsWritable(), store).IsOk());
+    settings::Settings loaded(foundation::core::DefaultAllocator());
+    REQUIRE(LoadEditorSettings(fs, loaded).IsOk());
+    const RecentProjectsSettings& back = loaded.Section<RecentProjectsSettings>();
+    REQUIRE(back.Find(u8"/projects/a") != nullptr);
+    CHECK(back.Find(u8"/projects/a")->lastOpened == 2000);
+    CHECK(back.Find(u8"/projects/a")->favourite);
+    CHECK_FALSE(back.Find(u8"/projects/b")->favourite);
+    CHECK(back.sortByName);
+    CHECK(back.lastLocation.AsView() == u8"/home/me/Games");
+
+    // A store written before these fields existed still loads, each at its default.
+    const String file = PathJoin(dir, kEditorSettingsFile);
+    Result<Array<byte>> bytes = ReadFile(file.AsView());
+    REQUIRE(bytes.HasValue());
+    const String text(StringView(reinterpret_cast<const char8_t*>(bytes.Value().Data()), bytes.Value().Size()));
+    String old;
+    usize start = 0;
+    while (start < text.Size())
+    {
+        usize end = start;
+        while (end < text.Size() && text[end] != u8'\n')
+            ++end;
+        const StringView line = text.AsView().SubStr(start, end - start);
+        const bool added = line.ContainsIgnoreCase(u8"\"lastOpened\"") || line.ContainsIgnoreCase(u8"\"favourite\"") ||
+                           line.ContainsIgnoreCase(u8"\"sortByName\"") || line.ContainsIgnoreCase(u8"\"lastLocation\"");
+        if (!added)
+        {
+            old += line;
+            old += u8"\n";
+        }
+        start = end + 1;
+    }
+    CHECK(old.Size() < text.Size());
+    REQUIRE(WriteFile(file.AsView(), Span<const byte>(reinterpret_cast<const byte*>(old.Data()), old.Size())).IsOk());
+    settings::Settings older(foundation::core::DefaultAllocator());
+    REQUIRE(LoadEditorSettings(fs, older).IsOk());
+    const RecentProjectsSettings& olderReg = older.Section<RecentProjectsSettings>();
+    REQUIRE(olderReg.entries.Size() == 2u);
+    CHECK(olderReg.Find(u8"/projects/a")->lastOpened == 0);
+    CHECK_FALSE(olderReg.Find(u8"/projects/a")->favourite);
+    CHECK_FALSE(olderReg.sortByName);
+    CHECK(olderReg.lastLocation.IsEmpty());
+
+    FileDelete(file);
+    RemoveDirectory(dir);
+}
+
+TEST_CASE("project-registry: a missing project is relocated in place; arranging pins, sorts and searches")
+{
+    RegisterProjectRegistryTypes();
+    settings::Settings store(foundation::core::DefaultAllocator());
+    TouchRecentProject(store, u8"/games/zeta", u8"Zeta", u8"0.1.0", 10);
+    TouchRecentProject(store, u8"/old/Alpha", u8"alpha", u8"0.1.0", 20);
+    TouchRecentProject(store, u8"/games/Mid", u8"Mid", u8"0.1.0", 30);
+    RecentProjectsSettings& reg = store.Section<RecentProjectsSettings>();
+
+    // Locate...: the entry takes the new folder and keeps its place; a folder already listed is refused.
+    CHECK(RelocateRecentProject(store, u8"/old/Alpha", u8"/games/Alpha"));
+    CHECK(reg.entries[1].path.AsView() == u8"/games/Alpha");
+    CHECK(reg.entries[1].lastOpened == 20);
+    CHECK_FALSE(RelocateRecentProject(store, u8"/games/Alpha", u8"/games/zeta"));
+    CHECK_FALSE(RelocateRecentProject(store, u8"/nowhere", u8"/games/new"));
+
+    // By recency (the list's order), by name in any case, and a pinned one first in both.
+    auto names = [](const Array<const RecentProjectEntry*>& list)
+    {
+        String out;
+        for (const RecentProjectEntry* e : list)
+            out += Format(u8"{} ", e->name);
+        return out;
+    };
+    CHECK(names(ArrangeRecentProjects(reg, {}, false)).AsView() == u8"Mid alpha Zeta ");
+    CHECK(names(ArrangeRecentProjects(reg, {}, true)).AsView() == u8"alpha Mid Zeta ");
+    REQUIRE(SetRecentProjectFavourite(store, u8"/games/zeta", true));
+    CHECK(names(ArrangeRecentProjects(reg, {}, false)).AsView() == u8"Zeta Mid alpha ");
+    CHECK(names(ArrangeRecentProjects(reg, {}, true)).AsView() == u8"Zeta alpha Mid ");
+
+    // Search looks at the name and the folder, in any case.
+    CHECK(names(ArrangeRecentProjects(reg, u8"ALP", false)).AsView() == u8"alpha ");
+    CHECK(names(ArrangeRecentProjects(reg, u8"games/m", false)).AsView() == u8"Mid ");
+    CHECK(ArrangeRecentProjects(reg, u8"nothing", false).IsEmpty());
+}
+
+TEST_CASE("project-registry: when a project was opened is said for a person, by the local calendar")
+{
+    const i64 now = 1793539320; // 2026-11-01 13:22 UTC
+    CHECK(DescribeLastOpened(0, now, 0).IsEmpty()); // never kept one
+    CHECK(DescribeLastOpened(now - 20, now, 0).AsView() == u8"Just now");
+    CHECK(DescribeLastOpened(now - 60, now, 0).AsView() == u8"1 minute ago");
+    CHECK(DescribeLastOpened(now - 45 * 60, now, 0).AsView() == u8"45 minutes ago");
+    CHECK(DescribeLastOpened(now - 3 * 3600, now, 0).AsView() == u8"3 hours ago");
+    CHECK(DescribeLastOpened(now - 14 * 3600, now, 0).AsView() == u8"Yesterday"); // 23:22 the day before
+    CHECK(DescribeLastOpened(now - 3 * 86400, now, 0).AsView() == u8"3 days ago");
+    CHECK(DescribeLastOpened(now - 20 * 86400, now, 0).AsView() == u8"2 weeks ago");
+    CHECK(DescribeLastOpened(now - 60 * 86400, now, 0).AsView() == u8"2 Sep 2026");
+    // The day turns at local midnight: 14 hours ago is today where it is 13 hours later in the day.
+    CHECK(DescribeLastOpened(now - 14 * 3600, now, 10 * 3600).AsView() == u8"14 hours ago");
+
+    CHECK(DescribeTime(0, 0).IsEmpty());
+    CHECK(DescribeTime(now, 0).AsView() == u8"1 Nov 2026, 13:22");
+    CHECK(DescribeTime(now - 13 * 3600 - 20 * 60, 0).AsView() == u8"1 Nov 2026, 00:02");
+    CHECK(DescribeTime(now, -14 * 3600).AsView() == u8"31 Oct 2026, 23:22");
+}
+
 TEST_CASE("project-registry: probe reads the manifest without opening; NotFound for non-projects")
 {
     const StringView dir = u8"scratch_registry_probe_test";
@@ -233,8 +362,31 @@ TEST_CASE("project-manager controller: open gates + prompt copy + registry pass-
     // Registry pass-through.
     controller.NoteOpened(dir, u8"Gate Test", u8"0.1.0");
     CHECK(controller.Entries().entries.Size() == 1u);
+    CHECK(controller.SetFavourite(dir, true));
+    CHECK(controller.Entries().entries[0].favourite);
+    controller.SetSortByName(true);
+    CHECK(controller.SortByName());
+    controller.SetLastLocation(u8"/home/me/Games");
+    CHECK(controller.LastLocation() == StringView(u8"/home/me/Games"));
     CHECK(controller.Remove(dir));
     CHECK(controller.Entries().entries.IsEmpty());
+
+    // Locate... takes only a folder holding a project, and refreshes the entry from it; Remove
+    // missing takes off the list every entry whose folder holds none, and touches no files.
+    controller.NoteOpened(u8"scratch_manager_gone", u8"Old name", u8"0.0.1");
+    controller.NoteOpened(u8"scratch_manager_gone_too", u8"Gone", u8"0.0.1");
+    controller.NoteOpened(dir, u8"Gate Test", u8"0.1.0");
+    CHECK_FALSE(controller.Relocate(u8"scratch_manager_gone", u8"scratch_manager_no_such_dir"));
+    CHECK_FALSE(controller.Relocate(u8"scratch_manager_gone", dir)); // listed already
+    CHECK(controller.Remove(dir));
+    CHECK(controller.Relocate(u8"scratch_manager_gone", dir));
+    const RecentProjectEntry* moved = controller.Entries().Find(dir);
+    REQUIRE(moved != nullptr);
+    CHECK(moved->name.AsView() == u8"Gate Test");
+    CHECK(controller.RemoveMissing() == 1u);
+    REQUIRE(controller.Entries().entries.Size() == 1u);
+    CHECK(controller.Entries().entries[0].path.AsView() == dir);
+    CHECK(DirectoryExists(dir));
 
     RemoveProjectTree(dir);
 }

@@ -7,10 +7,11 @@
 // The registry is a Settings section in the user-level editor settings store
 // (<user-data>/editor.settings.xml), outside any engine install or project directory, so every
 // editor version on the machine lists the same projects and a separate launcher can read the same
-// file. The order is the recency (most recent first), so there are no timestamps to go stale.
-// Display data (name, engine version) is a cached snapshot, refreshed every time the project is
-// touched; ProbeProject reads the live manifest when the list needs the current state (a missing
-// directory, an out-of-date stamp).
+// file. The order is the recency (most recent first), and each entry keeps when it was last opened
+// (Unix seconds, which the manager shows as "2 hours ago") and whether the user pinned it. Display
+// data (name, engine version) is a cached snapshot, refreshed every time the project is touched;
+// ProbeProject reads the live manifest when the list needs the current state (a missing directory,
+// an out-of-date stamp).
 //
 // Also here: the engine-version relation used by the open-time upgrade prompt, and the
 // manifest backup that prompt offers ("back up Project.xml, then open with this engine").
@@ -42,12 +43,16 @@ export namespace editor
         String path;
         String name;
         String engineVersion;
+        i64 lastOpened = 0;     // Unix seconds; 0 for an entry from before the editor kept it
+        bool favourite = false; // pinned: listed before the rest, whatever the order
 
         void Serialize(ISerializer& ar)
         {
             foundation::core::Serialize(ar, "path", path);
             foundation::core::Serialize(ar, "name", name);
             foundation::core::Serialize(ar, "engineVersion", engineVersion);
+            SerializeAppended(ar, "lastOpened", lastOpened); // after the rest, since older stores lack them
+            SerializeAppended(ar, "favourite", favourite);
         }
     };
 
@@ -73,11 +78,17 @@ export namespace editor
         Array<RecentProjectEntry> entries;
         // The launcher shows the projects as a grid of their pictures, else as a list.
         bool gridView = false;
+        // The list's order: by name, else by when each was last opened.
+        bool sortByName = false;
+        // The folder the last project was made or downloaded in, where the next one starts.
+        String lastLocation;
 
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "entries", entries);
-            SerializeAppended(ar, "gridView", gridView); // after the rest, since older stores lack it
+            SerializeAppended(ar, "gridView", gridView); // after the rest, since older stores lack them
+            SerializeAppended(ar, "sortByName", sortByName);
+            SerializeAppended(ar, "lastLocation", lastLocation);
         }
 
         [[nodiscard]] const RecentProjectEntry* Find(StringView path) const
@@ -101,21 +112,24 @@ export namespace editor
         RegisterSerializable<RecentProjectsSettings>();
     }
 
-    // Records `path` as the most recently opened project (inserting it or moving it to the front)
-    // and refreshes its display snapshot. Caps the list at kMaxEntries. Marks the section changed;
-    // the caller saves the store (SaveEditorSettingsToUserData).
+    // Records `path` as the most recently opened project, opened at `openedAt` (inserting it or
+    // moving it to the front, its pin kept), and refreshes its display snapshot. Caps the list at
+    // kMaxEntries. Marks the section changed; the caller saves the store
+    // (SaveEditorSettingsToUserData).
     inline void TouchRecentProject(settings::Settings& store, StringView path, StringView name,
-                                   StringView engineVersion)
+                                   StringView engineVersion, i64 openedAt = GetUnixTime())
     {
         RecentProjectsSettings& reg = store.Section<RecentProjectsSettings>();
         RecentProjectEntry entry;
         entry.path = String(path);
         entry.name = String(name);
         entry.engineVersion = String(engineVersion);
+        entry.lastOpened = openedAt;
         for (usize i = 0; i < reg.entries.Size(); ++i)
         {
             if (reg.entries[i].path.AsView() == path)
             {
+                entry.favourite = reg.entries[i].favourite;
                 reg.entries.RemoveAt(i);
                 break;
             }
@@ -142,6 +156,110 @@ export namespace editor
             }
         }
         return false;
+    }
+
+    // Pins or unpins `path`; false when it is not in the list. Marks the section changed.
+    inline bool SetRecentProjectFavourite(settings::Settings& store, StringView path, bool favourite)
+    {
+        RecentProjectsSettings& reg = store.Section<RecentProjectsSettings>();
+        for (RecentProjectEntry& e : reg.entries)
+        {
+            if (e.path.AsView() == path)
+            {
+                e.favourite = favourite;
+                store.MarkChanged<RecentProjectsSettings>();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Points the entry at `from` at the folder the project is in now (Locate... on a missing
+    // project), keeping its place, pin and time. False when `from` is not listed, or `to` already
+    // is (that entry stays; the caller removes this one if the user wants).
+    inline bool RelocateRecentProject(settings::Settings& store, StringView from, StringView to)
+    {
+        RecentProjectsSettings& reg = store.Section<RecentProjectsSettings>();
+        if (reg.Find(to) != nullptr)
+            return false;
+        for (RecentProjectEntry& e : reg.entries)
+        {
+            if (e.path.AsView() == from)
+            {
+                e.path = String(to);
+                store.MarkChanged<RecentProjectsSettings>();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The entries the manager lists, in its order: those matching `query` (in the name or the
+    // folder, any case; empty matches all), pinned ones first, then by name or by recency (the
+    // list's own order). Pointers into `reg`, valid until it changes.
+    [[nodiscard]] inline Array<const RecentProjectEntry*> ArrangeRecentProjects(const RecentProjectsSettings& reg, StringView query, bool byName)
+    {
+        Array<const RecentProjectEntry*> out;
+        for (const RecentProjectEntry& e : reg.entries)
+            if (query.IsEmpty() || e.name.AsView().ContainsIgnoreCase(query) || e.path.AsView().ContainsIgnoreCase(query))
+                out.PushBack(&e);
+        const auto lower = [](utf8char c) { return c >= u8'A' && c <= u8'Z' ? static_cast<utf8char>(c - u8'A' + u8'a') : c; };
+        const auto nameLess = [lower](StringView a, StringView b)
+        {
+            for (usize i = 0; i < a.Size() && i < b.Size(); ++i)
+                if (lower(a[i]) != lower(b[i]))
+                    return lower(a[i]) < lower(b[i]);
+            return a.Size() < b.Size();
+        };
+        out.Sort([byName, nameLess](const RecentProjectEntry* a, const RecentProjectEntry* b)
+                 {
+                     if (a->favourite != b->favourite)
+                         return a->favourite;
+                     return byName && nameLess(a->name.AsView(), b->name.AsView());
+                 });
+        return out;
+    }
+
+    // When a project was last opened, said for a person at `now`: "Just now", "5 minutes ago",
+    // "3 hours ago", "Yesterday", "4 days ago", "2 weeks ago", then the date ("19 Oct 2026").
+    // Empty for an entry that never kept one (0). `offset` is the local time zone's
+    // (GetLocalTimeOffset), so a date is the user's own.
+    [[nodiscard]] inline String DescribeLastOpened(i64 when, i64 now, i64 offset)
+    {
+        if (when <= 0)
+            return String();
+        const i64 ago = now > when ? now - when : 0;
+        const auto count = [](i64 n, StringView unit) { return Format(u8"{} {}{} ago", n, unit, n == 1 ? u8"" : u8"s"); };
+        if (ago < 60)
+            return String(u8"Just now");
+        if (ago < 3600)
+            return count(ago / 60, u8"minute");
+        // From here by calendar days, so "Yesterday" is the day before today, not 24 hours ago.
+        const i64 days = (now + offset) / 86400 - (when + offset) / 86400;
+        if (days == 0)
+            return count(ago / 3600, u8"hour");
+        if (days == 1)
+            return String(u8"Yesterday");
+        if (days < 14)
+            return count(days, u8"day");
+        if (days < 35)
+            return count(days / 7, u8"week");
+        static constexpr StringView kMonths[] = {u8"Jan", u8"Feb", u8"Mar", u8"Apr", u8"May", u8"Jun",
+                                                 u8"Jul", u8"Aug", u8"Sep", u8"Oct", u8"Nov", u8"Dec"};
+        const CivilTime date = CivilTimeOf(when + offset);
+        return Format(u8"{} {} {}", date.day, kMonths[date.month - 1], date.year);
+    }
+
+    // The exact local time `when` names, for a tooltip: "31 Oct 2026, 18:42". Empty for 0.
+    [[nodiscard]] inline String DescribeTime(i64 when, i64 offset)
+    {
+        if (when <= 0)
+            return String();
+        static constexpr StringView kMonths[] = {u8"Jan", u8"Feb", u8"Mar", u8"Apr", u8"May", u8"Jun",
+                                                 u8"Jul", u8"Aug", u8"Sep", u8"Oct", u8"Nov", u8"Dec"};
+        const CivilTime t = CivilTimeOf(when + offset);
+        return Format(u8"{} {} {}, {}{}:{}{}", t.day, kMonths[t.month - 1], t.year, t.hour < 10 ? u8"0" : u8"", t.hour,
+                      t.minute < 10 ? u8"0" : u8"", t.minute);
     }
 
     // Reads a project's manifest without opening the project (no content DBs, no directory

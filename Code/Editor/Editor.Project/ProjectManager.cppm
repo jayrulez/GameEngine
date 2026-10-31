@@ -134,7 +134,66 @@ export namespace editor
             m_store->MarkChanged<RecentProjectsSettings>();
         }
 
+        /// Pins or unpins a project (pinned ones are listed first); false when it is not listed.
+        bool SetFavourite(StringView directory, bool favourite) { return SetRecentProjectFavourite(*m_store, directory, favourite); }
+        /// Points a missing project's entry at the folder it is in now; false when `to` holds no
+        /// project, or is listed already.
+        bool Relocate(StringView from, StringView to)
+        {
+            engine::project::ProjectSettings probed;
+            if (!ProbeProject(to, probed).IsOk() || !RelocateRecentProject(*m_store, from, to))
+                return false;
+            TouchSnapshot(to, probed);
+            return true;
+        }
+        /// Removes every project whose folder no longer holds it; how many went. Files are never
+        /// touched: only the list changes.
+        usize RemoveMissing()
+        {
+            RecentProjectsSettings& reg = m_store->Section<RecentProjectsSettings>();
+            usize removed = 0;
+            for (usize i = reg.entries.Size(); i-- > 0;)
+            {
+                engine::project::ProjectSettings probed;
+                if (!ProbeProject(reg.entries[i].path.AsView(), probed).IsOk())
+                {
+                    reg.entries.RemoveAt(i);
+                    ++removed;
+                }
+            }
+            if (removed > 0)
+                m_store->MarkChanged<RecentProjectsSettings>();
+            return removed;
+        }
+
+        /// The list's order, by name or by when each was last opened.
+        [[nodiscard]] bool SortByName() { return m_store->Section<RecentProjectsSettings>().sortByName; }
+        void SetSortByName(bool byName)
+        {
+            m_store->Section<RecentProjectsSettings>().sortByName = byName;
+            m_store->MarkChanged<RecentProjectsSettings>();
+        }
+        /// Where the last project was made or downloaded: where New Project's location starts.
+        [[nodiscard]] StringView LastLocation() { return m_store->Section<RecentProjectsSettings>().lastLocation.AsView(); }
+        void SetLastLocation(StringView folder)
+        {
+            m_store->Section<RecentProjectsSettings>().lastLocation = String(folder);
+            m_store->MarkChanged<RecentProjectsSettings>();
+        }
+
     private:
+        // Refreshes an entry's name and version from its manifest, keeping its place and time.
+        void TouchSnapshot(StringView directory, const engine::project::ProjectSettings& probed)
+        {
+            RecentProjectsSettings& reg = m_store->Section<RecentProjectsSettings>();
+            for (RecentProjectEntry& e : reg.entries)
+                if (e.path.AsView() == directory)
+                {
+                    e.name = probed.name;
+                    e.engineVersion = probed.engineVersion;
+                }
+        }
+
         settings::Settings* m_store;
     };
 }

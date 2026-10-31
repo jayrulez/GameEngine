@@ -400,6 +400,7 @@ export namespace foundation::particles
         void Step(f32 deltaTime, Float3 cameraPos = Float3::Zero)
         {
             m_totalTime += deltaTime; // 1
+            m_stepDeltaTime = deltaTime;
             m_deathCount = 0;
             m_birthCount = 0;                                        // 2
             m_lodRateMultiplier = CalculateLODMultiplier(cameraPos); // 3
@@ -454,6 +455,7 @@ export namespace foundation::particles
             m_streams.aliveCount = 0;
             emitter.Reset();
             m_totalTime = 0.0f;
+            m_stepDeltaTime = 0.0f;
             m_prewarmed = false;
             m_random = Random(m_seed); // deterministic replay from the configured seed
         }
@@ -492,7 +494,7 @@ export namespace foundation::particles
                 local
                     ? Float3::Zero
                     : (position - prevPosition) /
-                          Max(m_totalTime, 0.001f); // divided by the total running time, not deltaTime
+                          Max(m_stepDeltaTime, 0.001f); // the emitter's displacement over the last step
             for (usize k = 0; k < m_initializers.Size(); ++k)
             {
                 m_initializers[k]->SetEmitterState(emState, emitterVel);
@@ -740,6 +742,7 @@ export namespace foundation::particles
         UniquePtr<ParticleSimulator> m_simulator;
         Random m_random;
         f32 m_totalTime = 0.0f;
+        f32 m_stepDeltaTime = 0.0f; // the last Step's deltaTime: the emitter velocity's divisor
         f32 m_lodRateMultiplier = 1.0f;
         bool m_prewarmed = false;
         u64 m_seed = 0x9E3779B97F4A7C15ull;

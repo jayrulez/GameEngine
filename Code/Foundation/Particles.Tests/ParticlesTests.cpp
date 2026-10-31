@@ -652,6 +652,36 @@ TEST_CASE("Sub-emitter SpawnAt: inherits (adds) velocity and modulates color")
     CHECK(c.z == doctest::Approx(0.0f));
 }
 
+// A moving emitter passes its velocity on: the displacement over one step divided by that step's
+// time, however long the system has run.
+TEST_CASE("Velocity inheritance: the emitter's velocity is its displacement over the step")
+{
+    particles::ParticleEffect fx(u8"moving");
+    particles::ParticleSystem& sys = fx.AddSystem(100);
+    auto& velocity = sys.AddInitializer<particles::VelocityInitializer>();
+    velocity.baseVelocity = Float3{0.0f, 0.0f, 0.0f};
+    velocity.velocityInheritance = 1.0f;
+    sys.AddInitializer<particles::LifetimeInitializer>().lifetime = particles::RangeFloat(5.0f, 5.0f);
+    sys.emitter.mode = particles::EmissionMode::Continuous;
+    sys.emitter.spawnRate = 0.0f;
+
+    // Run a while standing still, so the total time is far from one step's.
+    for (int i = 0; i < 50; ++i)
+    {
+        sys.Update(0.1f);
+    }
+    REQUIRE(sys.AliveCount() == 0);
+
+    // Move 1 unit along x during one 0.1 s step that spawns: 10 units a second.
+    sys.emitter.spawnRate = 100.0f;
+    sys.position = Float3{1.0f, 0.0f, 0.0f};
+    sys.Update(0.1f);
+    REQUIRE(sys.AliveCount() > 0);
+    const Float3 v = (*sys.Streams().StartVelocities())[0];
+    CHECK(v.x == doctest::Approx(10.0f));
+    CHECK(v.y == doctest::Approx(0.0f));
+}
+
 TEST_CASE("CollisionBehavior: sphere + box obstacles push out and reflect")
 {
     particles::ParticleEffect fx(u8"obstacles");

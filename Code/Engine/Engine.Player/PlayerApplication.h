@@ -337,6 +337,8 @@ namespace engine::player
             // Game script launches FIRST (task #123 boot reorder): the orchestrator's launch()/
             // update(dt) run from frame 1, scene or none, with the engine-service bindings above
             // already in place. A game whose launch() needs a scene waits `while (!Game.sceneReady())`.
+            // The player's one run plays one session, from here to OnExit.
+            Instance().Start();
             LoadAndStartGameScript();
 
             // Then, if a startup scene resolved, load it ASYNC behind a boot splash (task #123
@@ -403,6 +405,7 @@ namespace engine::player
         void OnExit(runtime::IApplicationHost&) override
         {
             StopGameScript();
+            Instance().Stop(); // its session ends: whatever follows the run's lifecycle hears it
             SetPrimaryScene(nullptr);
             if (m_scene != nullptr)
             {

@@ -52,6 +52,7 @@ import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)
 import foundation.net;                 // UdpSocket / DatagramEndpoint (the transport)
 import foundation.net.replication;     // NetworkId / StateReplication (the spawn-handler seam)
 import foundation.net.manager;   // NetworkManager + NetworkStartup/StartNetworking + the Net facade
+import foundation.run;           // RunRegistry: the live runs, for every subsystem
 import engine.net; // NetworkSubsystem (injects the NetworkComponentManager into scenes)
 import foundation.profiler;      // the CPU scope profiler (P-key dump)
 import foundation.profiler.capture; // F9's capture
@@ -172,6 +173,11 @@ namespace engine::runtime
     void DefaultApplication::Configure(IApplicationHost& host)
     {
         m_host = &host; // stable for the app's lifetime; extra instances route run.requestExit through it
+        // The runs: the primary instance first, extra ones as CreateInstance makes them; every
+        // subsystem finds them through the subsystem manager.
+        m_runs = core::MakeUnique<foundation::run::RunRegistry>(host.Subsystems().Allocator(), host.Subsystems().Allocator());
+        m_runs->Add(m_instance);
+        host.Subsystems().SetRunManager(m_runs.Get());
 
         // THE data root, resolved once: the explicit override (validated) or the discovery walk.
         // Every consumer below reads through the mount - none knows the location. Missing = the
@@ -410,6 +416,11 @@ namespace engine::runtime
         core::UniquePtr<GameInstance> owned =
             core::MakeUnique<GameInstance>(core::DefaultAllocator());
         GameInstance* gi = owned.Get();
+        gi->SetName(core::Format(u8"Game {}", ++m_runsMade).AsView());
+        if (m_runs)
+        {
+            m_runs->Add(*gi); // it leaves the registry as it is destroyed (ReleaseInstance)
+        }
         gi->SetHeadless(headless);
         m_scenes->RegisterManager(&gi->Scenes());
         m_scripts->ConfigureRunHost(gi->RunHost());
@@ -701,6 +712,9 @@ namespace engine::runtime
 
     void DefaultApplication::OnShutdown(IApplicationHost& host)
     {
+        // The subsystems have shut down (and stopped listening): nothing reaches the runs through
+        // the subsystem manager after this. The runs themselves go with the app.
+        host.Subsystems().SetRunManager(nullptr);
         // Drop the net subsystem's endpoint source before teardown - the stored callback captures `this`,
         // so it must not outlive the app (the context tick has already stopped, so this is belt-and-braces).
         if (auto* netSubsystem = host.Subsystems().GetSubsystem<engine::net::NetworkSubsystem>())

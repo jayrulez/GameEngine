@@ -38,6 +38,7 @@ import foundation.input;       // ActionRuntime + IInputSourceProvider + InputMa
 import foundation.net.tls;     // the run's TLS backend (https requests, wss joins)
 import foundation.http.client; // CreateHttpClient: the platform's client
 import foundation.http.script; // HttpScriptBinding: the run's HTTP for its scripts (the Http facade)
+import foundation.run;         // RunBase: a GameInstance is its run
 
 using namespace foundation::core;
 using namespace foundation;
@@ -100,7 +101,7 @@ export namespace engine::runtime
         f32 realDeltaSeconds = 0.0f;
         f64 realSeconds = 0.0;
         // This run's event bus: ONE service carries load + run-bus.
-        // run.events() publishes here. The GameInstance fills it with &RunEvents().
+        // run.events() publishes here. The GameInstance fills it with &Events(), the run's bus.
         messaging::EventBus* runEvents = nullptr;
     };
 
@@ -316,16 +317,18 @@ export namespace engine::runtime
     // A running game COMPOSES its networking: GameInstance holds a NetworkController (which IS the
     // INetworkController the Net facade drives) and forwards to it. The
     // controller is a stable member, so its binding never dangles; the endpoint inside it comes and goes.
-    class GameInstance final
+    // A running game, and the run (Documentation/Specs/run-context.md): it IS its IRun, through
+    // RunBase (its id, name, sessions, event bus, and the services below registered on it).
+    class GameInstance final : public foundation::run::RunBase
     {
     public:
-        GameInstance()
+        GameInstance() : RunBase(DefaultAllocator(), u8"Game")
         {
-            // Every scene this run creates BORROWS the run bus: set it on the group so
+            // Every scene this run creates BORROWS the run's bus: set it on the group so
             // CreateScene injects it BEFORE the script systems bind (OnSceneCreate), not after.
-            m_sceneManager.SetSceneEventBus(&m_runEvents);
-            // This instance IS the run: its scenes and its scripts carry it as their run key, so
-            // run-scoped systems (audio) group them by it.
+            m_sceneManager.SetSceneEventBus(&Events());
+            // This instance IS the run: its scenes and its scripts carry it, so run-scoped systems
+            // (audio) group them by it.
             m_sceneManager.SetSceneRun(this);
             m_runHost.Binding().run = this;
             // Every context of this run reads THIS run's services (run.*, its input, its save), the
@@ -336,7 +339,18 @@ export namespace engine::runtime
             // join use the run's TLS backend, made when first needed.
             m_http.SetFactory([this]() { return foundation::http::CreateHttpClient(*m_allocator, TlsBackend()); });
             m_network.SetTlsBackendSource([this]() { return TlsBackend(); });
+            // What the run owns and others reach through it (run.Get<T>()): borrowed, members all.
+            Register<GameInstance>(*this);
+            Register<NetworkController>(m_network);
+            Register<input::ActionRuntime>(m_inputRuntime);
+            Register<RunSave>(m_save);
+            Register<engine::script::ScriptRunHost>(m_runHost);
+            Register<foundation::http::HttpScriptBinding>(m_http);
         }
+
+        // Disposed here, while the members registered on it still exist (their stop hooks run,
+        // and the run's manager hears it go).
+        ~GameInstance() override { Dispose(); }
 
         /// The platform's TLS backend for this run (Mbed TLS natively; none in a browser, which
         /// does TLS itself), made on first use.
@@ -354,7 +368,7 @@ export namespace engine::runtime
             m_network.SetReplicatedScene(scene); // keep replication on the current scene across loads
             if (scene != nullptr)
             {
-                scene->SetEventBus(&m_runEvents); // adopt path shares THIS run's bus
+                scene->SetEventBus(&Events()); // adopt path shares THIS run's bus
                 scene->SetRun(this);
             }
         }
@@ -600,13 +614,12 @@ export namespace engine::runtime
         /// The Game tier's on<Event> inbox subscribes here, and a behavior in any of the run's scenes
         /// emits straight onto it - there is NO relay to cross (a Level may still re-emit as a deliberate
         /// translation, never as plumbing). The instance drains it once per frame (DrainRunEvents); the
-        /// borrowing scenes do not. Native messaging::EventBus (StringHash + Variant + subscriber list).
-        [[nodiscard]] messaging::EventBus& RunEvents() noexcept { return m_runEvents; }
+        /// borrowing scenes do not. The run's bus: IRun::Events().
 
         /// Deliver this frame's queued run-bus events. Called on the instance tick AFTER TickScript (no VM
         /// call active), so a subscriber may dispatch script handlers directly. Cascade-bounded like the
         /// scene bus; safe with no game script (native run-bus subscribers still fire).
-        void DrainRunEvents() { m_runEvents.Drain(); }
+        void DrainRunEvents() { Events().Drain(); }
 
         // ---- input (this instance's OWN action runtime - the input analog of the
         // per-instance scene group + net endpoint) ----
@@ -670,7 +683,6 @@ export namespace engine::runtime
         engine::script::ScriptRunHost m_runHost{
             foundation::core::DefaultAllocator()}; // owned: the game's script context (process
                                                    // root until the instance phase threads one)
-        messaging::EventBus m_runEvents; // the run-scoped event bus (app-owned)
         scene::SceneManager m_sceneManager{DefaultAllocator()}; // owned; registered with the SceneSubsystem to tick
         scene::Scene* m_scene = nullptr;
         script::IScriptErrorHandler* m_errorHandler = nullptr;

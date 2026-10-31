@@ -14,6 +14,7 @@
 import foundation.core;
 import foundation.runtime;
 import foundation.scene;
+import foundation.run;
 import foundation.audio;
 import engine.audio;
 
@@ -24,6 +25,11 @@ namespace scene = foundation::scene;
 
 namespace
 {
+    // A run of its own (a GameInstance is the real one).
+    struct TestRun final : foundation::run::RunBase
+    {
+        TestRun() : RunBase(DefaultAllocator(), u8"test") {}
+    };
     [[nodiscard]] RefPtr<AudioClip> Tone(f32 seconds, u32 sampleRate)
     {
         Array<i16> samples;
@@ -61,7 +67,7 @@ namespace
         scene::Scene scene{DefaultAllocator(), u8"run-scene"};
         scene::EntityHandle source;
 
-        RunScene(AudioSubsystem& audio, const void* run, const RefPtr<AudioClip>& clip)
+        RunScene(AudioSubsystem& audio, foundation::run::IRun* run, const RefPtr<AudioClip>& clip)
         {
             RegisterAudioComponentReflection();
             scene.SetRun(run);
@@ -91,7 +97,7 @@ TEST_CASE("run audio: ending a run fades out its scenes and its music, not anoth
     AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
     ctx.Startup();
     AudioEngine& engine = *audio->Engine();
-    int runA = 0, runB = 0; // two games' keys (a GameInstance is the real one)
+    TestRun runA, runB; // two games
 
     CHECK(audio->RunGroupFor(nullptr) == 0u); // outside every run
     const u64 groupA = audio->RunGroupFor(&runA);
@@ -132,7 +138,7 @@ TEST_CASE("run audio: only the focused run is heard, unless every run is; pause 
     AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
     ctx.Startup();
     AudioEngine& engine = *audio->Engine();
-    int runA = 0, runB = 0, runC = 0;
+    TestRun runA, runB, runC;
     const u64 a = audio->RunGroupFor(&runA);
     const u64 b = audio->RunGroupFor(&runB);
 

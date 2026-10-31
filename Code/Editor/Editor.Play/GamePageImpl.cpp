@@ -511,6 +511,10 @@ namespace editor
         }
 
         m_running = true;
+        if (m_gameInstance != nullptr)
+        {
+            m_gameInstance->Start(); // the run's session: whatever follows the run's lifecycle hears it
+        }
         if (m_pauseToggle != nullptr)
         {
             m_pauseToggle->SetChecked(false);
@@ -529,6 +533,10 @@ namespace editor
         if (m_audio != nullptr && m_gameInstance != nullptr)
         {
             m_audio->SetFocusedRun(m_gameInstance); // the tab Play was pressed in is the one heard
+        }
+        if (m_app != nullptr && m_app->Runs() != nullptr && m_gameInstance != nullptr)
+        {
+            m_app->Runs()->SetFocused(m_gameInstance); // ... and the one the user is playing
         }
         LOG_INFO(u8"Editor", u8"Game: running scene '{}'", m_sceneTitle);
         RefreshToolbar();
@@ -598,6 +606,11 @@ namespace editor
                 m_fallbackScenes.Clear(); // no instance: the page's own placeholder group
             }
             m_scene = nullptr;
+        }
+        // The run's session ends (its lifecycle's listeners hear it).
+        if (m_gameInstance != nullptr)
+        {
+            m_gameInstance->Stop();
         }
         // The run's sound ends with it: its music, one-shots and anything still fading (another
         // tab's run and the editor's own sounds play on).
@@ -698,10 +711,18 @@ namespace editor
         const bool paused =
             m_simPausedByDebugger || (m_pauseToggle != nullptr && m_pauseToggle->IsChecked());
         m_audio->SetRunPaused(m_gameInstance, paused);
-        // Clicking into this tab's viewport makes its run the one heard.
+        if (m_gameInstance != nullptr)
+        {
+            m_gameInstance->SetPaused(paused); // the host's pause: the run hears it once per change
+        }
+        // Clicking into this tab's viewport makes its run the one heard, and the one played.
         if (m_viewport->IsFocused() && m_audio->FocusedRun() != m_gameInstance)
         {
             m_audio->SetFocusedRun(m_gameInstance);
+            if (m_app != nullptr && m_app->Runs() != nullptr)
+            {
+                m_app->Runs()->SetFocused(m_gameInstance);
+            }
         }
     }
 

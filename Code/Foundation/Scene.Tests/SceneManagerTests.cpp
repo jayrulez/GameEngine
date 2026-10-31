@@ -9,6 +9,7 @@
 
 import foundation.core;
 import foundation.scene;
+import foundation.run;
 
 using namespace foundation::core;
 using namespace foundation::scene;
@@ -193,12 +194,15 @@ TEST_CASE("scene-manager: a running scene is stopped before it is destroyed")
     CHECK(stops == 2);
 }
 
-TEST_CASE("scene-manager: created scenes carry the run key the manager was given")
+TEST_CASE("scene-manager: created scenes carry the run the manager was given")
 {
     SceneManager loose{DefaultAllocator()};
     CHECK(loose.CreateScene(u8"page")->Run() == nullptr); // no run: an editor page's scenes
 
-    int runIdentity = 0; // any address stands for the run
+    struct TestRun final : foundation::run::RunBase
+    {
+        TestRun() : RunBase(DefaultAllocator(), u8"test") {}
+    } runIdentity;
     SceneManager owned{DefaultAllocator()};
     owned.SetSceneRun(&runIdentity);
     Scene* a = owned.CreateScene(u8"a");

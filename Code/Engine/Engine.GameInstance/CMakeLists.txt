@@ -5,7 +5,7 @@ util_add_engine_library(Engine.GameInstance ALIAS Engine::GameInstance)
 target_link_libraries(Engine.GameInstance PUBLIC
     Foundation::Core Foundation::Scene Foundation::Scene.Resource Foundation::Content Foundation::Resource
     Foundation::Script Engine::Script Foundation::Script.Facades
-    Foundation::Net.Manager Foundation::Net.Tls Foundation::Http.Client Foundation::Http.Script Engine::Net Foundation::Input Foundation::Settings Foundation::Xml.Serialization Engine::Domain Foundation::Policy)
+    Foundation::Net.Manager Foundation::Run Foundation::Net.Tls Foundation::Http.Client Foundation::Http.Script Engine::Net Foundation::Input Foundation::Settings Foundation::Xml.Serialization Engine::Domain Foundation::Policy)
 
 # The run's TLS backend: Mbed TLS natively; a browser does TLS itself (Http.Client's fetch, the
 # browser's WebSocket).

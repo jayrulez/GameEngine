@@ -14,6 +14,7 @@ module;
 export module foundation.runtime:subsystem_manager;
 
 import foundation.core;
+import foundation.run; // IRunManager: the runs this manager's subsystems serve
 import :subsystem;
 
 namespace core = foundation::core;
@@ -106,6 +107,13 @@ export namespace foundation::runtime
         // input runtime's per-action timeScale flag read it from here.
         void SetTimeScale(core::f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
         [[nodiscard]] core::f32 TimeScale() const noexcept { return m_timeScale; }
+
+        // The live runs (Documentation/Specs/run-context.md): whoever owns them (DefaultApplication)
+        // sets their manager here, so every subsystem - an engine one or a game plugin's,
+        // registered whenever - finds them through Manager()->RunManager(). Null: no game here
+        // (a tool, a test, the editor's outer runtime), so no runs. Borrowed.
+        void SetRunManager(foundation::run::IRunManager* runs) noexcept { m_runs = runs; }
+        [[nodiscard]] foundation::run::IRunManager* RunManager() const noexcept { return m_runs; }
 
         // The app's configured fixed step - plain CONFIG (a float), not an execution lane.
         // The scene bridge reads it to seed per-scene fixed steppers; fixed-rate interpolation
@@ -250,6 +258,7 @@ export namespace foundation::runtime
         core::Array<Subsystem*> m_sorted;                // non-owning, UpdateOrder-sorted
         core::Array<core::UniquePtr<Subsystem>> m_owned; // ownership
         bool m_running = false;
+        foundation::run::IRunManager* m_runs = nullptr; // SetRunManager; borrowed
         core::f32 m_fixedStep = 1.0f / 60.0f;
         core::f32 m_timeScale = 1.0f;
         bool m_disposed = false;

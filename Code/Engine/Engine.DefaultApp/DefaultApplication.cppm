@@ -60,6 +60,7 @@ import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)
 import foundation.net;                 // UdpSocket / DatagramEndpoint (the transport)
 import foundation.net.replication;     // NetworkId / StateReplication (the spawn-handler seam)
 import foundation.net.manager;   // NetworkManager + NetworkStartup/StartNetworking + the Net facade
+import foundation.run;           // RunRegistry: the live runs, for every subsystem
 import engine.net; // NetworkSubsystem (injects the NetworkComponentManager into scenes)
 import foundation.profiler;      // the CPU scope profiler (P-key dump)
 
@@ -98,6 +99,8 @@ export namespace engine::runtime
         /// The app's running game (N=1 today). The launch flow creates the game scene in its
         /// Scenes() manager so it groups + ticks + renders as this run's scenes.
         [[nodiscard]] GameInstance& Instance() noexcept { return m_instance; }
+        /// The live runs (null before Configure); also on the subsystem manager, for subsystems.
+        [[nodiscard]] foundation::run::IRunManager* Runs() noexcept { return m_runs.Get(); }
 
         /// The primary instance's scene group - a scene created here renders (the app renders instance
         /// scenes; there is no default manager). Returns SceneManager& directly so callers need not
@@ -362,6 +365,11 @@ export namespace engine::runtime
         core::f32 m_runSeconds = 0.0f;
 
         engine::scene::SceneSubsystem* m_scenes = nullptr;
+        // The live runs (every GameInstance), handed to the subsystem manager for every subsystem
+        // (Documentation/Specs/run-context.md). Made in Configure; declared BEFORE the instances so
+        // it outlives them and hears each one go.
+        core::UniquePtr<foundation::run::RunRegistry> m_runs;
+        core::u32 m_runsMade = 1; // names the extra instances' runs ("Game 2", ...)
         GameInstance m_instance; // the primary running game (app-level ops target this one)
         core::Array<core::UniquePtr<GameInstance>>
             m_extraInstances; // multi-instance PIE / headless server

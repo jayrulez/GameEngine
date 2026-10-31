@@ -104,7 +104,7 @@ namespace engine::runtime
 
     void GameInstance::InstallRunServices(script::IScriptContext& context)
     {
-        m_runBinding.runEvents = &m_runEvents;            // run.events() -> THIS run's bus
+        m_runBinding.runEvents = &Events();            // run.events() -> THIS run's bus
         InstallRunScriptService(context, m_runBinding);   // run.* -> this instance's registry
         // THIS instance's input runtime as the context's Input service (overriding the shared editor
         // runtime the run-host configurator installed), so the run reads only ITS own source.
@@ -172,7 +172,7 @@ namespace engine::runtime
         // Wire the Game tier's on<Event> inbox to THIS run's bus: the shared
         // bridge subscribes the run bus to the Game class's declared handlers (threaded in from the cooked
         // ScriptClass), fanning each to DispatchGameEvent -> the Game object. No implicit scene->run relay.
-        m_gameEventSubs.Bind(&m_runEvents,
+        m_gameEventSubs.Bind(&Events(),
                              core::Function<void(core::StringView, const core::Variant&)>{
                                  [this](core::StringView eventName, const core::Variant& payload)
                                  { DispatchGameEvent(eventName, payload); }});

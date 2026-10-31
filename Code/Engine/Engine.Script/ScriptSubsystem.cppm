@@ -107,7 +107,7 @@ export namespace engine::script
     {
     public:
         /// Wire the target bus + the sink (called with (eventName, payload) per fired event). The bus is
-        /// tier-agnostic: a scene passes &scene.Events(), the run tier passes &instance.RunEvents().
+        /// tier-agnostic: a scene passes &scene.Events(), the run tier passes &instance.Events().
         void Bind(messaging::EventBus* bus, Function<void(StringView, const Variant&)> sink)
         {
             m_bus = bus;

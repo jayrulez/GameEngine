@@ -22,6 +22,7 @@ export module foundation.scene:manager;
 
 import foundation.core;
 import foundation.messaging; // EventBus (the scope bus injected into every created scene)
+import foundation.run;       // IRun: the run every created scene belongs to
 import :scene;
 import :frame_time;
 
@@ -58,8 +59,8 @@ export namespace foundation::scene
         /// its run bus here so `scene.events` and the run bus are one object. Applied before assembly, so
         /// the script systems bind to it. Null (default) leaves scenes with no bus.
         void SetSceneEventBus(messaging::EventBus* bus) noexcept { m_sceneEventBus = bus; }
-        // The run key every created scene carries (Scene::SetRun), set by the owning run.
-        void SetSceneRun(const void* run) noexcept { m_sceneRun = run; }
+        // The run every created scene belongs to (Scene::SetRun), set by the owning run.
+        void SetSceneRun(foundation::run::IRun* run) noexcept { m_sceneRun = run; }
 
         /// The GROUP time scale - the `instance` term of dt = host x context x GROUP x scene. Default
         /// 1.0, so the editor / default manager applies no group scaling.
@@ -296,7 +297,7 @@ export namespace foundation::scene
         SceneInstaller m_installer;   // composition path (type-erased; owned, callable or empty)
         SceneUninstaller m_uninstaller; // teardown path (type-erased; owned, callable or empty)
         messaging::EventBus* m_sceneEventBus = nullptr; // borrowed scope bus for created scenes
-        const void* m_sceneRun = nullptr;               // the run key created scenes carry
+        foundation::run::IRun* m_sceneRun = nullptr;    // the run created scenes belong to
         f32 m_timeScale = 1.0f;       // the group / instance term
         Scene* m_current = nullptr;   // the group's current scene
         IAllocator* m_allocator;

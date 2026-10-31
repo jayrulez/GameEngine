@@ -26,6 +26,7 @@ export module foundation.script.facades;
 import foundation.core;
 import foundation.scene;
 import foundation.scene.resource; // PrefabSpawnSystem - what scene.spawn reaches
+import foundation.run;            // IRun: the run a script context belongs to
 import foundation.script;
 import foundation.resource; // ResourceManager - the run's resource-swap seam (Track A resource refs)
 
@@ -99,10 +100,10 @@ export namespace foundation::script
         // installs this. Null / returns null on a bare cook VM => the swap sets the id only (unbound).
         core::Function<foundation::resource::ResourceManager*()> resolveResources;
 
-        // The run this context's scripts belong to: the same opaque key the run's scenes carry
-        // (Scene::Run), so a run-scoped service (the Audio facade's music and one-shots) plays
-        // into the run's own group. Null = outside every run (an editor tool, a bare cook VM).
-        const void* run = nullptr;
+        // The run this context's scripts belong to: the run its scenes belong to (Scene::Run), so
+        // a run-scoped service (the Audio facade's music and one-shots) plays into the run's own
+        // group. Null = outside every run (an editor tool, a bare cook VM).
+        foundation::run::IRun* run = nullptr;
     };
 
     // ---- the curated behavior facades (camelCase = the script-visible names, the
@@ -674,7 +675,7 @@ export namespace foundation::script
     }
 
     /// The run the current script context belongs to (ScriptRuntimeBinding::run), or null.
-    [[nodiscard]] inline const void* CurrentRun()
+    [[nodiscard]] inline foundation::run::IRun* CurrentRun()
     {
         IScriptContext* context = CurrentScriptContext();
         auto* binding =

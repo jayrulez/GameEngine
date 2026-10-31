@@ -24,6 +24,7 @@ import foundation.input; // IInputSourceProvider
 import engine.input;  // FittedInputSource (the render resolution's pointer)
 import engine.gui;    // the screen tier's resolution
 import engine.gameinstance;
+import foundation.run;
 
 using namespace foundation::core;
 namespace runtime = foundation::runtime;
@@ -116,3 +117,48 @@ TEST_CASE("defaultapp: a render resolution fits the game's pointer and its scree
     CHECK(&app.Input()->ActiveSource() == shell);
     app.ReleaseInstance(extra);
 }
+
+// The runs (Documentation/Specs/run-context.md, P2): the app's instances are its runs, listed by
+// its run manager, which every subsystem finds on the subsystem manager; an instance released is
+// announced gone and leaves; the focused one, when it goes, takes the focus with it.
+TEST_CASE("defaultapp: its instances are the runs, on the subsystem manager for every subsystem")
+{
+    struct Heard final : foundation::run::IRunListener
+    {
+        int created = 0;
+        int destroyed = 0;
+        int focusCleared = 0;
+        void OnRunCreated(foundation::run::IRun&) override { ++created; }
+        void OnRunDestroyed(foundation::run::IRun&) override { ++destroyed; }
+        void OnFocusChanged(foundation::run::IRun* run) override { focusCleared += run == nullptr ? 1 : 0; }
+    } heard;
+
+    StubHost host;
+    engine::runtime::DefaultApplication app;
+    app.Configure(host);
+    foundation::run::IRunManager* runs = host.Subsystems().RunManager();
+    REQUIRE(runs != nullptr);
+    CHECK(runs == app.Runs());
+    CHECK(runs->Find(app.Instance().Id()) == &app.Instance()); // the primary instance is a run
+
+    runs->Subscribe(heard);
+    engine::runtime::GameInstance* extra = app.CreateInstance();
+    REQUIRE(extra != nullptr);
+    CHECK(heard.created == 1);
+    CHECK(extra->Name() == StringView(u8"Game 2"));
+    const foundation::run::RunId id = extra->Id();
+    CHECK(runs->Find(id) == extra);
+    runs->SetFocused(extra);
+
+    app.ReleaseInstance(extra);
+    CHECK(heard.destroyed == 1);
+    CHECK(heard.focusCleared == 1);
+    CHECK(runs->Find(id) == nullptr);
+    CHECK(runs->Focused() == nullptr);
+    engine::runtime::GameInstance* next = app.CreateInstance();
+    REQUIRE(next != nullptr);
+    CHECK(next->Id() != id); // ids are not reused
+    runs->Unsubscribe(heard);
+    app.ReleaseInstance(next);
+}
+

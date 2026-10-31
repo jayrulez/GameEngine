@@ -27,6 +27,8 @@ import foundation.input;       // ActionRuntime / IInputSourceProvider (per-inst
 import foundation.shell;       // IKeyboard / KeyCode (a minimal fake device)
 import foundation.http;        // HttpServer (a local server the run's client fetches from)
 import foundation.http.script; // RegisterHttpScriptFacade (the run domain registers it in an app)
+import foundation.run;         // IRun (a GameInstance is one)
+import engine.script;          // ScriptRunHost (one of the run's services)
 
 using namespace foundation::core;
 namespace script = foundation::script; // raw manager/context for the run facade battery
@@ -147,6 +149,32 @@ TEST_CASE("game-instance: an instance is its scenes' and scripts' run")
     b.SetScene(adopted);
     CHECK(adopted->Run() == &b);
     b.SetScene(nullptr);
+}
+
+// The run as a type (Documentation/Specs/run-context.md, P2): a GameInstance is its IRun - its
+// scenes borrow the run's own bus, and what it owns is reached through the run.
+TEST_CASE("game-instance: the instance is an IRun, its scenes on the run's bus, its services through the run")
+{
+    engine::runtime::GameInstance gi;
+    foundation::run::IRun& run = gi;
+    CHECK(run.Id() != 0);
+    CHECK(run.State() == foundation::run::RunState::Idle);
+    scene::Scene* level = gi.Scenes().CreateScene(u8"L1");
+    REQUIRE(level != nullptr);
+    CHECK(level->Events() == &run.Events()); // one bus: the run's
+
+    CHECK(run.Get<engine::runtime::GameInstance>() == &gi);
+    CHECK(run.Get<engine::runtime::NetworkController>() == &gi.Network());
+    CHECK(run.Get<input::ActionRuntime>() == &gi.InputRuntime());
+    CHECK(run.Get<engine::runtime::RunSave>() == &gi.Saves());
+    CHECK(run.Get<engine::script::ScriptRunHost>() == &gi.RunHost());
+    CHECK(run.Get<foundation::http::HttpScriptBinding>() == &gi.Http());
+
+    gi.Start();
+    gi.SetPaused(true);
+    CHECK(run.State() == foundation::run::RunState::Paused);
+    gi.Stop();
+    CHECK(run.State() == foundation::run::RunState::Idle);
 }
 
 TEST_CASE("game-instance: each instance's input runtime reads ONLY its own source (per-instance "
@@ -807,7 +835,7 @@ TEST_CASE("game-instance: the run-scoped event bus - deferred delivery, order, c
     RegisterCoreTypes();
 
     engine::runtime::GameInstance gi;
-    messaging::EventBus& bus = gi.RunEvents();
+    messaging::EventBus& bus = gi.Events();
 
     // Deferred delivery + payload + subscription order (the native run bus, zero script).
     Array<i32> order;
@@ -835,10 +863,10 @@ TEST_CASE("game-instance: the run-scoped event bus - deferred delivery, order, c
     // Two instances own INDEPENDENT buses (the multi-instance correctness check).
     engine::runtime::GameInstance other;
     i32 aHits = 0, bHits = 0;
-    (void)gi.RunEvents().Subscribe(StringHash(StringView(u8"Only")), [&](const Variant&) { ++aHits; });
-    (void)other.RunEvents().Subscribe(StringHash(StringView(u8"Only")),
+    (void)gi.Events().Subscribe(StringHash(StringView(u8"Only")), [&](const Variant&) { ++aHits; });
+    (void)other.Events().Subscribe(StringHash(StringView(u8"Only")),
                                       [&](const Variant&) { ++bHits; });
-    gi.RunEvents().Publish(StringHash(StringView(u8"Only")), Variant{});
+    gi.Events().Publish(StringHash(StringView(u8"Only")), Variant{});
     gi.DrainRunEvents();
     other.DrainRunEvents();
     CHECK(aHits == 1);
@@ -869,13 +897,13 @@ TEST_CASE("game-instance: the Game tier's on<Event> inbox harvests the run bus (
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // nothing fired yet
 
     // C++ publishes on the run bus -> onPing(42) fires on the Game class at the next drain.
-    gi.RunEvents().Publish(StringHash(StringView(u8"Ping")), Variant::From<i32>(42));
+    gi.Events().Publish(StringHash(StringView(u8"Ping")), Variant::From<i32>(42));
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // deferred until Drain
     gi.DrainRunEvents();
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // delivered with payload
 
     // An event with NO matching on<Event> handler is ignored (only declared handlers subscribe).
-    gi.RunEvents().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
+    gi.Events().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
     gi.DrainRunEvents();
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // unchanged
 
@@ -910,7 +938,7 @@ TEST_CASE("game-instance: a Game started from its cooked class hears the run bus
     REQUIRE(gi.StartScript(cooked));
     auto* ctx = gi.RunHost().Context();
     REQUIRE(ctx != nullptr);
-    gi.RunEvents().Publish(StringHash(StringView(u8"GoalReached")), Variant::From<i32>(0));
+    gi.Events().Publish(StringHash(StringView(u8"GoalReached")), Variant::From<i32>(0));
     gi.DrainRunEvents();
     CHECK(ctx->GetGlobal(u8"Reached").Get<f64>() == doctest::Approx(1.0));
     gi.StopScript();
@@ -938,12 +966,12 @@ TEST_CASE("game-instance: the Game tier's on<Event> inbox harvests the run bus (
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0));
 
     // C++ publishes on the run bus -> Game:onPing(42) fires at drain (deferred).
-    gi.RunEvents().Publish(StringHash(StringView(u8"Ping")), Variant::From<i32>(42));
+    gi.Events().Publish(StringHash(StringView(u8"Ping")), Variant::From<i32>(42));
     gi.DrainRunEvents();
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0));
 
     // A non-subscribed event is ignored.
-    gi.RunEvents().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
+    gi.Events().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
     gi.DrainRunEvents();
     CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0));
 
@@ -1401,8 +1429,8 @@ TEST_CASE("game-instance: created scenes share the run bus - cross-scene deliver
     scene::Scene* b = gi.CreateScene(u8"B");
     REQUIRE(a != nullptr);
     REQUIRE(b != nullptr);
-    CHECK(a->Events() == &gi.RunEvents()); // both borrow the ONE run bus
-    CHECK(b->Events() == &gi.RunEvents());
+    CHECK(a->Events() == &gi.Events()); // both borrow the ONE run bus
+    CHECK(b->Events() == &gi.Events());
 
     int hits = 0;
     (void)a->Events()->Subscribe(StringHash(u8"Ping"), [&](const Variant&) { ++hits; });

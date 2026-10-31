@@ -211,11 +211,13 @@ D10. **Each run has an id that is never reused** in the process (a counter in `f
 D11. **Null stays "outside every run".** An editor page's scene and a test's scene have no run.
      They have no network, input map, save or run bus to hold.
 
-D12. **The run owns its event bus.** `IRun::Events()`; `RunBase` holds it (today's
-     `GameInstance::m_runEvents`). A scene reaches it through its run: `Scene::Events()` stays as
-     the accessor scene systems call, now `Run() ? &Run()->Events() : nullptr`, and
-     `Scene::SetEventBus` / `SceneManager::SetSceneEventBus` go (a scene is handed its run once,
-     not its run and its bus). `run.events()` in scripts reads the same bus as today.
+D12. **The run owns its event bus.** `IRun::Events()`; `RunBase` holds it (was
+     `GameInstance::m_runEvents`; `GameInstance::RunEvents()` is gone, callers use `Events()`).
+     `run.events()` in scripts reads the same bus as today. As built, a scene still BORROWS its bus
+     by injection (`Scene::SetEventBus`, `SceneManager::SetSceneEventBus`), not through its run:
+     the editor's scene page gives its scenes a bus of its own with no run
+     (`Code/Editor/Editor.Scene/ScenePageImpl.cpp:90`, its page bus), and so do tests, so a scene
+     can have a bus without a run (D11). A run injects ITS bus; `Scene::Events()` is unchanged.
 
 D13. **The script surface does not change.** `run`, `Input`, `Net`, `Save`, `Http`, `Audio` and
      `gui` read the same to a script; `ScriptBinding::run` becomes an `IRun*`. Whether the run
@@ -241,15 +243,19 @@ counter, as D1-D7, D10 and D12, with `Run.Tests`. Nothing in the engine uses the
 
 - `SubsystemManager::SetRunManager` / `RunManager()` (`foundation.runtime` links
   `foundation.run`).
-- `Scene::Run()` becomes `run::IRun*`; `SceneManager::SetSceneRun` takes one; `Scene::Events()`
-  reads the run's bus and `SetEventBus` / `SetSceneEventBus` go; `ScriptBinding::run` becomes an
-  `IRun*`.
+- `Scene::Run()` becomes `run::IRun*`; `SceneManager::SetSceneRun` takes one;
+  `ScriptBinding::run` becomes an `IRun*`. A run's scenes borrow the run's bus (D12, as built).
 - `GameInstance` derives from `RunBase`; its bus moves into it; it registers its services (D9).
 - `DefaultApplication` implements `IRunManager` over a `RunRegistry`; `CreateInstance` and
   `ReleaseInstance` announce created and destroyed; the primary instance likewise; it sets the
   subsystem manager's run manager.
 - The Game tab's Play calls `Start`, its pause `SetPaused`, its Stop `Stop`; focusing its viewport
-  calls `SetFocused`.
+  calls `SetFocused` (through `DefaultApplication::Runs()`). The player starts its run's one
+  session just before it launches the game script and stops it in `OnExit`. Hosts that never call
+  `Start` (the samples) keep an Idle run, which nothing yet reads.
+- As built: the registry is made in `DefaultApplication::Configure` from the subsystem manager's
+  allocator (held before the instances, so it outlives them); extra instances are named
+  "Game 2", "Game 3", ....
 - Tests: `GameInstanceTests` (created and adopted scenes carry the instance as their run, and its
   bus, `GameInstanceTests.cpp:139-148`); a released instance is gone from the manager and its
   destruction announced; a subsystem finds the run manager through its `Manager()`.

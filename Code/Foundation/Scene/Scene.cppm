@@ -26,6 +26,7 @@ import :phase;
 import :system;
 import :component;
 import foundation.messaging; // EventBus (its own leaf module)
+import foundation.run;       // IRun: the run that owns this scene
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -474,11 +475,11 @@ export namespace foundation::scene
         /// Null clears the borrowed bus - the scene has no bus of its own. Set before the scene ticks.
         void SetEventBus(messaging::EventBus* bus) noexcept { m_eventBus = bus; }
 
-        // The run that owns this scene: an opaque key (a GameInstance sets itself) that run-scoped
-        // systems group the scene by - its audio nests under the run's, so the run's stop, pause
-        // and mute reach it. Null = outside every run (an editor page's scene, a test's).
-        [[nodiscard]] const void* Run() const noexcept { return m_run; }
-        void SetRun(const void* run) noexcept { m_run = run; }
+        // The run that owns this scene (Documentation/Specs/run-context.md): run-scoped systems
+        // group the scene by it - its audio nests under the run's, so the run's stop, pause and
+        // mute reach it. Null = outside every run (an editor page's scene, a test's).
+        [[nodiscard]] foundation::run::IRun* Run() const noexcept { return m_run; }
+        void SetRun(foundation::run::IRun* run) noexcept { m_run = run; }
 
         // ---- play / edit state ----
 
@@ -615,7 +616,7 @@ export namespace foundation::scene
 
         // per-scene systems
         messaging::EventBus* m_eventBus = nullptr; // borrowed scope bus (injected by the run scope); null = none
-        const void* m_run = nullptr;                // the owning run's key (SetRun); null = none
+        foundation::run::IRun* m_run = nullptr;     // the owning run (SetRun); null = none
         Array<UniquePtr<SceneSystem>> m_systems;                // ownership
         HashMap<TypeId, SceneSystem*> m_systemsByType; // lookup by type (id: DLL-safe)
         Array<SceneSystem*> m_sortedSystems;                    // non-owning, UpdateOrder-sorted

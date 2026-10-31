@@ -22,6 +22,7 @@ import foundation.content;
 import foundation.resource;
 import foundation.script;
 import foundation.script.facades; // ScriptRuntimeBinding (the run a context belongs to)
+import foundation.run;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
@@ -206,7 +207,10 @@ namespace
             utf8char stepsText[37];
             beep->Id().ToChars(beepText);
             steps->Id().ToChars(stepsText);
-            int runKey = 0;
+            struct TestRun final : foundation::run::RunBase
+            {
+                TestRun() : RunBase(DefaultAllocator(), u8"test") {}
+            } runKey;
             foundation::script::ScriptRuntimeBinding runtime;
             runtime.run = &runKey;
             subsystem.Engine()->SetBusVolume(AudioBus::Music, 1.0f);

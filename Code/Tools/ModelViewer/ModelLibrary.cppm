@@ -598,7 +598,8 @@ export namespace modelviewer
         /// Its resources (the loads finish as they are pumped).
         [[nodiscard]] resource::ResourceManager* Resources() const noexcept { return m_resources.Get(); }
 
-        static constexpr const char8_t* kRecordName = u8"viewer-record.txt";
+        // Exported data: read by the viewer executable through ModelBrowse in the shared build.
+        static constexpr ENGINE_EXPORT_DATA const char8_t* kRecordName = u8"viewer-record.txt";
 
     private:
         [[nodiscard]] String RecordPath() const { return PathJoin(m_folder.AsView(), StringView(kRecordName)); }

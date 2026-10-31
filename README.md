@@ -8,17 +8,10 @@
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/WSvxW8mWH5)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A game engine in C++23, built on modules throughout, with the editor, asset pipeline and tools to
-take a game from first scene to shipped build: a project made in the editor exports to a desktop
-player, to the browser (WebGPU through Emscripten) and to the Steam Deck. Underneath are a layered
-runtime over an abstract RHI with Vulkan, WebGPU and Direct3D 12 backends; a render graph driving
-forward PBR with shadows, image-based lighting and a full post stack; physics, navigation, audio,
-skeletal animation with graphs and IK, terrain and vegetation; gameplay scripting in AngelScript
-or Luau; and a CSS-styled UI framework.
-
-It is built to be worked by agents as well as people. An MCP host exposes the engine's
-reflection, its script API, project operations and play in editor, and the sample games in this
-repository were built and playtested through those tools.
+A modern C++23 game engine and editor built entirely with C++ modules. It provides a complete game
+development ecosystem, combining an integrated editor, asset pipeline, runtime, and toolchain with
+advanced rendering, gameplay scripting, and a comprehensive UI framework. Its agentic workflow
+enables AI agents to build entire games, from initial project setup to fully playable experiences.
 
 ![The editor](Documentation/Images/Editor.png)
 

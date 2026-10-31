@@ -14,8 +14,8 @@ cmake --build build/clang -j4 --target Tools.Editor    # one target
 cmake --build build/clang -j4                          # everything
 ```
 
-- Develop against Debug, and keep BOTH compilers green: `build/clang` and `build/gcc`.
-- Build at `-j4`, ONE build at a time, and never beside another heavy build (a second ninja,
+- Develop against Debug, and keep both compilers green: `build/clang` and `build/gcc`.
+- Build at `-j4`, one build at a time, and never beside another heavy build (a second ninja,
   the Steam Deck container, another engine's build). Two ninjas on one tree corrupt its dyndep
   state; two heavy builds at once run the machine out of memory.
 - Point the compiler's temp at the disk for big builds: `export TMPDIR=$PWD/build/tmp` (an
@@ -49,7 +49,7 @@ cmake --build build/clang -j4                          # everything
   instead of hard-coding a list of type names.
 - **Keep the documents honest in the same commit.** A change to the MCP tools updates
   `Documentation/Shipping/McpGuide.md`; the engine tool count (`kEngineToolCount`) is a
-  deliberate tripwire, bumped when a tool is added.
+  tripwire, bumped by hand when a tool is added.
 - **Commits**: one per piece of work (a layer with its tests), the subject `Area: what it
   does` with a body saying why, and no `Co-Authored-By` or session trailer lines. Stage
   explicit paths. Push only when asked.
@@ -83,9 +83,9 @@ lesson shaders generated the same way (`Tools/`: the lessons table, the hall, th
 the same way (`Tools/`: Blender models, the maps, the shaders, the sounds), and **NativeSample**, a
 game with native code.
 Their `Cooked/`, `.cache/`, `Editor/` and `Dist/` are generated and ignored. Integration.Mcp
-checks that PaperKid, Sky Hopper, Snowline, Shader Gallery and Masquerade read at the current data versions
-and cook. Sky Hopper's
-`CREDITS.md` and `Licenses/` must stay in step with its assets, and so must PaperKid's.
+checks that PaperKid, Sky Hopper, Snowline, Shader Gallery and Masquerade read at the current data
+versions and cook. Each sample game's `CREDITS.md` and `Licenses/` must stay in step with its
+assets.
 
 ## Steam Deck
 

@@ -17,9 +17,8 @@ skeletal animation with graphs and IK, terrain and vegetation; gameplay scriptin
 or Luau; and a CSS-styled UI framework.
 
 It is built to be worked by agents as well as people. An MCP host exposes the engine's
-reflection, its script API, project operations and play in editor, and the five sample projects
-in this repository were each built and playtested through those tools, and ship to the web and
-the Steam Deck.
+reflection, its script API, project operations and play in editor, and the sample games in this
+repository were built and playtested through those tools.
 
 ![The editor](Documentation/Images/Editor.png)
 
@@ -49,8 +48,8 @@ with a debugger in the editor. See [Documentation/Shipping/Scripting.md](Documen
 (terrain sculpting and painting, vegetation, spline editing), inspectors from reflection, an
 asset browser over the import and cook pipeline, undo and redo, play in editor (several
 instances side by side), and a page per asset type: materials, meshes, textures, fonts, audio,
-animation clips and graphs, particles, input maps, UI documents and themes, render profiles, and
-scripts.
+animation clips and graphs, particles, input maps, GUI documents and style sheets, render
+profiles, and scripts.
 
 **Pipeline and shipping.** Importers (glTF, FBX and OBJ, images, audio, fonts), cooks per asset
 type, texture compression (BC7, ASTC), and an export that packages a project for the desktop
@@ -110,7 +109,7 @@ ctest --preset clang                  # the unit and integration tests
 | `clang-reldbg` / `msvc-reldbg` | RelWithDebInfo, for performance work and the editor download |
 | `clang-release` / `gcc-release` / `msvc-release` | Release |
 | `clang-shipping` / `gcc-shipping` / `msvc-shipping` | Shipping (no asserts, stripped) |
-| `wasm` / `wasm-shipping` | Emscripten wasm32 |
+| `wasm` / `wasm-release` / `wasm-shipping` | Emscripten wasm32: Debug, Release with the profiler, Shipping |
 
 Running the editor:
 
@@ -123,9 +122,10 @@ Add `--mcp` to serve the open project to an agent over MCP while you work in the
 
 ## Sample projects
 
-Game projects under `Data/SampleProjects/`, opened from the editor's project manager. The four
-games and the Shader Gallery are built through the engine's MCP tools and ship to the web and the
-Steam Deck; [the website](https://assiduousengine.github.io/#games) plays them in a browser.
+Game projects under `Data/SampleProjects/`, opened from the editor's project manager. The five
+games and the Shader Gallery were built through the engine's MCP tools.
+[The website](https://assiduousengine.github.io/#games) plays them in a browser and has their
+Windows, Linux and Steam Deck downloads (the Shader Gallery has no Steam Deck build).
 
 **Sky Hopper** (`PlatformerGame`) is a small 3D platformer, played through to the end over the
 MCP tools by an AI agent while it was built: five levels, coins, enemies and hazards, three lives
@@ -148,8 +148,8 @@ animated by Blender scripts.
 
 Watch it played on a Steam Deck: [PaperKid gameplay video](https://youtu.be/syJlmIirg_o).
 
-**Snowline** is a snowboard time trial with tricks, chosen for the engine features the other two
-do not use: generated terrain with splat-painted snow, rock and forest, scattered vegetation whose
+**Snowline** is a snowboard time trial with tricks, chosen for the engine features the earlier
+games do not use: generated terrain with splat-painted snow, rock and forest, scattered vegetation whose
 trees are solid, splines for the course line and the medal ghosts, an animation graph the rider
 drives by parameters, decals for its tracks, and jointed slalom flags. Three courses opened by
 medals: Meadow, Forest with its shortcut through the trees, and Ridge with a run of kickers, a gap
@@ -185,7 +185,7 @@ someone else's mark; guests stroll, gather and dance to the orchestra's cues, an
 sprints or stands still through a dance stands out. Three maps: the Palace, the Canal with its
 gondolas, and the Gardens. Masks and silk on custom shaders, music the crowd follows, and the
 models, the music and the sounds all made by its scripts. More in
-[its README](Data/SampleProjects/Masquerade/README.md); it is not on the website or the Deck yet.
+[its README](Data/SampleProjects/Masquerade/README.md).
 
 | The title | On the Canal | The music stops |
 |:---:|:---:|:---:|
@@ -195,7 +195,8 @@ models, the music and the sounds all made by its scripts. More in
 fly through, each on its own plinth, each `.hlsl` a short commented lesson that builds on the one
 before. Surface shaders first (unlit colour, textures, lava, a hologram, triplanar rock, dissolve,
 waves, wind and the engine's own PBR written as a surface), then two low-level shaders that light
-themselves: toon bands, and lighting that walks the scene's lights. Its lessons are listed in [its README](Data/SampleProjects/ShaderGallery/README.md).
+themselves: toon bands, and lighting that walks the scene's lights. Its lessons are listed in
+[its README](Data/SampleProjects/ShaderGallery/README.md).
 
 | The hall | Hologram | Dissolve | Toon |
 |:---:|:---:|:---:|:---:|
@@ -207,19 +208,22 @@ themselves: toon bands, and lighting that walks the scene's lights. Its lessons 
 
 ```
 Code/
-  Foundation/     Core, RHI and backends, Shell, Resource, VFS, Scene, Render, UI, GUI, VG,
+  Foundation/     Core, RHI and backends, Shell, Resource, VFS, Scene, Render, GUI, VG,
                   Fonts, Audio, Physics, Navigation, Net, Script, Shaders, Mcp, ...
   Engine/         The subsystems over Foundation, the composition root, the default
                   application, the game instance, the player
   Pipeline/       Importers and cooks per asset type, the per-language script cooks
   Editor/         Editor core, the project half, the app and one module per domain;
                   the MCP tools
-  Tools/          Editor, Cook, Export, ShaderPack and Mcp executables
+  Tools/          Editor, Cook, Export, ShaderPack, Mcp and ModelViewer executables
   Integration/    Flows that cross collections
   Samples/        Low-level C++ samples, one per engine area, and the RHI samples
                   (Code/Samples/README.md)
   Extensions/     Dear ImGui as a debug UI extension
-Data/             Engine data (shaders, fonts, themes) and the sample projects
+  Deprecated/     The old UI framework and its sandbox, built only on request
+Data/             The engine's shaders and fonts, the editor's and the model viewer's interface,
+                  branding, project templates, the code samples' and tests' data, and the
+                  sample projects
 ThirdParty/       Vendored dependencies
 scripts/          Distribution, export template and Steam Deck builds
 Documentation/    Shipping documentation (served to agents through the MCP host), systems,

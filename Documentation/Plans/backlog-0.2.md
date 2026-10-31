@@ -227,6 +227,45 @@ touch/input + build"). The pieces:
 Check against a real device (the user's phone), as the web demos were: touch, rotation, pause and
 resume, the back button.
 
+**The Linux dev box is ready (2026-10-31).** Installed and checked, so nothing here needs looking
+up again:
+
+- **JDK:** OpenJDK 17.0.20.1 (`openjdk-17-jdk`, `/usr/bin/java`), what Gradle and the Android
+  Gradle Plugin need. Gradle itself is not installed: the project's Gradle wrapper fetches it.
+- **SDK root:** `~/Android/Sdk` (2.7 GB), set up from Google's "command line tools only" download
+  (`commandlinetools-linux-15859902_latest.zip`, cmdline-tools 22.0) unpacked to
+  `~/Android/Sdk/cmdline-tools/latest`; licences accepted by the user.
+- **SDK packages** (`sdkmanager --install`):
+  - `platform-tools` 37.0.1 (adb 1.0.41);
+  - `platforms;android-36` (API 36, revision 2);
+  - `build-tools;37.0.0`;
+  - `ndk;30.0.16248370` (r30 stable; the other r30 builds and the newest r29 builds were release
+    candidates).
+- **The NDK's toolchain:** Android's Clang 21.0.0 (build 16134705, based on LLVM r574158c), with
+  `clang-scan-deps`, `clangd` and `lld` in
+  `$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin`. That meets the engine's Clang 21
+  floor and CMake's module scanning, so the plan is to build with the NDK's own compiler through
+  `$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake`. Watch for: it is Android's snapshot from
+  before the 21.1 releases the Linux lanes and CI use (21.1.8), so a module bug fixed in 21.1 could
+  still appear; the fallback is this box's `clang++-21` targeting `aarch64-linux-android` against
+  the NDK's sysroot and libc++.
+- **The NDK's sysroot:** `libc++_static.a` and `libc++_shared.so` for each ABI (aarch64, arm,
+  x86_64, i686, riscv64), Vulkan headers (`usr/include/vulkan`) and `libvulkan.so` per API level
+  (from 24).
+- **Environment** (in the user's `~/.bashrc`):
+  ```
+  export ANDROID_HOME=$HOME/Android/Sdk
+  export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370
+  export PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin
+  ```
+- **A phone over USB:** `android-sdk-platform-tools-common` (the udev rules) is installed; turn on
+  USB debugging on the phone and check it with `adb devices`.
+- **Already present:** CMake, Ninja and `clang++-21`. Not needed on the device: DXC, Naga and
+  Tint cook shaders on the host, and Android renders through the Vulkan backend, not wgpu-native.
+
+Open when the work starts: AngelScript's native calling convention on arm64 Android, SDL3's Java
+activity in the Gradle project, and reading content from the APK's assets through the VFS.
+
 ## Seeded: mountable content directories (user 2026-08-29)
 
 Origin: reviewing Sedulous's VFS while building the editor's `data://` discovery+mount. Sedulous lets

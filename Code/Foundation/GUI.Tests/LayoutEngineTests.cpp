@@ -435,6 +435,62 @@ namespace
     };
 }
 
+TEST_CASE("layout: repeat(auto-fill) makes as many columns as the width holds, which share what is left")
+{
+    Bed bed; // 400 wide: the grid's content is 380 inside its padding
+    auto grid = core::MakeRef<Panel>(core::DefaultAllocator());
+    grid->AddClass(SV(u8"cards"));
+    bed.root->AddChild(grid.Get());
+    core::Array<core::RefPtr<Panel>> cards;
+    for (int i = 0; i < 5; ++i)
+    {
+        cards.PushBack(core::MakeRef<Panel>(core::DefaultAllocator()));
+        cards[cards.Size() - 1]->AddClass(SV(u8"card"));
+        grid->AddChild(cards[cards.Size() - 1].Get());
+    }
+    StyleManager styles(CSSParser::Parse(SV(
+        u8".cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; padding: 10px; }"
+        u8".card { height: 40px; }")));
+    styles.ApplyTree(*bed.root.Get());
+    bed.Layout();
+    CHECK(grid->GetLayoutStyle().ColumnsRepeatAt == 0);
+    CHECK(grid->GetLayoutStyle().ColumnsRepeatSize == 1);
+    // Three columns of at least 100 and two gaps of 10 fit in 380, four do not; the three share
+    // the rest: (380 - 20) / 3 each.
+    const f32 column = (380.0f - 20.0f) / 3.0f;
+    CHECK(cards[0]->GetSize().x == doctest::Approx(column));
+    CHECK(cards[2]->GetPosition().x == doctest::Approx(10.0f + 2.0f * (column + 10.0f)));
+    // The last row starts at the first column, its cards as wide as the rows above.
+    CHECK(cards[3]->GetPosition().x == doctest::Approx(10.0f));
+    CHECK(cards[3]->GetPosition().y == doctest::Approx(10.0f + 40.0f + 10.0f));
+    CHECK(cards[4]->GetSize().x == doctest::Approx(column));
+
+    // Narrower, fewer columns; never fewer than one.
+    bed.root->SetSize(core::Float2{250.0f, 300.0f}); // 230 inside: two of 100 and a gap
+    bed.Layout();
+    CHECK(cards[1]->GetPosition().y == doctest::Approx(10.0f));
+    CHECK(cards[2]->GetPosition().y == doctest::Approx(60.0f));
+    bed.root->SetSize(core::Float2{60.0f, 300.0f});
+    bed.Layout();
+    CHECK(cards[1]->GetPosition().x == doctest::Approx(10.0f)); // one column, under the first
+
+    // Fixed tracks beside the repeat count against the width; a size to count with is required,
+    // and rows take no auto repeat.
+    StyleManager mixed(CSSParser::Parse(SV(
+        u8".cards { display: grid; grid-template-columns: 60px repeat(auto-fill, 50px); gap: 0; padding: 0; }")));
+    bed.root->SetSize(core::Float2{400.0f, 300.0f});
+    mixed.ApplyTree(*bed.root.Get());
+    bed.Layout();
+    CHECK(grid->GetLayoutStyle().ColumnsRepeatAt == 1);
+    CHECK(cards[4]->GetPosition().x == doctest::Approx(60.0f + 3.0f * 50.0f)); // 60 + 6 x 50 = 360 fit, a seventh does not
+    StyleManager refused(CSSParser::Parse(SV(
+        u8".cards { grid-template-columns: repeat(auto-fill, 1fr); grid-template-rows: repeat(auto-fill, 40px); }")));
+    refused.ApplyTree(*bed.root.Get());
+    CHECK(grid->GetLayoutStyle().ColumnsRepeatAt == -1); // refused, as an invalid declaration: no columns set
+    CHECK(grid->GetLayoutStyle().Columns.IsEmpty());
+    CHECK(grid->GetLayoutStyle().Rows.IsEmpty());
+}
+
 TEST_CASE("layout: a label and a button size to their text, and follow it")
 {
     fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);

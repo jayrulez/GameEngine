@@ -222,9 +222,20 @@ export namespace foundation::gui
                 return GridTrack{l.Value(), l.Value(), 0.0f};
             return {};
         }
-        // Parses a track list: sizes separated by spaces, which may include `repeat(<n>, <sizes>)`.
-        [[nodiscard]] inline Optional<Array<GridTrack>> ParseGridTracks(core::StringView text, const LengthContext& lengths)
+        // Where a track list's `repeat(auto-fill, <sizes>)` sits: its first track and how many it
+        // repeats (At -1: none).
+        struct GridAutoRepeat
         {
+            i32 At = -1;
+            i32 Size = 0;
+        };
+        // Parses a track list: sizes separated by spaces, which may include `repeat(<n>, <sizes>)`,
+        // and, where `autoRepeat` is given, one `repeat(auto-fill, <sizes>)` of fixed or minmax sizes.
+        [[nodiscard]] inline Optional<Array<GridTrack>> ParseGridTracks(core::StringView text, const LengthContext& lengths,
+                                                                       GridAutoRepeat* autoRepeat = nullptr)
+        {
+            if (autoRepeat != nullptr)
+                *autoRepeat = GridAutoRepeat{};
             Array<GridTrack> tracks;
             if (Trim(text) == core::StringView(u8"none"))
                 return tracks;
@@ -235,17 +246,26 @@ export namespace foundation::gui
                     const Array<core::StringView> args = SplitTopLevel(part.SubStr(7, part.Size() - 8), u8',');
                     if (args.Size() != 2)
                         return {};
-                    const Optional<f32> count = ParseLength(Trim(args[0]));
+                    const bool fill = Trim(args[0]) == core::StringView(u8"auto-fill");
+                    if (fill && (autoRepeat == nullptr || autoRepeat->At >= 0))
+                        return {}; // one auto repeat, and only where the caller takes one
+                    const Optional<f32> count = fill ? Optional<f32>(1.0f) : ParseLength(Trim(args[0]));
                     if (!count.HasValue() || count.Value() < 1.0f)
                         return {};
+                    if (fill)
+                        autoRepeat->At = static_cast<i32>(tracks.Size());
                     Array<GridTrack> unit;
                     for (const core::StringView size : SplitTopLevel(Trim(args[1]), u8' '))
                     {
                         const Optional<GridTrack> track = ParseTrack(size, lengths);
                         if (!track.HasValue())
                             return {};
+                        if (fill && track.Value().Min.Kind != LayoutLengthKind::Px)
+                            return {}; // an auto repeat counts with fixed sizes: 1fr or auto alone has none
                         unit.PushBack(track.Value());
                     }
+                    if (fill)
+                        autoRepeat->Size = static_cast<i32>(unit.Size());
                     for (i32 n = 0; n < static_cast<i32>(count.Value()); ++n)
                         for (const GridTrack& track : unit)
                             tracks.PushBack(track);
@@ -1093,11 +1113,17 @@ export namespace foundation::gui
             choose(u8"grid-auto-flow", ls.AutoFlow, detail::AutoFlowNamed);
             choose(u8"dock", ls.DockSide, detail::DockNamed);
             if (const StringView t = keyword(u8"grid-template-columns"); t.Size() != 0)
-                if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths); tracks.HasValue() && !detail::SameTracks(ls.Columns, tracks.Value()))
+            {
+                detail::GridAutoRepeat repeat;
+                if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths, &repeat);
+                    tracks.HasValue() && (!detail::SameTracks(ls.Columns, tracks.Value()) || ls.ColumnsRepeatAt != repeat.At || ls.ColumnsRepeatSize != repeat.Size))
                 {
                     ls.Columns = Move(tracks.Value());
+                    ls.ColumnsRepeatAt = repeat.At;
+                    ls.ColumnsRepeatSize = repeat.Size;
                     changed = true;
                 }
+            }
             if (const StringView t = keyword(u8"grid-template-rows"); t.Size() != 0)
                 if (Optional<Array<GridTrack>> tracks = detail::ParseGridTracks(t, lengths); tracks.HasValue() && !detail::SameTracks(ls.Rows, tracks.Value()))
                 {
@@ -1129,6 +1155,7 @@ export namespace foundation::gui
             if (free(SlotMarginLeft)) { result.Margin.Left = ls.Margin.Left; result.MarginPercent.Left = ls.MarginPercent.Left; }
             if (free(SlotRowGap)) result.RowGapPercent = ls.RowGapPercent;
             if (free(SlotColumnGap)) result.ColumnGapPercent = ls.ColumnGapPercent;
+            if (free(SlotGridTemplateColumns)) { result.ColumnsRepeatAt = ls.ColumnsRepeatAt; result.ColumnsRepeatSize = ls.ColumnsRepeatSize; }
             if (ChangedLayoutSlots(result, node.GetLayoutStyle()).Any())
                 node.SetLayoutStyle(result);
             // Any value but visible clips the children to the box (and scroll and auto also scroll

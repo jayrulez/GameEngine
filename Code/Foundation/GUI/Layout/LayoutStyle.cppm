@@ -266,6 +266,11 @@ export namespace foundation::gui
         f32 RowGapPercent = 0.0f;    ///< of the container's content height, resolved at layout
         f32 ColumnGapPercent = 0.0f; ///< of its content width
         Array<GridTrack> Columns;
+        /// `repeat(auto-fill, <tracks>)` among the columns: the ColumnsRepeatSize tracks of Columns
+        /// from ColumnsRepeatAt repeat as often as the grid's width holds them, at least once
+        /// (ColumnsRepeatAt -1: none).
+        i32 ColumnsRepeatAt = -1;
+        i32 ColumnsRepeatSize = 0;
         Array<GridTrack> Rows;
         GridTrack AutoRows{};
         GridTrack AutoColumns{};
@@ -443,6 +448,7 @@ export namespace foundation::gui
         if (a.Margin.Left != b.Margin.Left || a.MarginPercent.Left != b.MarginPercent.Left) bits |= SlotBit(SlotMarginLeft);
         if (a.RowGapPercent != b.RowGapPercent) bits |= SlotBit(SlotRowGap);
         if (a.ColumnGapPercent != b.ColumnGapPercent) bits |= SlotBit(SlotColumnGap);
+        if (a.ColumnsRepeatAt != b.ColumnsRepeatAt || a.ColumnsRepeatSize != b.ColumnsRepeatSize) bits |= SlotBit(SlotGridTemplateColumns);
         return bits;
     }
 

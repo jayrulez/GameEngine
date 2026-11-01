@@ -475,10 +475,10 @@ namespace foundation::gui
 
         // Places items on the grid. Items with both lines given go where they say, and the rest flow
         // into the first free cells (row by row, or column by column). Returns the track counts.
-        void PlaceGridItems(const LayoutStyle& s, Array<GridItem>& items, i32& columns, i32& rows)
+        void PlaceGridItems(const LayoutStyle& s, const Array<GridTrack>& templateColumns, Array<GridItem>& items, i32& columns, i32& rows)
         {
             const bool byRow = s.AutoFlow == GridAutoFlow::Row;
-            columns = core::Max(1, static_cast<i32>(s.Columns.Size()));
+            columns = core::Max(1, static_cast<i32>(templateColumns.Size()));
             rows = core::Max(0, static_cast<i32>(s.Rows.Size()));
             for (const GridItem& item : items)
             {
@@ -574,6 +574,43 @@ namespace foundation::gui
         // Sizes one axis's tracks: fixed and percentage tracks at their length, auto tracks at their
         // single-span items' largest size, fr tracks sharing what is left (or at their content when
         // the axis has no limit); items spanning auto tracks widen them to fit.
+        // The column tracks with a `repeat(auto-fill, ...)` repeated as often as `available` holds
+        // them (as CSS counts: each track at its fixed maximum, else its fixed minimum, with the
+        // gaps), at least once; once when the width is not known.
+        [[nodiscard]] Array<GridTrack> TemplateColumns(const LayoutStyle& s, f32 available, f32 gap)
+        {
+            if (s.ColumnsRepeatAt < 0 || s.ColumnsRepeatSize <= 0)
+                return s.Columns;
+            const usize at = static_cast<usize>(s.ColumnsRepeatAt);
+            const usize size = static_cast<usize>(s.ColumnsRepeatSize);
+            const auto fixedSize = [](const GridTrack& t)
+            {
+                if (t.Fr <= 0.0f && t.Max.Kind == LayoutLengthKind::Px)
+                    return t.Max.Value;
+                return t.Min.Kind == LayoutLengthKind::Px ? t.Min.Value : 0.0f;
+            };
+            f32 unit = 0.0f, others = 0.0f;
+            for (usize i = 0; i < s.Columns.Size(); ++i)
+                (i >= at && i < at + size ? unit : others) += fixedSize(s.Columns[i]);
+            const usize otherCount = s.Columns.Size() - size;
+            i32 repeats = 1;
+            if (!IsUnbounded(available) && unit + gap * static_cast<f32>(size) > 0.0f)
+            {
+                // others + n * unit + gap * (otherCount + n * size - 1) <= available
+                const f32 room = available - others - gap * (static_cast<f32>(otherCount) - 1.0f);
+                repeats = core::Max(1, static_cast<i32>(room / (unit + gap * static_cast<f32>(size))));
+            }
+            Array<GridTrack> tracks;
+            for (usize i = 0; i < at; ++i)
+                tracks.PushBack(s.Columns[i]);
+            for (i32 n = 0; n < repeats; ++n)
+                for (usize i = at; i < at + size; ++i)
+                    tracks.PushBack(s.Columns[i]);
+            for (usize i = at + size; i < s.Columns.Size(); ++i)
+                tracks.PushBack(s.Columns[i]);
+            return tracks;
+        }
+
         [[nodiscard]] Array<f32> SizeTracks(const Array<GridTrack>& explicitTracks, const GridTrack& implicit, i32 count,
                                             f32 available, f32 gap, const Array<GridItem>& items, bool columns,
                                             const core::Function<f32(const GridItem&)>& contentOf)
@@ -670,8 +707,9 @@ namespace foundation::gui
                 items.PushBack(GridItem{child, cs.Column.Start, cs.Row.Start, core::Max(1, cs.Column.Span), core::Max(1, cs.Row.Span)});
             }
             i32 columns = 0, rows = 0;
-            PlaceGridItems(s, items, columns, rows);
-            const Array<f32> widths = SizeTracks(s.Columns, s.AutoColumns, columns, f.width, columnGap, items, true,
+            const Array<GridTrack> templateColumns = TemplateColumns(s, f.width, columnGap);
+            PlaceGridItems(s, templateColumns, items, columns, rows);
+            const Array<f32> widths = SizeTracks(templateColumns, s.AutoColumns, columns, f.width, columnGap, items, true,
                                                  [&](const GridItem& item) { return MeasureItem(*item.node, kUnbounded, kUnbounded, percentBase).x; });
             const auto areaWidth = [&](const GridItem& item)
             {

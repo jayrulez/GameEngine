@@ -201,7 +201,8 @@ Design, one protocol and a few layout kinds:
     text node its first line's, any other the bottom of its content box). It absorbs
     `LinearLayout` (one direction, no wrap) and foundation.ui's Flow (flex with wrap).
   - `grid`: `grid-template-columns` and `-rows` with px, %, `fr`, `auto`, `minmax()` and
-    `repeat()`; `grid-column` and `grid-row` with spans; `grid-auto-flow` row or column; gaps;
+    `repeat()` (a count, or `auto-fill` among the columns: as many as the width holds);
+    `grid-column` and `grid-row` with spans; `grid-auto-flow` row or column; gaps;
     `justify-items` and `align-items` with per-cell `justify-self` and `align-self`. Named areas
     wait for a screen that asks.
   - `stack`: children laid over each other in the content box, each aligned by its
@@ -254,9 +255,10 @@ constraints, `MeasureContent(available)` per widget (a label its wrapped text, a
 a text field a line, the rest a size of their own), `Arrange(rect)` running `OnLayout`, and
 `RequestLayout` climbing until a node of definite size; each GUI lays out once a frame, a tree in
 no GUI when asked (`UpdateLayout`). Flex by the CSS rules (the automatic minimum is the content's,
-no more than the specified size), grid (px, %, auto and fr tracks, `repeat()`, `minmax()`, spans,
-auto flow), stack, dock, absolute and relative placement; `visibility: hidden` keeps its space and
-`display: none` (code's `SetDisplayed`, a script's `displayed`) gives it up. Scrolling is
+no more than the specified size), grid (px, %, auto and fr tracks, `repeat()` with a count or
+`auto-fill` columns, `minmax()`, spans, auto flow), stack, dock, absolute and relative
+placement; `visibility: hidden`
+keeps its space and `display: none` (code's `SetDisplayed`, a script's `displayed`) gives it up. Scrolling is
 `overflow` on any node: the offset moves the children through their transform, with the wheel,
 keys, drawn and draggable bars and `ScrollIntoView`; `Panel` is the plain element and `ScrollView`
 a node with `overflow: auto`; LinearLayout, FlexLayout, GridLayout and RelativeLayout are gone

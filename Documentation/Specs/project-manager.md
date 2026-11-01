@@ -1,6 +1,6 @@
 # The project manager
 
-Status: P1 and P2 BUILT (2026-10-31); P3 to P5 to come. Agreed with the user over a mockup. Replaces the project manager of
+Status: P1 to P3 BUILT (2026-10-31); P4 and P5 to come. Agreed with the user over a mockup. Replaces the project manager of
 editor-gui.md section 5.1 (layer 13) where they differ.
 
 Goal: the screen the editor opens on without a project looks and behaves like a finished tool:

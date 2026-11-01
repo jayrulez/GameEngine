@@ -380,31 +380,52 @@ TEST_CASE("launcher: each project's menu holds what applies to it; Remove from L
     CHECK(l.view->Status() == StringView(u8"Gone was taken off the list; its files are untouched."));
 }
 
-TEST_CASE("launcher: New Project waits for a name and a folder, then makes it in a folder of its name")
+TEST_CASE("launcher: New Project starts where the last project went, checks as it is typed, and makes a folder of its name")
 {
     Launcher l;
+    l.controller->SetLastLocation(l.root.AsView());
     l.view->ShowCreateDialog();
     gui::Window* dialog = l.view->CreateDialog();
     REQUIRE(dialog != nullptr);
     auto* name = FindId<gui::TextField>(*dialog, u8"new-project-name");
     auto* parent = FindId<gui::TextField>(*dialog, u8"new-project-parent");
+    auto* ownFolder = FindId<gui::CheckBox>(*dialog, u8"new-project-own-folder");
+    auto* line = FindId<gui::UIWidget>(*dialog, u8"new-project-check");
+    auto* where = FindId<gui::Label>(*dialog, u8"new-project-where");
     auto* create = FindId<gui::Button>(*dialog, u8"new-project-create");
     REQUIRE(name != nullptr);
     REQUIRE(parent != nullptr);
+    REQUIRE(ownFolder != nullptr);
+    REQUIRE(line != nullptr);
     REQUIRE(create != nullptr);
+    CHECK(parent->GetText() == l.root.AsView()); // the last location
+    CHECK(ownFolder->IsChecked());               // a folder of its name, unless turned off
     CHECK_FALSE(create->IsEnabled());
+    CHECK(line->HasClass(u8"error"));
+    CHECK(where->GetText() == StringView(u8"Give the project a name."));
+
     gui::EventDispatcher& d = *l.scene->GetEventDispatcher();
     name->RequestFocus();
     d.InjectText(u8"Harbour");
-    CHECK_FALSE(create->IsEnabled()); // no folder yet
-    parent->RequestFocus();
-    d.InjectText(l.root.AsView());
     CHECK(create->IsEnabled());
-    CHECK(FindId<gui::Label>(*dialog, u8"new-project-where")->GetText() == PathJoin(l.root.AsView(), u8"Harbour").AsView());
+    CHECK_FALSE(line->HasClass(u8"error"));
+    CHECK_FALSE(line->HasClass(u8"warning"));
+
+    // Without a folder of its name, the location itself must be empty: the scratch root is not.
+    CHECK(ownFolder->HandleActivate());
+    CHECK_FALSE(ownFolder->IsChecked());
+    CHECK_FALSE(create->IsEnabled());
+    CHECK(line->HasClass(u8"error"));
+    CHECK(ownFolder->HandleActivate());
+    CHECK(create->IsEnabled());
+
+    const u32 before = l.saves;
     CHECK(create->HandleActivate());
     CHECK(l.view->CreateDialog() == nullptr);
     REQUIRE(l.created.Size() == 1u);
     CHECK(l.created[0] == PathJoin(l.root.AsView(), u8"Harbour"));
+    CHECK(l.controller->LastLocation() == l.root.AsView()); // remembered for the next one
+    CHECK(l.saves == before + 1u);
 }
 
 namespace

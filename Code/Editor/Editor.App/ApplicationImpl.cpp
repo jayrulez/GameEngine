@@ -842,7 +842,8 @@ namespace editor::app
     }
 
     // New Project from the manager: a folder that already holds a project is refused; otherwise the
-    // project is made there with the starter content and opened.
+    // project is made there (its location too, when that is new) with the starter content and
+    // opened.
     void EditorApplication::CreateFromManager(StringView directory, StringView name)
     {
         engine::project::ProjectSettings probed;
@@ -852,6 +853,9 @@ namespace editor::app
                 m_manager->SetStatus(u8"That folder is a project already: Open Folder opens it.");
             return;
         }
+        // New Project's check said a location that does not exist yet is made: the project's
+        // own folder's parent first.
+        (void)CreateDirectories(PathParent(directory));
         EditorSession::OpenOptions options;
         options.scaffold = true;
         options.scaffoldName = String(name);

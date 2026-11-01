@@ -426,7 +426,9 @@ export namespace editor::app
             return true;
         }
 
-        /// New Project: a name and the folder it is made in; Create needs both.
+        /// New Project: a name, the folder it is made in (starting where the last project went), and
+        /// whether it gets a folder of its name there. The check line under them says what Create
+        /// would do, and Create waits while it is red.
         void ShowCreateDialog()
         {
             gui::SceneRoot* root = m_content ? Cast<gui::SceneRoot>(m_content->GetRootNode()) : nullptr;
@@ -439,6 +441,9 @@ export namespace editor::app
             m_dialog->GetContent()->AddChild(body.Get());
             auto* name = Cast<gui::TextField>(FindIn(*body, u8"new-project-name"));
             auto* parent = Cast<gui::TextField>(FindIn(*body, u8"new-project-parent"));
+            auto* ownFolder = Cast<gui::CheckBox>(FindIn(*body, u8"new-project-own-folder"));
+            auto* line = Cast<gui::UIWidget>(FindIn(*body, u8"new-project-check"));
+            auto* icon = Cast<gui::Image>(FindIn(*body, u8"new-project-check-icon"));
             auto* where = Cast<gui::Label>(FindIn(*body, u8"new-project-where"));
             auto* create = Cast<gui::Button>(FindIn(*body, u8"new-project-create"));
             auto* browse = Cast<gui::Button>(FindIn(*body, u8"new-project-browse"));
@@ -447,25 +452,49 @@ export namespace editor::app
                 return;
             ProjectManagerView* self = this;
             gui::Window* dialog = m_dialog.Get();
-            // Create needs both fields; the line under them says where the project will go.
-            const auto refresh = [name, parent, where, create]()
+            if (ownFolder != nullptr)
+                ownFolder->SetChecked(true);
+            if (m_services.controller != nullptr && !m_services.controller->LastLocation().IsEmpty())
+                parent->SetText(m_services.controller->LastLocation());
+            else
+                parent->SetText(m_home.AsView());
+            // The check line, kept current: what Create would make, coloured by what it says.
+            const auto check = [self, name, parent, ownFolder]()
             {
-                const bool ready = !name->GetText().IsEmpty() && !parent->GetText().IsEmpty();
-                create->SetEnabled(ready);
+                return editor::ProjectManagerController::CheckNewProject(name->GetText(), parent->GetText(), ownFolder == nullptr || ownFolder->IsChecked(),
+                                                                         self->m_home.AsView());
+            };
+            const auto refresh = [check, line, icon, where, create]()
+            {
+                const editor::NewProjectCheck result = check();
+                create->SetEnabled(result.level != editor::NewProjectCheckLevel::Error);
                 if (where != nullptr)
-                    where->SetText(ready ? PathJoin(parent->GetText(), name->GetText()).AsView() : StringView{});
+                    where->SetText(result.message.AsView());
+                SetClass(line, u8"warning", result.level == editor::NewProjectCheckLevel::Warning);
+                SetClass(line, u8"error", result.level == editor::NewProjectCheckLevel::Error);
+                if (icon != nullptr)
+                    icon->SetSource(String(result.level == editor::NewProjectCheckLevel::Ok        ? u8"Editor/Icons/check.svg"
+                                           : result.level == editor::NewProjectCheckLevel::Warning ? u8"Editor/Icons/warning.svg"
+                                                                                                    : u8"Editor/Icons/error.svg"));
             };
             name->SetOnTextChanging([refresh](StringView) { refresh(); });
             parent->SetOnTextChanging([refresh](StringView) { refresh(); });
-            create->SetOnClick([self, dialog, name, parent]()
+            if (ownFolder != nullptr)
+                ownFolder->SetOnToggled([refresh](bool) { refresh(); });
+            create->SetOnClick([self, dialog, check, parent]()
                                {
-                                   const String projectName(name->GetText());
-                                   const String directory = PathJoin(parent->GetText(), projectName.AsView());
-                                   if (projectName.IsEmpty() || parent->GetText().IsEmpty())
+                                   const editor::NewProjectCheck result = check();
+                                   if (result.level == editor::NewProjectCheckLevel::Error)
                                        return;
+                                   if (self->m_services.controller != nullptr)
+                                   {
+                                       self->m_services.controller->SetLastLocation(parent->GetText());
+                                       if (self->m_services.storeChanged)
+                                           self->m_services.storeChanged();
+                                   }
                                    dialog->Close();
                                    if (self->m_services.create)
-                                       self->m_services.create(directory.AsView(), projectName.AsView());
+                                       self->m_services.create(result.target.AsView(), result.name.AsView());
                                });
             if (browse != nullptr)
                 browse->SetOnClick([self, parent, refresh]()
@@ -479,7 +508,8 @@ export namespace editor::app
                                                                                                                                  parent->SetText(paths[0].AsView());
                                                                                                                                  refresh();
                                                                                                                              }
-                                                                                                                         }});
+                                                                                                                         }},
+                                                                                parent->GetText());
                                    });
             if (cancel != nullptr)
                 cancel->SetOnClick([dialog]() { dialog->Close(); });
@@ -491,8 +521,8 @@ export namespace editor::app
         [[nodiscard]] gui::Window* CreateDialog() const noexcept { return m_dialog && m_dialog->IsOpen() ? m_dialog.Get() : nullptr; }
 
     private:
-        static constexpr f32 kDialogWidth = 480.0f;
-        static constexpr f32 kDialogHeight = 220.0f;
+        static constexpr f32 kDialogWidth = 600.0f;
+        static constexpr f32 kDialogHeight = 330.0f;
 
         // A listed project as the last probe found it.
         struct Probe

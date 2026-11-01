@@ -64,6 +64,7 @@ export namespace editor::app
                 ChoicePicture picture;
                 if (choice.picture)
                 {
+                    row->AddClass(u8"pictures");
                     button->AddClass(u8"picture");
                     auto image = MakeRef<gui::Image>(MemoryAllocator());
                     image->AddClass(u8"segment-picture");
@@ -99,6 +100,7 @@ export namespace editor::app
                 AddHeading(name);
             auto row = MakeRef<gui::Panel>(MemoryAllocator());
             row->AddClass(u8"segmented");
+            row->AddClass(u8"pictures");
             auto frame = MakeRef<gui::Panel>(MemoryAllocator());
             frame->AddClass(u8"segment");
             frame->AddClass(u8"picture");

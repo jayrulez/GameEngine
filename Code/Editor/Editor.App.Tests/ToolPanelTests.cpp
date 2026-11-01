@@ -7,7 +7,7 @@
 // throwaway views, and mount and clear callbacks record what the host asked the page to dock. The
 // panel appears and disappears with its tool, an unknown or panel-less tool shows nothing and does
 // not crash, and switching between two tools with panels clears the old panel before mounting the
-// new one.
+// new one. Under the editor's sheet, a row of pictures (a terrain's layers) holds its pictures.
 
 #include <doctest/doctest.h>
 
@@ -228,4 +228,62 @@ TEST_CASE("tool-panel host: switching between two paneled tools clears then moun
     CHECK(host.CurrentToolId() == StringView(u8"b"));
     CHECK(panelA.CreateCount == 1);
     CHECK(panelB.CreateCount == 1);
+}
+
+TEST_CASE("tool-panel body: under the editor's sheet a row of pictures is as tall as they are, and many wrap")
+{
+    String sheet;
+    const char8_t* const files[] = {u8"Editor/tokens.css", u8"Editor/editor.css", u8"Editor/density-default.css"}; // the tokens first
+    for (const char8_t* file : files)
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    auto root = MakeRef<foundation::gui::SceneRoot>(DefaultAllocator(), MakeRef<foundation::gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{800.0f, 600.0f});
+    auto body = MakeRef<app::ToolPanelBody>(DefaultAllocator());
+    body->EditLayoutStyle([](foundation::gui::LayoutStyle& s) { s.Width = foundation::gui::LayoutLength::Px(240.0f); });
+    app::ToolPanelBody::Choice base;
+    base.icon = String(u8"Editor/Icons/texture.svg");
+    base.picture = []() { return RefPtr<foundation::gui::Drawable>(); }; // no picture yet: its icon stands in
+    body->AddPicture(u8"Base", Move(base));
+    Array<app::ToolPanelBody::Choice> layers;
+    for (u32 i = 0; i < 8; ++i)
+    {
+        app::ToolPanelBody::Choice layer;
+        layer.icon = String(u8"Editor/Icons/texture.svg");
+        layer.picture = []() { return RefPtr<foundation::gui::Drawable>(); };
+        layers.PushBack(Move(layer));
+    }
+    body->AddChoices(u8"Layer", Move(layers), []() { return 0; }, [](i32) {});
+    root->AddChild(body.Get());
+    foundation::gui::StyleManager styles;
+    styles.SetStyleSheet(foundation::gui::CSSParser::Parse(sheet.AsView()));
+    styles.ApplyTree(*root);
+    (void)root->UpdateLayout();
+
+    // The rows in order: Base's heading and picture, then Layer's heading and pictures.
+    REQUIRE(body->ChildCount() == 4u);
+    foundation::gui::Node& row = *body->GetChildAt(3);
+    const foundation::gui::Rect layerRow = row.GetScreenBounds();
+    REQUIRE(row.ChildCount() == 8u);
+    f32 firstTop = 0.0f;
+    bool wrapped = false;
+    for (usize i = 0; i < row.ChildCount(); ++i)
+    {
+        const foundation::gui::Rect slot = row.GetChildAt(i)->GetScreenBounds();
+        CHECK(slot.y >= layerRow.y - 0.5f);                                // within its row, not over its edges
+        CHECK(slot.y + slot.height <= layerRow.y + layerRow.height + 0.5f);
+        CHECK(slot.x + slot.width <= layerRow.x + layerRow.width + 0.5f); // and within the panel's width
+        CHECK(slot.height >= 40.0f);                                      // a picture big enough to tell apart
+        if (i == 0)
+            firstTop = slot.y;
+        else if (slot.y > firstTop + 1.0f)
+            wrapped = true;
+    }
+    CHECK(wrapped); // eight do not fit on one line of a 240 wide panel
+    const foundation::gui::Rect baseSlot = body->GetChildAt(1)->GetChildAt(0)->GetScreenBounds();
+    CHECK(baseSlot.height == doctest::Approx(row.GetChildAt(0)->GetScreenBounds().height)); // the base as big as a layer
 }

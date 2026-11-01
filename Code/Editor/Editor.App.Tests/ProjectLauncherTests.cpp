@@ -344,6 +344,10 @@ TEST_CASE("launcher: a folder dropped on the manager opens its project, or the s
     CHECK(l.view->OpenDropped(dropped.AsSpan()));
     CHECK(l.opened.IsEmpty());
     CHECK(l.view->Status() == StringView(u8"scratch_launcher holds no Project.xml, so it is not a project. New Project makes one."));
+    // Laying the page out again shows the same words, read from the view's own copy.
+    l.view->Rebuild();
+    l.view->Rebuild();
+    CHECK(FindId<gui::Label>(*l.view->Content(), u8"manager-status")->GetText() == l.view->Status());
     dropped[0] = l.second;
     CHECK(l.view->OpenDropped(dropped.AsSpan()));
     REQUIRE(l.opened.Size() == 1u);

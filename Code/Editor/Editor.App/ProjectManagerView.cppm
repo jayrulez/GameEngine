@@ -1113,17 +1113,20 @@ export namespace editor::app
 
         void ShowStatus(StringView text, bool problem)
         {
-            m_status = String(text);
+            // `text` may be a view of m_status itself (Populate shows it again): copy it first,
+            // and read only the copy after, since the assignment frees what the view points into.
+            String copy(text);
+            m_status = Move(copy);
             m_problem = problem;
             auto* status = Find<gui::Label>(u8"manager-status");
             if (status == nullptr)
                 return;
             // Nothing to say: how to open a project, while there are some.
-            const bool idle = text.IsEmpty();
+            const bool idle = m_status.IsEmpty();
             String idleText;
             if (idle && !m_samples && !m_shown.IsEmpty())
                 idleText = String(u8"Double-click a project or press Enter to open it.");
-            status->SetText(idle ? idleText.AsView() : text);
+            status->SetText(idle ? idleText.AsView() : m_status.AsView());
             SetClass(status, u8"warning", problem && !idle);
         }
 

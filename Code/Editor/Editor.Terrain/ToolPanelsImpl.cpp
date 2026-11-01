@@ -201,7 +201,7 @@ namespace editor
                                 [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
                 // Airbrush: stamps on a timer while held, building up where the brush rests.
                 body->AddCheck(u8"Airbrush", [t]() { return t->IsAirbrush(); }, [t](bool on) { t->SetAirbrush(on); });
-                body->AddHelp(u8"Drag to paint. 1 to 9 pick a layer, 0 erases, - smooths, Shift+wheel sizes the brush.");
+                body->AddHelp(u8"Drag to paint. 1 to 9 pick a layer, 0 erases, the minus key smooths, Shift+wheel sizes the brush.");
                 body->Sync();
                 return body;
             }

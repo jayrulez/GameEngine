@@ -157,7 +157,7 @@ namespace editor
                 body->AddSlider(u8"Spacing", 0.05, 1.0, 0.05, [t]() { return static_cast<f64>(t->Spacing()); },
                                 [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
                 body->AddCheck(u8"Airbrush", [t]() { return t->IsAirbrush(); }, [t](bool on) { t->SetAirbrush(on); });
-                body->AddHelp(u8"Drag to paint. 1 to 9 pick a plane, 0 erases, - smooths, Shift+wheel sizes the brush.");
+                body->AddHelp(u8"Drag to paint. 1 to 9 pick a plane, 0 erases, the minus key smooths, Shift+wheel sizes the brush.");
                 body->Sync();
                 return body;
             }

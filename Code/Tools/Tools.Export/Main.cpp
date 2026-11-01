@@ -20,7 +20,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -66,7 +65,6 @@ import script.pipeline; // the per-language script cooks (AngelScript, Luau) com
 using namespace foundation::core;
 namespace scene = foundation::scene;
 namespace vfs = foundation::vfs;
-namespace fs = std::filesystem;
 
 namespace
 {
@@ -98,15 +96,9 @@ namespace
     // main() calls RegisterPipelineTypes and RegisterAllBuilders directly.
 
     // The directory holding this executable (under Bin/, where Engine.Player and its .runtime-libs
-    // live, which makes it the host template's source). argv[0] can be bare or relative, so it is
-    // canonicalized.
-    [[nodiscard]] String ToolDir(const char* argv0)
-    {
-        std::error_code ec;
-        const fs::path self = fs::weakly_canonical(fs::absolute(fs::path(argv0), ec), ec);
-        const std::string dir = self.parent_path().string();
-        return String(StringView(reinterpret_cast<const utf8char*>(dir.c_str())));
-    }
+    // live, which makes it the host template's source). Asked of the OS, not taken from argv[0],
+    // which can be bare or relative.
+    [[nodiscard]] String ToolDir() { return GetExecutableDirectory(); }
 
     // The templates root: $ENV_TEMPLATES_DIR, else <user-data-dir>/templates. The CLI has no editor
     // settings, so it passes no override, which matches the editor with an empty setting.
@@ -116,9 +108,8 @@ namespace
     void BuildRegistry(editor::TemplateRegistry& registry, StringView templatesRoot,
                        StringView toolDir)
     {
-        std::error_code ec;
         UniquePtr<vfs::NativeFileSystem> rootFs;
-        if (fs::is_directory(Cs(templatesRoot), ec))
+        if (DirectoryExists(templatesRoot))
         {
             rootFs = MakeUnique<vfs::NativeFileSystem>(AppRoot(), templatesRoot,
                                                        AppRoot());
@@ -144,10 +135,10 @@ namespace
 
     // --- template management ---------------------------------------------------------------------
 
-    int TemplateList(const char* argv0)
+    int TemplateList()
     {
         editor::TemplateRegistry registry;
-        const String toolDir = ToolDir(argv0);
+        const String toolDir = ToolDir();
         const String root = TemplatesRoot();
         BuildRegistry(registry, root.AsView(), toolDir.AsView());
         std::printf("export templates (root: %s):\n", Cs(root.AsView()));
@@ -160,7 +151,7 @@ namespace
         return 0;
     }
 
-    int TemplateImport(const char* argv0, const char* srcDir)
+    int TemplateImport(const char* srcDir)
     {
         const String root = TemplatesRoot();
         String importedId;
@@ -172,7 +163,6 @@ namespace
         }
         const String dst = PathJoin(root.AsView(), importedId.AsView());
         std::printf("imported template '%s' -> %s\n", Cs(importedId), Cs(dst));
-        (void)argv0;
         return 0;
     }
 
@@ -267,7 +257,7 @@ int main(int argc, char** argv)
         }
         if (std::strcmp(argv[2], "list") == 0)
         {
-            return TemplateList(argv[0]);
+            return TemplateList();
         }
         if (std::strcmp(argv[2], "import") == 0)
         {
@@ -275,7 +265,7 @@ int main(int argc, char** argv)
             {
                 return Usage();
             }
-            return TemplateImport(argv[0], argv[3]);
+            return TemplateImport(argv[3]);
         }
         if (std::strcmp(argv[2], "create") == 0)
         {
@@ -372,7 +362,7 @@ int main(int argc, char** argv)
     }
 
     editor::TemplateRegistry registry;
-    BuildRegistry(registry, TemplatesRoot().AsView(), ToolDir(argv[0]).AsView());
+    BuildRegistry(registry, TemplatesRoot().AsView(), ToolDir().AsView());
 
     const String outRoot =
         (outArg != nullptr) ? String(Sv(outArg)) : PathJoin(project->Directory(), u8"Dist");

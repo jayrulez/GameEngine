@@ -33,7 +33,6 @@ module;
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
-#include <filesystem>
 
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -142,26 +141,22 @@ int engine::player::PlayerMain(int argc, char** argv,
         // No path given: behave like a distributed game binary, whose game is wherever it is.
         // Try the current directory, then the executable's own directory (double-click /
         // run-from-anywhere), then the dev default.
-        namespace fs = std::filesystem;
-        std::error_code ec;
-        auto hasGame = [](const fs::path& dir)
+        auto hasGame = [](StringView dir)
         {
-            std::error_code e;
-            return fs::exists(dir / "Content.pak", e) || fs::exists(dir / "Project.xml", e);
+            return FileExists(PathJoin(dir, u8"Content.pak").AsView()) ||
+                   FileExists(PathJoin(dir, u8"Project.xml").AsView());
         };
-        const fs::path exeDir =
-            fs::weakly_canonical(fs::absolute(fs::path(argv[0]), ec), ec).parent_path();
-        fs::path chosen = ".";
-        if (!hasGame(chosen) && hasGame(exeDir))
+        const String exeDir = GetExecutableDirectory();
+        StringView chosen = u8".";
+        if (!hasGame(chosen) && hasGame(exeDir.AsView()))
         {
-            chosen = exeDir;
+            chosen = exeDir.AsView();
         }
         else if (!hasGame(chosen))
         {
-            chosen = "EditorProject";
+            chosen = u8"EditorProject";
         } // dev fallback
-        options.projectDir =
-            String(StringView(reinterpret_cast<const utf8char*>(chosen.string().c_str())));
+        options.projectDir = String(chosen);
     }
     for (int i = 1; i < argc - 1; ++i)
     {

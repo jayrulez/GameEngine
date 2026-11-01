@@ -12,8 +12,6 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-// No <filesystem> here (see ImportTemplate below); ExportTemplateImpl.cpp includes it.
-
 // Export-template id prefix; CMake bakes TEMPLATE_ID_PREFIX_VALUE on the policy target. It is
 // required, with no default in the source, which keeps the prefix value out of the source. Tests
 // build expected ids from the same macro so they always agree.
@@ -312,14 +310,7 @@ export namespace editor
     // overwrites an existing install of the same id. `outId` receives the imported id. NotFound if
     // the source has no valid template.xml. Shared by the Tools.Export CLI and the editor's Import
     // Template action.
-    // Defined out of line in ExportTemplateImpl.cpp: the body needs <filesystem> for the recursive
-    // copy, and that header must not reach this interface. On MSVC an STL header in a module
-    // interface's global module fragment gets attached to the module, and consumers then fail to
-    // re-materialize it from the .ifc, here as
-    //   type_traits(2410): error C2678: binary '&': no operator found which takes a left-hand
-    //   operand of type '_Bitmask'
-    // from std::_Bitmask_includes_all<__std_fs_stats_flags>. (<stop_token> through <thread> in
-    // Core's JobSystem has the same problem.)
+    // Defined in ExportTemplateImpl.cpp.
     [[nodiscard]] Status ImportTemplate(StringView srcDir, StringView templatesRoot,
                                         String* outId = nullptr);
 
@@ -327,7 +318,7 @@ export namespace editor
     // under it (the editor templates manager's Remove action; the registry drops it on the next
     // Refresh). The host template is synthesized, not on disk, so it can never be removed this
     // way, and callers must not offer Remove for it. An empty id or a missing directory is a soft
-    // error, not a crash. Out of line for the same reason as ImportTemplate above.
+    // error, not a crash. Defined in ExportTemplateImpl.cpp.
     [[nodiscard]] Status RemoveTemplate(StringView templatesRoot, StringView templateId);
 
     // Whether a template's engineVersion matches this running build's. Empty (an unstamped or

@@ -30,6 +30,9 @@ import foundation.mcp; // McpServer (the layout tools added to the host)
 import foundation.profiler;         // the process's store the Profiler page records
 import foundation.profiler.capture; // the process's recorder (a saved capture's platform and build)
 import engine.project; // ProjectSettings (a folder probed for a project)
+import foundation.net.tls;          // the Samples tab's https
+import foundation.net.tls.mbedtls;
+import foundation.http.client;
 
 using namespace foundation::core;
 
@@ -771,6 +774,13 @@ namespace editor::app
             };
             services.storeChanged = [self]() { (void)editor::SaveEditorSettingsToUserData(self->m_editorSettings); };
             services.loadMarkup = [self](StringView path) { return self->m_window.LoadMarkup(path); };
+            // The Samples tab downloads from GitHub over https, with the system's roots.
+            if (!m_http)
+            {
+                m_tls = foundation::net::CreateMbedTlsBackend(m_editorAllocator);
+                m_http = foundation::http::CreateHttpClient(m_editorAllocator, m_tls.Get());
+            }
+            services.http = m_http.Get();
             m_manager = MakeUnique<ProjectManagerView>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ProjectManagerView::kPath));
         }
         else
@@ -1043,6 +1053,9 @@ namespace editor::app
     {
         if (m_mcp)
             m_mcp->Pump(); // a waiting agent call is answered here: tools touch main-thread state
+        if (m_manager)
+            m_manager->Tick(); // the Samples tab's fetches and downloads, which go on while a project is open
+        
         // The embedded runtime's frame first (fixed steps in BeginFrame, interpolation in Update):
         // pages then read fresh state. EndFrame closes after the scene bracket (OnRenderWindow).
         if (m_embeddedApp)
@@ -1244,6 +1257,8 @@ namespace editor::app
         }
         m_preferences.Reset();
         m_manager.Reset();
+        m_http.Reset(); // after the manager, which cancels its requests as it goes
+        m_tls.Reset();
         m_palette.Reset();
         m_menus.Reset();
         m_shortcuts.Reset();

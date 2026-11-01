@@ -28,6 +28,8 @@ import foundation.settings;
 import pipeline.core;
 import engine.defaultapp; // the embedded game application
 import editor.core;
+import foundation.net.tls;        // the Samples tab's https
+import foundation.http.client;
 import :window_capture;   // EditorWindowCapture (View > Screenshot, --screenshot, the MCP tool)
 import :editor_window;
 import :editor_dock;
@@ -266,6 +268,10 @@ export namespace editor::app
         UniquePtr<ExportDialog> m_exportDialog;             // Project > Export (its project's presets)
         editor::EditorProject* m_exportProject = nullptr;   // the project m_exportDialog edits
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
+        // The Samples tab's network: Mbed TLS for https, the system's roots, the platform's client.
+        // Declared before the manager, which pumps it and cancels its requests as it goes.
+        UniquePtr<foundation::net::ITlsBackend> m_tls;
+        UniquePtr<foundation::http::IHttpClient> m_http;
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content
         UniquePtr<ProfilerPanel> m_profiler;     // the Profiler page's content

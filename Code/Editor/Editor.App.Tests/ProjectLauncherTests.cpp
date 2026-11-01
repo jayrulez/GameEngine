@@ -18,6 +18,10 @@ import foundation.image.io;
 import foundation.gui;
 import editor.core;
 import editor.app;
+import foundation.net;
+import foundation.http.client;
+
+#include "LoopbackFiles.h"
 
 using namespace foundation::core;
 using namespace editor;
@@ -86,8 +90,9 @@ namespace
         Array<String> opened;
         Array<String> created;
 
-        /// Adds `more` older projects after the three, which exist on disk when `real` is set.
-        explicit Launcher(int more = 0, bool real = false)
+        /// Adds `more` older projects after the three, which exist on disk when `real` is set;
+        /// `configure` adds to the view's services (the Samples tab's client).
+        explicit Launcher(int more = 0, bool real = false, const Function<void(app::ProjectManagerView::Services&)>& configure = {})
         {
             RegisterProjectRegistryTypes();
             (void)RemoveDirectoryRecursive(root.AsView());
@@ -112,6 +117,8 @@ namespace
             services.create = [self](StringView directory, StringView) { self->created.PushBack(String(directory)); };
             services.storeChanged = [self]() { ++self->saves; };
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
+            if (configure)
+                configure(services);
             scene->SetSize(Float2{1280.0f, 800.0f});
             view = MakeUnique<app::ProjectManagerView>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadMarkup(app::kProjectManagerViewPath));
             REQUIRE(view->Content().Get() != nullptr);
@@ -541,4 +548,117 @@ TEST_CASE("launcher: under the editor's sheet a row stretches across the window,
     CHECK(row.width > 1100.0f); // 1280 less 40 each side and a scroll bar at most
     const gui::Rect missing = FindId<gui::Node>(*l.view->Content(), u8"manager-missing-list")->GetChildAt(0)->GetScreenBounds();
     CHECK(missing.width == doctest::Approx(row.width));
+}
+
+TEST_CASE("launcher: the Samples tab lists the release's samples, and one downloaded joins the projects")
+{
+    UniquePtr<foundation::http::IHttpClient> client = foundation::http::CreateNativeHttpClient(DefaultAllocator(), nullptr);
+    LoopbackFiles server;
+    Launcher l(0, false, [&](app::ProjectManagerView::Services& services)
+               {
+                   services.http = client.Get();
+                   services.releaseFile = [&server](StringView file) { return server.Url(Format(u8"/{}", file).AsView()); };
+               });
+    // The release: its samples.json, one sample's zip (a project's manifest at its root) and picture.
+    Result<Array<byte>> zip = ReadFile(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data/Tests/Zip/sample.zip").AsView());
+    REQUIRE(zip.HasValue());
+    Result<Array<byte>> picture = ReadFile(l.WritePicture(u8"picture.png").AsView());
+    REQUIRE(picture.HasValue());
+    server.Serve(u8"/samples.json",
+                 Format(u8R"({{"version": "0.1.0", "samples": [{{"folder": "NativeSample", "name": "NativeSample", "description": "A game with native code.",
+                         "archive": "sample-NativeSample.zip", "size": {}, "sha256": "{}", "picture": "sample-NativeSample.png"}}]}})",
+                        zip.Value().Size(), Sha256::Of(zip.Value().AsSpan()).ToHex())
+                     .AsView());
+    server.Serve(u8"/sample-NativeSample.zip", Move(zip.Value()));
+    server.Serve(u8"/sample-NativeSample.png", Move(picture.Value()));
+    const auto run = [&](const Function<bool()>& until)
+    {
+        for (u32 i = 0; i < 5000 && !until(); ++i)
+        {
+            server.Pump();
+            l.view->Tick();
+            l.Drain();
+            SleepMilliseconds(1);
+        }
+    };
+
+    l.view->ShowSamples(true);
+    run([&]() { return l.view->SampleCatalogState() == app::ProjectManagerView::CatalogState::Loaded; });
+    REQUIRE(l.view->SampleCatalogState() == app::ProjectManagerView::CatalogState::Loaded);
+    REQUIRE(l.view->Samples().samples.Size() == 1u);
+    gui::Node* grid = FindId<gui::Node>(*l.view->Content(), u8"manager-samples");
+    REQUIRE(grid != nullptr);
+    REQUIRE(grid->ChildCount() == 1u);
+    gui::Button* download = ButtonText(*grid, u8"Download...");
+    REQUIRE(download != nullptr);
+    CHECK_FALSE(l.view->InProjects(l.view->Samples().samples[0]));
+
+    // Download... asks where; the location starts where the last project went.
+    l.controller->SetLastLocation(l.root.AsView());
+    CHECK(download->HandleActivate());
+    gui::Window* dialog = l.view->DownloadDialog();
+    REQUIRE(dialog != nullptr);
+    CHECK(FindId<gui::Label>(*dialog, u8"download-sample-where")->GetText().StartsWith(u8"Downloads into"));
+    gui::Button* go = FindId<gui::Button>(*dialog, u8"download-sample-go");
+    REQUIRE(go != nullptr);
+    CHECK(go->IsEnabled());
+    CHECK(go->HandleActivate());
+    CHECK(l.view->DownloadDialog() == nullptr);
+    l.Drain();
+    run([&]() { return l.view->DownloadOf(u8"NativeSample") == nullptr; });
+
+    // It is one of the projects now, and its card says so.
+    const String target = PathJoin(l.root.AsView(), u8"NativeSample");
+    INFO(reinterpret_cast<const char*>(String(l.view->Status()).CStr()));
+    CHECK(FileExists(PathJoin(target.AsView(), u8"Project.xml").AsView()));
+    bool listed = false;
+    for (const RecentProjectEntry& e : l.controller->Entries().entries)
+        listed = listed || e.path == target;
+    CHECK(listed);
+    l.Drain();
+    CHECK(l.view->InProjects(l.view->Samples().samples[0]));
+    gui::Node* card = FindId<gui::Node>(*l.view->Content(), u8"manager-samples")->GetChildAt(0);
+    bool saysSo = false;
+    Array<gui::Node*> stack;
+    stack.PushBack(card);
+    while (!stack.IsEmpty())
+    {
+        gui::Node* n = stack[stack.Size() - 1];
+        stack.PopBack();
+        if (auto* label = Cast<gui::Label>(n))
+            saysSo = saysSo || label->GetText() == StringView(u8"In your projects");
+        for (usize i = 0; i < n->ChildCount(); ++i)
+            stack.PushBack(n->GetChildAt(i));
+    }
+    CHECK(saysSo);
+    CHECK(l.view->Status().ContainsIgnoreCase(u8"in your projects"));
+}
+
+TEST_CASE("launcher: the Samples tab says when the release has no samples, and when GitHub is not reached")
+{
+    UniquePtr<foundation::http::IHttpClient> client = foundation::http::CreateNativeHttpClient(DefaultAllocator(), nullptr);
+    LoopbackFiles server; // serves nothing: samples.json is a 404
+    Launcher l(0, false, [&](app::ProjectManagerView::Services& services)
+               {
+                   services.http = client.Get();
+                   services.releaseFile = [&server](StringView file) { return server.Url(Format(u8"/{}", file).AsView()); };
+               });
+    l.view->ShowSamples(true);
+    for (u32 i = 0; i < 5000 && l.view->SampleCatalogState() == app::ProjectManagerView::CatalogState::Fetching; ++i)
+    {
+        server.Pump();
+        l.view->Tick();
+        l.Drain();
+        SleepMilliseconds(1);
+    }
+    CHECK(l.view->SampleCatalogState() == app::ProjectManagerView::CatalogState::NotPublished);
+    CHECK(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-samples-state")->IsDisplayed());
+    CHECK(FindId<gui::Label>(*l.view->Content(), u8"manager-samples-state-title")->GetText() == StringView(u8"No samples for this version yet"));
+    CHECK_FALSE(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-samples-retry")->IsDisplayed());
+
+    // With no client at all, it cannot be reached, and Retry is offered.
+    Launcher offline;
+    offline.view->ShowSamples(true);
+    CHECK(offline.view->SampleCatalogState() == app::ProjectManagerView::CatalogState::Failed);
+    CHECK(FindId<gui::UIWidget>(*offline.view->Content(), u8"manager-samples-retry")->IsDisplayed());
 }

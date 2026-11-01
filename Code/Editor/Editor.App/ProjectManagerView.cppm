@@ -28,9 +28,11 @@ import foundation.shell;
 import foundation.gui;
 import foundation.image;
 import foundation.image.io;
+import foundation.http.client;
 import engine.project;
 import editor.core;
 import :project_picture;
+import :sample_downloads;
 
 using namespace foundation::core;
 
@@ -63,11 +65,17 @@ export namespace editor::app
             Function<void()> storeChanged;
             /// Loads a dialog's markup by its path (New Project's).
             Function<RefPtr<gui::Node>(StringView)> loadMarkup;
+            /// The Samples tab's client (null: the tab says it cannot reach GitHub). It must outlive
+            /// the view, which pumps it in Tick.
+            foundation::http::IHttpClient* http = nullptr;
+            /// Where a file of this editor's release is fetched from (empty: the release's own URL,
+            /// EngineReleaseDownloadUrl); tests point it at a loopback server.
+            Function<String(StringView file)> releaseFile;
         };
 
         ProjectManagerView(IAllocator& allocator, Services services, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_services(Move(services)), m_content(Move(content)), m_pictures(allocator), m_probes(allocator),
-              m_shown(allocator), m_rows(allocator)
+              m_shown(allocator), m_rows(allocator), m_samplePictures(allocator), m_downloads(allocator), m_sampleCards(allocator)
         {
             if (const Optional<String> home = GetEnvironmentVariable(u8"HOME"); home.HasValue() && !home.Value().IsEmpty())
                 m_home = home.Value();
@@ -100,6 +108,12 @@ export namespace editor::app
                                  });
             if (auto* removeMissing = Find<gui::Button>(u8"manager-remove-missing"))
                 removeMissing->SetOnClick([self]() { self->RemoveMissing(); });
+            if (auto* retry = Find<gui::Button>(u8"manager-samples-retry"))
+                retry->SetOnClick([self]() { self->FetchCatalog(); });
+            if (auto* intro = Find<gui::Label>(u8"manager-samples-intro"))
+                intro->SetText(Format(u8"Sample games made with this engine, for engine {}. A sample you download becomes one of your projects.",
+                                      engine::project::kEngineVersionString)
+                                   .AsView());
             if (auto* search = Find<gui::TextField>(u8"manager-search"))
                 search->SetOnTextChanging([self](StringView text) { self->SetQuery(text); });
             if (auto* sort = Find<gui::ComboBox>(u8"manager-sort"))
@@ -126,7 +140,17 @@ export namespace editor::app
         }
         ProjectManagerView(const ProjectManagerView&) = delete;
         ProjectManagerView& operator=(const ProjectManagerView&) = delete;
-        ~ProjectManagerView() { CloseDialog(); }
+        ~ProjectManagerView()
+        {
+            CloseDialog();
+            if (m_services.http != nullptr)
+            {
+                m_services.http->Cancel(m_catalogRequest);
+                for (const foundation::http::HttpRequestId id : m_pictureRequests)
+                    m_services.http->Cancel(id);
+            }
+            m_downloads.Clear(); // each cancels itself and deletes what it wrote
+        }
 
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
@@ -202,11 +226,176 @@ export namespace editor::app
             Later([](ProjectManagerView& self) { self.Populate(); });
         }
 
-        /// The Samples tab, else the Projects tab.
+        /// The Samples tab, else the Projects tab. The first visit fetches the release's samples.
         void ShowSamples(bool samples)
         {
             m_samples = samples;
+            if (samples && m_catalogState == CatalogState::NotFetched)
+                FetchCatalog();
             Populate();
+        }
+
+        /// Once a frame: the HTTP client's answers, then the downloads under way (their bars, and
+        /// what each that ended leaves: a project in the list, or a word in the status line).
+        void Tick()
+        {
+            if (m_services.http != nullptr)
+                m_services.http->Pump();
+            bool ended = false;
+            for (usize i = m_downloads.Size(); i-- > 0;)
+            {
+                SampleDownload& d = *m_downloads[i];
+                if (d.GetState() == SampleDownload::State::Downloading)
+                    continue;
+                Finished(d);
+                m_downloads.RemoveAt(i);
+                ended = true;
+            }
+            if (ended)
+                Later([](ProjectManagerView& self) { self.Rebuild(); });
+            else
+                ShowProgress();
+        }
+
+        /// Where the tab's list of samples stands.
+        enum class CatalogState : u8
+        {
+            NotFetched,
+            Fetching,
+            Loaded,
+            NotPublished, ///< the release has no samples.json (a build between releases)
+            Failed,       ///< GitHub was not reached, or answered with nothing readable
+        };
+        [[nodiscard]] CatalogState SampleCatalogState() const noexcept { return m_catalogState; }
+        [[nodiscard]] const SampleCatalog& Samples() const noexcept { return m_catalog; }
+        /// The download of the sample in `folder`, while one is under way (null else).
+        [[nodiscard]] SampleDownload* DownloadOf(StringView folder) const
+        {
+            for (const UniquePtr<SampleDownload>& d : m_downloads)
+                if (d->Sample().folder.AsView() == folder)
+                    return d.Get();
+            return nullptr;
+        }
+        /// Whether a sample is already one of the user's projects (a listed project of its name).
+        [[nodiscard]] bool InProjects(const SampleInfo& sample) const
+        {
+            for (const Probe& probe : m_probes)
+                if (probe.found && probe.name == sample.name)
+                    return true;
+            return false;
+        }
+
+        /// Fetches the release's samples.json, then each sample's picture.
+        void FetchCatalog()
+        {
+            if (m_services.http == nullptr)
+            {
+                m_catalogState = CatalogState::Failed;
+                m_catalogError = String(u8"this editor has no network client");
+                Populate();
+                return;
+            }
+            m_services.http->Cancel(m_catalogRequest);
+            m_catalogState = CatalogState::Fetching;
+            foundation::http::HttpClientRequest request = foundation::http::HttpClientRequest::Get(ReleaseFile(u8"samples.json").AsView());
+            request.maxResponseBytes = 1024 * 1024;
+            ProjectManagerView* self = this;
+            m_catalogRequest = m_services.http->Send(Move(request), [self](const foundation::http::HttpClientResponse& response) { self->OnCatalog(response); });
+            Populate();
+        }
+
+        /// A sample's download: where it goes, starting where the last project went, and whether it
+        /// gets a folder of its name there. Download waits while the check line is red.
+        void ShowDownloadDialog(const SampleInfo& sample)
+        {
+            gui::SceneRoot* root = m_content ? Cast<gui::SceneRoot>(m_content->GetRootNode()) : nullptr;
+            RefPtr<gui::Node> body = m_services.loadMarkup ? m_services.loadMarkup(kDownloadSamplePath) : RefPtr<gui::Node>();
+            if (root == nullptr || !body || (m_dialog && m_dialog->IsOpen()))
+                return;
+            m_dialog = MakeRef<gui::Window>(m_allocator);
+            m_dialog->SetTitle(Format(u8"Download {}", sample.name).AsView());
+            m_dialog->SetSize(Float2{kDialogWidth, kDownloadDialogHeight});
+            m_dialog->GetContent()->AddChild(body.Get());
+            auto* parent = Cast<gui::TextField>(FindIn(*body, u8"download-sample-parent"));
+            auto* ownFolder = Cast<gui::CheckBox>(FindIn(*body, u8"download-sample-own-folder"));
+            auto* line = Cast<gui::UIWidget>(FindIn(*body, u8"download-sample-check"));
+            auto* icon = Cast<gui::Image>(FindIn(*body, u8"download-sample-check-icon"));
+            auto* where = Cast<gui::Label>(FindIn(*body, u8"download-sample-where"));
+            auto* size = Cast<gui::Label>(FindIn(*body, u8"download-sample-size"));
+            auto* go = Cast<gui::Button>(FindIn(*body, u8"download-sample-go"));
+            auto* browse = Cast<gui::Button>(FindIn(*body, u8"download-sample-browse"));
+            auto* cancel = Cast<gui::Button>(FindIn(*body, u8"download-sample-cancel"));
+            if (parent == nullptr || go == nullptr)
+                return;
+            ProjectManagerView* self = this;
+            gui::Window* dialog = m_dialog.Get();
+            if (ownFolder != nullptr)
+            {
+                ownFolder->SetText(Format(u8"Create a folder named {} in it", sample.folder).AsView());
+                ownFolder->SetChecked(true);
+            }
+            if (size != nullptr)
+                size->SetText(Format(u8"{} from GitHub", SizeText(sample.size)).AsView());
+            parent->SetText(m_services.controller != nullptr && !m_services.controller->LastLocation().IsEmpty() ? m_services.controller->LastLocation()
+                                                                                                                  : m_home.AsView());
+            const String folder = sample.folder;
+            const auto check = [self, folder, parent, ownFolder]()
+            {
+                return editor::ProjectManagerController::CheckNewProject(folder.AsView(), parent->GetText(), ownFolder == nullptr || ownFolder->IsChecked(),
+                                                                         self->m_home.AsView(), editor::NewProjectAction::Download);
+            };
+            const auto refresh = [check, line, icon, where, go]() { ShowCheck(check(), line, icon, where, go); };
+            parent->SetOnTextChanging([refresh](StringView) { refresh(); });
+            if (ownFolder != nullptr)
+                ownFolder->SetOnToggled([refresh](bool) { refresh(); });
+            const SampleInfo chosen = sample;
+            go->SetOnClick([self, dialog, check, parent, chosen]()
+                           {
+                               const editor::NewProjectCheck result = check();
+                               if (result.level == editor::NewProjectCheckLevel::Error)
+                                   return;
+                               if (self->m_services.controller != nullptr)
+                               {
+                                   self->m_services.controller->SetLastLocation(parent->GetText());
+                                   if (self->m_services.storeChanged)
+                                       self->m_services.storeChanged();
+                               }
+                               dialog->Close();
+                               self->StartDownload(chosen, result.target.AsView());
+                           });
+            if (browse != nullptr)
+                browse->SetOnClick([self, parent, refresh]()
+                                   {
+                                       if (self->m_services.dialogs == nullptr)
+                                           return;
+                                       self->m_services.dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{[parent, refresh](Span<const String> paths)
+                                                                                                                         {
+                                                                                                                             if (paths.Size() > 0)
+                                                                                                                             {
+                                                                                                                                 parent->SetText(paths[0].AsView());
+                                                                                                                                 refresh();
+                                                                                                                             }
+                                                                                                                         }},
+                                                                                parent->GetText());
+                                   });
+            if (cancel != nullptr)
+                cancel->SetOnClick([dialog]() { dialog->Close(); });
+            refresh();
+            m_dialog->OpenModal(*root);
+        }
+        /// The download dialog's window while it is open (for tests).
+        [[nodiscard]] gui::Window* DownloadDialog() const noexcept { return CreateDialog(); }
+
+        /// Starts `sample`'s download into `target` (the dialog's second half).
+        void StartDownload(const SampleInfo& sample, StringView target)
+        {
+            if (m_services.http == nullptr || DownloadOf(sample.folder.AsView()) != nullptr)
+                return;
+            m_downloads.PushBack(MakeUnique<SampleDownload>(m_allocator, m_allocator, *m_services.http, sample, ReleaseFile(sample.archive.AsView()),
+                                                            String(target)));
+            m_downloads.Back()->Start();
+            SetNote(Format(u8"Downloading {}...", sample.name).AsView());
+            Later([](ProjectManagerView& self) { self.Populate(); });
         }
         [[nodiscard]] bool IsShowingSamples() const noexcept { return m_samples; }
         /// Whether the first run's welcome stands in for the lists (no projects at all).
@@ -464,19 +653,7 @@ export namespace editor::app
                 return editor::ProjectManagerController::CheckNewProject(name->GetText(), parent->GetText(), ownFolder == nullptr || ownFolder->IsChecked(),
                                                                          self->m_home.AsView());
             };
-            const auto refresh = [check, line, icon, where, create]()
-            {
-                const editor::NewProjectCheck result = check();
-                create->SetEnabled(result.level != editor::NewProjectCheckLevel::Error);
-                if (where != nullptr)
-                    where->SetText(result.message.AsView());
-                SetClass(line, u8"warning", result.level == editor::NewProjectCheckLevel::Warning);
-                SetClass(line, u8"error", result.level == editor::NewProjectCheckLevel::Error);
-                if (icon != nullptr)
-                    icon->SetSource(String(result.level == editor::NewProjectCheckLevel::Ok        ? u8"Editor/Icons/check.svg"
-                                           : result.level == editor::NewProjectCheckLevel::Warning ? u8"Editor/Icons/warning.svg"
-                                                                                                    : u8"Editor/Icons/error.svg"));
-            };
+            const auto refresh = [check, line, icon, where, create]() { ShowCheck(check(), line, icon, where, create); };
             name->SetOnTextChanging([refresh](StringView) { refresh(); });
             parent->SetOnTextChanging([refresh](StringView) { refresh(); });
             if (ownFolder != nullptr)
@@ -523,6 +700,238 @@ export namespace editor::app
     private:
         static constexpr f32 kDialogWidth = 600.0f;
         static constexpr f32 kDialogHeight = 330.0f;
+        static constexpr f32 kDownloadDialogHeight = 260.0f;
+        static constexpr const char8_t* kDownloadSamplePath = u8"Editor/DownloadSample.xml";
+
+        // A check line (New Project's, a download's): its words, its colour, its icon, and whether
+        // the dialog's button may go ahead.
+        static void ShowCheck(const editor::NewProjectCheck& result, gui::UIWidget* line, gui::Image* icon, gui::Label* where, gui::Button* go)
+        {
+            go->SetEnabled(result.level != editor::NewProjectCheckLevel::Error);
+            if (where != nullptr)
+                where->SetText(result.message.AsView());
+            SetClass(line, u8"warning", result.level == editor::NewProjectCheckLevel::Warning);
+            SetClass(line, u8"error", result.level == editor::NewProjectCheckLevel::Error);
+            if (icon != nullptr)
+                icon->SetSource(String(result.level == editor::NewProjectCheckLevel::Ok        ? u8"Editor/Icons/check.svg"
+                                       : result.level == editor::NewProjectCheckLevel::Warning ? u8"Editor/Icons/warning.svg"
+                                                                                                : u8"Editor/Icons/error.svg"));
+        }
+
+        // A size for a person: "7.2 MB".
+        [[nodiscard]] static String SizeText(u64 bytes)
+        {
+            const u64 tenths = (bytes * 10 + 512 * 1024) / (1024 * 1024);
+            if (tenths < 10)
+                return Format(u8"{} KB", Max<u64>(1, (bytes + 512) / 1024));
+            return Format(u8"{}.{} MB", tenths / 10, tenths % 10);
+        }
+
+        [[nodiscard]] String ReleaseFile(StringView file) const
+        {
+            return m_services.releaseFile ? m_services.releaseFile(file) : engine::project::EngineReleaseDownloadUrl(file);
+        }
+
+        void OnCatalog(const foundation::http::HttpClientResponse& response)
+        {
+            m_catalogRequest = 0;
+            if (response.Ok() && response.status == 404)
+                m_catalogState = CatalogState::NotPublished;
+            else if (!response.Ok() || response.status != 200)
+            {
+                m_catalogState = CatalogState::Failed;
+                m_catalogError = response.Ok() ? Format(u8"GitHub answered {}", response.status) : response.error;
+            }
+            else if (!SampleCatalog::Parse(response.BodyText(), m_catalog, m_catalogError))
+                m_catalogState = CatalogState::Failed;
+            else
+            {
+                m_catalogState = CatalogState::Loaded;
+                FetchPictures();
+            }
+            Later([](ProjectManagerView& self) { self.Populate(); });
+        }
+
+        // Each sample's picture, shown on its card as it arrives.
+        void FetchPictures()
+        {
+            m_samplePictures.Clear();
+            m_pictureRequests.Clear();
+            for (usize i = 0; i < m_catalog.samples.Size(); ++i)
+            {
+                m_samplePictures.PushBack(UniquePtr<foundation::image::Image>());
+                if (m_catalog.samples[i].picture.IsEmpty())
+                    continue;
+                foundation::http::HttpClientRequest request = foundation::http::HttpClientRequest::Get(ReleaseFile(m_catalog.samples[i].picture.AsView()).AsView());
+                ProjectManagerView* self = this;
+                m_pictureRequests.PushBack(m_services.http->Send(Move(request), [self, i](const foundation::http::HttpClientResponse& response)
+                                                                 {
+                                                                     if (!response.Ok() || response.status != 200 || i >= self->m_samplePictures.Size())
+                                                                         return;
+                                                                     auto image = MakeUnique<foundation::image::Image>(self->m_allocator);
+                                                                     if (foundation::image::io::LoadImageFromMemory(
+                                                                             Span<const u8>(reinterpret_cast<const u8*>(response.body.Data()), response.body.Size()), *image)
+                                                                             .IsOk())
+                                                                     {
+                                                                         self->m_samplePictures[i] = Move(image);
+                                                                         self->Later([](ProjectManagerView& view) { view.Populate(); });
+                                                                     }
+                                                                 }));
+            }
+        }
+
+        // What a finished download leaves: a project in the list, or why it did not.
+        void Finished(SampleDownload& d)
+        {
+            const String name = d.Sample().name;
+            if (d.GetState() == SampleDownload::State::Done)
+            {
+                engine::project::ProjectSettings probed;
+                if (m_services.controller != nullptr && editor::ProbeProject(d.Target(), probed).IsOk())
+                {
+                    m_services.controller->NoteOpened(d.Target(), probed.name.AsView(), probed.engineVersion.AsView());
+                    if (m_services.storeChanged)
+                        m_services.storeChanged();
+                    SetNote(Format(u8"{} is in your projects, in {}.", name, ShortenHomePath(d.Target(), m_home.AsView())).AsView());
+                }
+                else
+                    SetStatus(Format(u8"{} downloaded, but holds no Project.xml.", name).AsView());
+            }
+            else if (d.GetState() == SampleDownload::State::Failed)
+                SetStatus(Format(u8"{} did not download: {}.", name, d.Error()).AsView());
+            else
+                SetNote(Format(u8"{}'s download was cancelled; nothing was kept.", name).AsView());
+        }
+
+        // The bars and words of the downloads under way, without laying the page out again.
+        void ShowProgress()
+        {
+            for (const SampleCard& card : m_sampleCards)
+                if (SampleDownload* d = DownloadOf(card.folder.AsView()); d != nullptr && card.bar != nullptr)
+                {
+                    card.bar->SetValue(static_cast<f64>(d->Progress()));
+                    if (card.stage != nullptr)
+                        card.stage->SetText(Format(u8"Downloading {} of {}", SizeText(d->Received()), SizeText(d->Total())).AsView());
+                }
+        }
+
+        // The Samples tab: the cards, or where the list stands.
+        void PopulateSamples()
+        {
+            gui::Node* grid = Find<gui::Node>(u8"manager-samples");
+            Clear(grid);
+            m_sampleCards.Clear();
+            const bool loaded = m_catalogState == CatalogState::Loaded && !m_catalog.samples.IsEmpty();
+            if (auto* scroll = Find<gui::UIWidget>(u8"manager-samples-scroll"))
+                scroll->SetDisplayed(loaded);
+            if (auto* state = Find<gui::UIWidget>(u8"manager-samples-state"))
+                state->SetDisplayed(!loaded);
+            if (!loaded)
+            {
+                StringView title = u8"Reaching GitHub...";
+                String text;
+                if (m_catalogState == CatalogState::Failed)
+                {
+                    title = u8"The samples could not be fetched";
+                    text = Format(u8"GitHub was not reached ({}).", m_catalogError);
+                }
+                else if (m_catalogState == CatalogState::NotPublished || m_catalogState == CatalogState::Loaded)
+                {
+                    title = u8"No samples for this version yet";
+                    text = Format(u8"Release {} has no samples published: they come with each release of the editor.", engine::project::kEngineVersionString);
+                }
+                if (auto* label = Find<gui::Label>(u8"manager-samples-state-title"))
+                    label->SetText(title);
+                if (auto* label = Find<gui::Label>(u8"manager-samples-state-text"))
+                    label->SetText(text.AsView());
+                if (auto* retry = Find<gui::UIWidget>(u8"manager-samples-retry"))
+                    retry->SetDisplayed(m_catalogState == CatalogState::Failed);
+                return;
+            }
+            for (usize i = 0; i < m_catalog.samples.Size() && grid != nullptr; ++i)
+                grid->AddChild(SampleCardFor(i).Get());
+            ShowProgress();
+        }
+
+        [[nodiscard]] RefPtr<gui::Node> SampleCardFor(usize index)
+        {
+            const SampleInfo& sample = m_catalog.samples[index];
+            RefPtr<gui::Panel> card = MakeRef<gui::Panel>(m_allocator);
+            card->AddClass(u8"manager-sample");
+            if (index < m_samplePictures.Size() && m_samplePictures[index])
+            {
+                RefPtr<gui::Image> picture = MakeRef<gui::Image>(m_allocator);
+                picture->AddClass(u8"manager-sample-picture");
+                picture->SetFit(gui::ObjectFit::Cover);
+                picture->SetDrawable(MakeRef<gui::ImageDrawable>(m_allocator, m_samplePictures[index].Get()));
+                card->AddChild(picture.Get());
+            }
+            else
+            {
+                RefPtr<gui::Panel> blank = MakeRef<gui::Panel>(m_allocator);
+                blank->AddClass(u8"manager-sample-picture");
+                card->AddChild(blank.Get());
+            }
+            RefPtr<gui::Panel> body = MakeRef<gui::Panel>(m_allocator);
+            body->AddClass(u8"manager-sample-body");
+            RefPtr<gui::Panel> title = MakeRef<gui::Panel>(m_allocator);
+            title->AddClass(u8"manager-sample-title");
+            title->AddChild(Text(sample.name.AsView(), u8"manager-sample-name").Get());
+            title->AddChild(Text(SizeText(sample.size).AsView(), u8"manager-count").Get());
+            body->AddChild(title.Get());
+            body->AddChild(Text(sample.description.AsView(), u8"manager-sample-text").Get());
+            SampleCard entry;
+            entry.folder = sample.folder;
+            ProjectManagerView* self = this;
+            if (DownloadOf(sample.folder.AsView()) != nullptr)
+            {
+                RefPtr<gui::Panel> progress = MakeRef<gui::Panel>(m_allocator);
+                progress->AddClass(u8"manager-sample-progress");
+                RefPtr<gui::ProgressBar> bar = MakeRef<gui::ProgressBar>(m_allocator);
+                bar->SetMin(0.0);
+                bar->SetMax(1.0);
+                progress->AddChild(bar.Get());
+                RefPtr<gui::Panel> stage = MakeRef<gui::Panel>(m_allocator);
+                stage->AddClass(u8"manager-sample-stage");
+                RefPtr<gui::Label> words = Text(u8"Downloading", u8"");
+                stage->AddChild(words.Get());
+                RefPtr<gui::Button> cancel = MakeRef<gui::Button>(m_allocator);
+                cancel->AddClass(u8"ghost");
+                cancel->SetText(u8"Cancel");
+                const String folder = sample.folder;
+                cancel->SetOnClick([self, folder]()
+                                   {
+                                       if (SampleDownload* d = self->DownloadOf(folder.AsView()))
+                                           d->Cancel(); // Tick takes it off and says so
+                                   });
+                stage->AddChild(cancel.Get());
+                progress->AddChild(stage.Get());
+                body->AddChild(progress.Get());
+                entry.bar = bar.Get();
+                entry.stage = words.Get();
+            }
+            else
+            {
+                RefPtr<gui::Panel> actions = MakeRef<gui::Panel>(m_allocator);
+                actions->AddClass(u8"manager-sample-actions");
+                RefPtr<gui::Button> download = MakeRef<gui::Button>(m_allocator);
+                download->AddClasses(u8"primary");
+                download->SetText(u8"Download...");
+                download->SetEnabled(m_services.http != nullptr);
+                download->SetOnClick([self, index]()
+                                     {
+                                         if (index < self->m_catalog.samples.Size())
+                                             self->ShowDownloadDialog(self->m_catalog.samples[index]);
+                                     });
+                actions->AddChild(download.Get());
+                if (InProjects(sample))
+                    actions->AddChild(Text(u8"In your projects", u8"manager-sample-have").Get());
+                body->AddChild(actions.Get());
+            }
+            card->AddChild(body.Get());
+            m_sampleCards.PushBack(Move(entry));
+            return RefPtr<gui::Node>(card);
+        }
 
         // A listed project as the last probe found it.
         struct Probe
@@ -604,7 +1013,13 @@ export namespace editor::app
                 return;
             // Nothing to say: how to open a project, while there are some.
             const bool idle = text.IsEmpty();
-            status->SetText(idle && !m_shown.IsEmpty() && !m_samples ? StringView(u8"Double-click a project or press Enter to open it.") : text);
+            String idleText;
+            if (idle && m_samples)
+                idleText = Format(u8"From the {} release on GitHub, checked against its published checksum before it is unpacked.",
+                                  engine::project::kEngineVersionString);
+            else if (idle && !m_shown.IsEmpty())
+                idleText = String(u8"Double-click a project or press Enter to open it.");
+            status->SetText(idle ? idleText.AsView() : text);
             SetClass(status, u8"warning", problem && !idle);
         }
 
@@ -639,6 +1054,8 @@ export namespace editor::app
                 page->SetDisplayed(!m_samples && !welcome);
             if (auto* page = Find<gui::UIWidget>(u8"manager-samples-page"))
                 page->SetDisplayed(m_samples);
+            if (m_samples)
+                PopulateSamples();
             if (auto* page = Find<gui::UIWidget>(u8"manager-welcome"))
                 page->SetDisplayed(welcome);
             if (auto* logo = Find<gui::UIWidget>(u8"manager-logo"))
@@ -1010,5 +1427,21 @@ export namespace editor::app
         usize m_focus = 0;
         bool m_problem = false;
         bool m_samples = false;
+
+        // The Samples tab.
+        struct SampleCard
+        {
+            String folder;
+            gui::ProgressBar* bar = nullptr; // while it downloads
+            gui::Label* stage = nullptr;
+        };
+        CatalogState m_catalogState = CatalogState::NotFetched;
+        SampleCatalog m_catalog;
+        String m_catalogError;
+        foundation::http::HttpRequestId m_catalogRequest = 0;
+        Array<foundation::http::HttpRequestId> m_pictureRequests;
+        Array<UniquePtr<foundation::image::Image>> m_samplePictures; // by the catalog's order; null until it arrives
+        Array<UniquePtr<SampleDownload>> m_downloads;
+        Array<SampleCard> m_sampleCards;
     };
 }

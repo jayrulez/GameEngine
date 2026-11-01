@@ -1,6 +1,6 @@
 # The project manager
 
-Status: P1 to P4 BUILT (2026-11-01); P5 to come. Agreed with the user over a mockup. Replaces the project manager of
+Status: P1 to P5 BUILT (2026-11-01); the first release with samples attached is the first full test. Agreed with the user over a mockup. Replaces the project manager of
 editor-gui.md section 5.1 (layer 13) where they differ.
 
 Goal: the screen the editor opens on without a project looks and behaves like a finished tool:
@@ -98,4 +98,8 @@ it is handed to the user for the visual check.
   against the head's length.
 - **P5. Samples.** release.yml packs the samples and `samples.json`; the Samples tab, its
   download dialog (P3's check), progress and cancel, the SHA-256 check, unpacking, and the entry
-  in the list.
+  in the list. Built: `Data/SampleProjects/Samples.json` lists the games (not
+  NativeSample, which needs a compiler) and `scripts/pack-samples.py` packs them (the project at
+  each zip's root); the tab fetches the list and pictures, a download goes on while a project is
+  open, and one done joins the list. Until a release carries them, the tab says no samples are
+  published for its version.

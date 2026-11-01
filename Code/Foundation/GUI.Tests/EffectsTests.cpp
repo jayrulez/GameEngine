@@ -169,6 +169,38 @@ TEST_CASE("effects: overflow clips the children, to the rounded corners through 
     CHECK_FALSE(card->ClipsChildren());
 }
 
+namespace
+{
+    // A picture that fills its rectangle with one colour.
+    struct SolidProbeDrawable : Drawable
+    {
+        void Draw(DrawContext& ctx, const Rect& dest) override { ctx.VG().FillRect(dest.ToRectangle(), core::Color::White); }
+        [[nodiscard]] core::Optional<core::Float2> IntrinsicSize() const override { return core::Float2{100.0f, 50.0f}; }
+    };
+}
+
+TEST_CASE("effects: an image with rounded corners clips its picture to them, as CSS rounds a replaced element")
+{
+    auto picture = core::MakeRef<Image>(core::DefaultAllocator());
+    picture->SetTag(SV(u8"img"));
+    picture->SetSize(core::Float2{100.0f, 50.0f});
+    picture->SetDrawable(core::MakeRef<SolidProbeDrawable>(core::DefaultAllocator()));
+    Apply(*picture.Get(), u8"img { border-radius: 8px; }");
+    vg::VGContext canvas;
+    DrawWith(*picture.Get(), canvas, true);
+    bool stencilClipped = false;
+    for (const vg::VGCommand& cmd : canvas.GetBatch().commands)
+        stencilClipped = stencilClipped || cmd.clipMode == vg::VGClipMode::Stencil;
+    CHECK(stencilClipped);
+
+    // Square corners: no path clip.
+    Apply(*picture.Get(), u8"img { border-radius: 0; }");
+    vg::VGContext square;
+    DrawWith(*picture.Get(), square, true);
+    for (const vg::VGCommand& cmd : square.GetBatch().commands)
+        CHECK(cmd.clipMode != vg::VGClipMode::Stencil);
+}
+
 TEST_CASE("effects: a transition moves a filter's blur")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

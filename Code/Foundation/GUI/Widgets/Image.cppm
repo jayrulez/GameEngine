@@ -20,6 +20,7 @@ export module foundation.gui:image;
 
 import foundation.core; // RefPtr, Move, Optional, Float2, Min, Max, String, Color
 import foundation.image; // ImageData
+import foundation.vg;    // PathBuilder, ShapeBuilder (the rounded corners' clip)
 import :rect;
 import :draw_context;
 import :drawable;
@@ -256,8 +257,16 @@ export namespace foundation::gui
                 return;
             const Rect at = DrawnBounds();
             const Rect box = GetContentBounds();
-            // Clip whatever extends past the box, as CSS clips a replaced element's content.
+            // Clip whatever extends past the box, as CSS clips a replaced element's content, and
+            // round its corners with the box's (a thumbnail on a rounded card).
             const bool clip = at.x < box.x || at.y < box.y || at.x + at.width > box.x + box.width || at.y + at.height > box.y + box.height;
+            const bool rounded = !GetBox().Radii.IsZero();
+            if (rounded)
+            {
+                vg::PathBuilder shape;
+                vg::ShapeBuilder::BuildRoundedRect(GetLocalBounds().ToRectangle(), GetBox().Radii, shape);
+                ctx.VG().PushClipPath(shape.ToPath());
+            }
             if (clip)
                 ctx.PushClip(box);
             if (m_imageColor == Color::White)
@@ -266,6 +275,8 @@ export namespace foundation::gui
                 m_drawable->DrawTinted(ctx, at, m_imageColor);
             if (clip)
                 ctx.PopClip();
+            if (rounded)
+                ctx.VG().PopClipPath();
         }
 
     private:

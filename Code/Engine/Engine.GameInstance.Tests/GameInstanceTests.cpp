@@ -255,14 +255,16 @@ TEST_CASE("game-instance: a ws:// address joins the host's gateway at port + 1, 
     engine::runtime::GameInstance client;
     u16 port = 0;
     {
-        // Two free ports in a row (the game's and its gateway's).
-        for (u32 attempt = 0; attempt < 20 && port == 0; ++attempt)
+        // Two free ports in a row (the game's and its gateway's), searched among ordinary ports from
+        // a start that differs run to run. Not beside an ephemeral port the system hands out: on
+        // Windows the next one up is often taken or reserved.
+        const u32 start = 20000u + static_cast<u32>(GetUnixTime() % 1000) * 30u;
+        for (u32 candidate = start; candidate < start + 2000u && port == 0; candidate += 2)
         {
-            foundation::net::TcpListener probe(0, true);
-            const u16 candidate = probe.BoundPort();
-            foundation::net::TcpListener next(static_cast<u16>(candidate + 1), true);
-            if (candidate < 65000 && next.IsOpen())
-                port = candidate;
+            foundation::net::TcpListener game(static_cast<u16>(candidate), true);
+            foundation::net::TcpListener gateway(static_cast<u16>(candidate + 1), true);
+            if (game.IsOpen() && gateway.IsOpen())
+                port = static_cast<u16>(candidate);
         }
     }
     REQUIRE(port != 0);

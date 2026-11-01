@@ -65,7 +65,7 @@ export namespace editor::app
             Function<void()> storeChanged;
             /// Loads a dialog's markup by its path (New Project's).
             Function<RefPtr<gui::Node>(StringView)> loadMarkup;
-            /// The Samples tab's client (null: the tab says it cannot reach GitHub). It must outlive
+            /// The Samples tab's client (null: the tab says the samples could not be fetched). It must outlive
             /// the view, which pumps it in Tick.
             foundation::http::IHttpClient* http = nullptr;
             /// Where a file of this editor's release is fetched from (empty: the release's own URL,
@@ -264,7 +264,7 @@ export namespace editor::app
             Fetching,
             Loaded,
             NotPublished, ///< the release has no samples.json (a build between releases)
-            Failed,       ///< GitHub was not reached, or answered with nothing readable
+            Failed,       ///< the release was not reached, or answered with nothing readable
         };
         [[nodiscard]] CatalogState SampleCatalogState() const noexcept { return m_catalogState; }
         [[nodiscard]] const SampleCatalog& Samples() const noexcept { return m_catalog; }
@@ -304,8 +304,10 @@ export namespace editor::app
             Populate();
         }
 
-        /// A sample's download: where it goes, starting where the last project went, and whether it
-        /// gets a folder of its name there. Download waits while the check line is red.
+        /// A sample's download, in one window from start to end: where it goes (starting where the
+        /// last project went, and whether it gets a folder of its name there; Download waits while
+        /// the check line is red), its progress with Cancel, and how it ended, with Open for the new
+        /// project or Try again. Closing it mid-way leaves the download going, its card showing it.
         void ShowDownloadDialog(const SampleInfo& sample)
         {
             gui::SceneRoot* root = m_content ? Cast<gui::SceneRoot>(m_content->GetRootNode()) : nullptr;
@@ -325,17 +327,22 @@ export namespace editor::app
             auto* go = Cast<gui::Button>(FindIn(*body, u8"download-sample-go"));
             auto* browse = Cast<gui::Button>(FindIn(*body, u8"download-sample-browse"));
             auto* cancel = Cast<gui::Button>(FindIn(*body, u8"download-sample-cancel"));
+            auto* close = Cast<gui::Button>(FindIn(*body, u8"download-sample-close"));
+            auto* retry = Cast<gui::Button>(FindIn(*body, u8"download-sample-retry"));
+            auto* open = Cast<gui::Button>(FindIn(*body, u8"download-sample-open"));
             if (parent == nullptr || go == nullptr)
                 return;
             ProjectManagerView* self = this;
             gui::Window* dialog = m_dialog.Get();
+            m_dialogSample = sample.folder;
+            m_dialogTarget.Clear();
             if (ownFolder != nullptr)
             {
                 ownFolder->SetText(Format(u8"Create a folder named {} in it", sample.folder).AsView());
                 ownFolder->SetChecked(true);
             }
             if (size != nullptr)
-                size->SetText(Format(u8"{} from GitHub", SizeText(sample.size)).AsView());
+                size->SetText(Format(u8"{} download", SizeText(sample.size)).AsView());
             parent->SetText(m_services.controller != nullptr && !m_services.controller->LastLocation().IsEmpty() ? m_services.controller->LastLocation()
                                                                                                                   : m_home.AsView());
             const String folder = sample.folder;
@@ -349,7 +356,7 @@ export namespace editor::app
             if (ownFolder != nullptr)
                 ownFolder->SetOnToggled([refresh](bool) { refresh(); });
             const SampleInfo chosen = sample;
-            go->SetOnClick([self, dialog, check, parent, chosen]()
+            go->SetOnClick([self, check, parent, chosen]()
                            {
                                const editor::NewProjectCheck result = check();
                                if (result.level == editor::NewProjectCheckLevel::Error)
@@ -360,8 +367,9 @@ export namespace editor::app
                                    if (self->m_services.storeChanged)
                                        self->m_services.storeChanged();
                                }
-                               dialog->Close();
+                               self->m_dialogTarget = result.target;
                                self->StartDownload(chosen, result.target.AsView());
+                               self->ShowDialogStage(DialogStage::Downloading);
                            });
             if (browse != nullptr)
                 browse->SetOnClick([self, parent, refresh]()
@@ -379,8 +387,32 @@ export namespace editor::app
                                                                                 parent->GetText());
                                    });
             if (cancel != nullptr)
-                cancel->SetOnClick([dialog]() { dialog->Close(); });
+                cancel->SetOnClick([self, dialog]()
+                                   {
+                                       // Choosing: the dialog goes. Downloading: the download stops,
+                                       // and the dialog says so when Tick hears it.
+                                       if (SampleDownload* d = self->DownloadOf(self->m_dialogSample.AsView()))
+                                           d->Cancel();
+                                       else
+                                           dialog->Close();
+                                   });
+            if (close != nullptr)
+                close->SetOnClick([dialog]() { dialog->Close(); });
+            if (retry != nullptr)
+                retry->SetOnClick([self, refresh]()
+                                  {
+                                      self->ShowDialogStage(DialogStage::Choosing);
+                                      refresh();
+                                  });
+            if (open != nullptr)
+                open->SetOnClick([self, dialog]()
+                                 {
+                                     const String target = self->m_dialogTarget;
+                                     dialog->Close();
+                                     self->Open(target.AsView());
+                                 });
             refresh();
+            ShowDialogStage(DialogStage::Choosing);
             m_dialog->OpenModal(*root);
         }
         /// The download dialog's window while it is open (for tests).
@@ -703,6 +735,51 @@ export namespace editor::app
         static constexpr f32 kDownloadDialogHeight = 260.0f;
         static constexpr const char8_t* kDownloadSamplePath = u8"Editor/DownloadSample.xml";
 
+        // Where the download dialog is: choosing where, downloading, or how it ended.
+        enum class DialogStage : u8
+        {
+            Choosing,
+            Downloading,
+            Done,
+            Failed,
+            Cancelled,
+        };
+        // Shows one stage of the download dialog: its panel and the buttons it offers.
+        void ShowDialogStage(DialogStage stage, StringView words = {})
+        {
+            if (!m_dialog || !m_dialog->IsOpen())
+                return;
+            gui::Node& body = *m_dialog->GetContent();
+            const auto show = [&body](const char8_t* id, bool on)
+            {
+                if (auto* w = Cast<gui::UIWidget>(FindIn(body, id)))
+                    w->SetDisplayed(on);
+            };
+            const bool ended = stage == DialogStage::Done || stage == DialogStage::Failed || stage == DialogStage::Cancelled;
+            show(u8"download-sample-choose", stage == DialogStage::Choosing);
+            show(u8"download-sample-progress", stage == DialogStage::Downloading);
+            show(u8"download-sample-result", ended);
+            show(u8"download-sample-go", stage == DialogStage::Choosing);
+            show(u8"download-sample-cancel", stage == DialogStage::Choosing || stage == DialogStage::Downloading);
+            show(u8"download-sample-close", ended);
+            show(u8"download-sample-retry", stage == DialogStage::Failed);
+            show(u8"download-sample-open", stage == DialogStage::Done);
+            if (ended)
+            {
+                auto* line = Cast<gui::UIWidget>(FindIn(body, u8"download-sample-result"));
+                SetClass(line, u8"error", stage == DialogStage::Failed);
+                SetClass(line, u8"warning", stage == DialogStage::Cancelled);
+                if (auto* text = Cast<gui::Label>(FindIn(body, u8"download-sample-result-text")))
+                    text->SetText(words);
+                if (auto* icon = Cast<gui::Image>(FindIn(body, u8"download-sample-result-icon")))
+                    icon->SetSource(String(stage == DialogStage::Done     ? u8"Editor/Icons/check.svg"
+                                           : stage == DialogStage::Failed ? u8"Editor/Icons/error.svg"
+                                                                          : u8"Editor/Icons/warning.svg"));
+            }
+            if (stage == DialogStage::Downloading)
+                ShowProgress();
+        }
+
         // A check line (New Project's, a download's): its words, its colour, its icon, and whether
         // the dialog's button may go ahead.
         static void ShowCheck(const editor::NewProjectCheck& result, gui::UIWidget* line, gui::Image* icon, gui::Label* where, gui::Button* go)
@@ -740,7 +817,7 @@ export namespace editor::app
             else if (!response.Ok() || response.status != 200)
             {
                 m_catalogState = CatalogState::Failed;
-                m_catalogError = response.Ok() ? Format(u8"GitHub answered {}", response.status) : response.error;
+                m_catalogError = response.Ok() ? Format(u8"the release answered {}", response.status) : response.error;
             }
             else if (!SampleCatalog::Parse(response.BodyText(), m_catalog, m_catalogError))
                 m_catalogState = CatalogState::Failed;
@@ -784,6 +861,10 @@ export namespace editor::app
         void Finished(SampleDownload& d)
         {
             const String name = d.Sample().name;
+            // The dialog that started it, if it is still open, says how it ended too.
+            const bool told = m_dialog && m_dialog->IsOpen() && m_dialogSample == d.Sample().folder;
+            String words;
+            DialogStage stage = DialogStage::Failed;
             if (d.GetState() == SampleDownload::State::Done)
             {
                 engine::project::ProjectSettings probed;
@@ -792,20 +873,46 @@ export namespace editor::app
                     m_services.controller->NoteOpened(d.Target(), probed.name.AsView(), probed.engineVersion.AsView());
                     if (m_services.storeChanged)
                         m_services.storeChanged();
-                    SetNote(Format(u8"{} is in your projects, in {}.", name, RecentProjects::ShortenHomePath(d.Target(), m_home.AsView())).AsView());
+                    words = Format(u8"{} is in your projects, in {}.", name, RecentProjects::ShortenHomePath(d.Target(), m_home.AsView()));
+                    stage = DialogStage::Done;
+                    SetNote(words.AsView());
                 }
                 else
-                    SetStatus(Format(u8"{} downloaded, but holds no Project.xml.", name).AsView());
+                {
+                    words = Format(u8"{} downloaded, but holds no Project.xml.", name);
+                    SetStatus(words.AsView());
+                }
             }
             else if (d.GetState() == SampleDownload::State::Failed)
-                SetStatus(Format(u8"{} did not download: {}.", name, d.Error()).AsView());
+            {
+                words = Format(u8"{} did not download: {}.", name, d.Error());
+                SetStatus(words.AsView());
+            }
             else
-                SetNote(Format(u8"{}'s download was cancelled; nothing was kept.", name).AsView());
+            {
+                words = Format(u8"{}'s download was cancelled; nothing was kept.", name);
+                stage = DialogStage::Cancelled;
+                SetNote(words.AsView());
+            }
+            if (told)
+                ShowDialogStage(stage, words.AsView());
         }
 
         // The bars and words of the downloads under way, without laying the page out again.
         void ShowProgress()
         {
+            if (m_dialog && m_dialog->IsOpen())
+                if (SampleDownload* d = DownloadOf(m_dialogSample.AsView()))
+                {
+                    if (auto* bar = Cast<gui::ProgressBar>(FindIn(*m_dialog->GetContent(), u8"download-sample-bar")))
+                    {
+                        bar->SetMin(0.0);
+                        bar->SetMax(1.0);
+                        bar->SetValue(static_cast<f64>(d->Progress()));
+                    }
+                    if (auto* stage = Cast<gui::Label>(FindIn(*m_dialog->GetContent(), u8"download-sample-stage")))
+                        stage->SetText(Format(u8"Downloading {} of {}", SizeText(d->Received()), SizeText(d->Total())).AsView());
+                }
             for (const SampleCard& card : m_sampleCards)
                 if (SampleDownload* d = DownloadOf(card.folder.AsView()); d != nullptr && card.bar != nullptr)
                 {
@@ -828,12 +935,12 @@ export namespace editor::app
                 state->SetDisplayed(!loaded);
             if (!loaded)
             {
-                StringView title = u8"Reaching GitHub...";
+                StringView title = u8"Fetching the samples...";
                 String text;
                 if (m_catalogState == CatalogState::Failed)
                 {
                     title = u8"The samples could not be fetched";
-                    text = Format(u8"GitHub was not reached ({}).", m_catalogError);
+                    text = Format(u8"The release was not reached: {}.", m_catalogError);
                 }
                 else if (m_catalogState == CatalogState::NotPublished || m_catalogState == CatalogState::Loaded)
                 {
@@ -1015,7 +1122,7 @@ export namespace editor::app
             const bool idle = text.IsEmpty();
             String idleText;
             if (idle && m_samples)
-                idleText = Format(u8"From the {} release on GitHub, checked against its published checksum before it is unpacked.",
+                idleText = Format(u8"From the {} release, each checked against its published checksum before it is unpacked.",
                                   engine::project::kEngineVersionString);
             else if (idle && !m_shown.IsEmpty())
                 idleText = String(u8"Double-click a project or press Enter to open it.");
@@ -1443,5 +1550,7 @@ export namespace editor::app
         Array<UniquePtr<foundation::image::Image>> m_samplePictures; // by the catalog's order; null until it arrives
         Array<UniquePtr<SampleDownload>> m_downloads;
         Array<SampleCard> m_sampleCards;
+        String m_dialogSample; // the sample the download dialog is for
+        String m_dialogTarget; // where it goes, once Download is pressed
     };
 }

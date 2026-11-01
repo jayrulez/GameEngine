@@ -65,10 +65,13 @@ The location starts where the last project was made or downloaded.
 One card per sample game of this editor's version: its picture, a one-line description that says
 what it is (taken from the README; never by reference to another sample), its size, and
 **Download...**. Download opens a dialog shaped like New Project (Location, Browse..., **Create a
-folder named `<Sample>` in it**, the same check line, Cancel and Download). While it downloads, the
-card shows a progress bar and Cancel (a cancelled download keeps nothing); when it is done, the
-sample is one of the user's projects and the card says "In your projects". Samples are never
-opened from this tab. With no network, the tab says it could not reach GitHub, with Retry.
+folder named `<Sample>` in it**, the same check line, Cancel and Download). The dialog stays
+through the download (2026-11-01, the user's ruling): its progress bar and Cancel (a cancelled
+download keeps nothing), then how it ended, with **Open** for the new project and Close, or why it
+failed with Try again. Closed mid-way, the download goes on and its card shows the bar and Cancel.
+When it is done, the sample is one of the user's projects and the card says "In your projects".
+The tab itself opens no sample. With no network, the tab says the samples could not be fetched,
+with Retry. The text names no host (no "GitHub"): it says "the release".
 
 Where they come from: each release (release.yml) attaches one zip per sample (its game: not
 `Tools/`, `Cooked/`, `.cache/`, `Editor/` or `Dist/`) and a `samples.json` naming each sample's

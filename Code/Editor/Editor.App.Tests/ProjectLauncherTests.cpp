@@ -603,9 +603,22 @@ TEST_CASE("launcher: the Samples tab lists the release's samples, and one downlo
     REQUIRE(go != nullptr);
     CHECK(go->IsEnabled());
     CHECK(go->HandleActivate());
-    CHECK(l.view->DownloadDialog() == nullptr);
+    // The dialog stays, showing the download, then how it ended.
+    REQUIRE(l.view->DownloadDialog() != nullptr);
+    CHECK(FindId<gui::UIWidget>(*dialog, u8"download-sample-progress")->IsDisplayed());
+    CHECK_FALSE(FindId<gui::UIWidget>(*dialog, u8"download-sample-choose")->IsDisplayed());
     l.Drain();
     run([&]() { return l.view->DownloadOf(u8"NativeSample") == nullptr; });
+    REQUIRE(l.view->DownloadDialog() != nullptr);
+    CHECK(FindId<gui::UIWidget>(*dialog, u8"download-sample-result")->IsDisplayed());
+    CHECK(FindId<gui::Label>(*dialog, u8"download-sample-result-text")->GetText().ContainsIgnoreCase(u8"is in your projects"));
+    gui::Button* openIt = FindId<gui::Button>(*dialog, u8"download-sample-open");
+    REQUIRE(openIt != nullptr);
+    CHECK(openIt->IsDisplayed());
+    CHECK(openIt->HandleActivate()); // opens the new project
+    CHECK(l.view->DownloadDialog() == nullptr);
+    REQUIRE(l.opened.Size() == 1u);
+    CHECK(l.opened[0] == PathJoin(l.root.AsView(), u8"NativeSample"));
 
     // It is one of the projects now, and its card says so.
     const String target = PathJoin(l.root.AsView(), u8"NativeSample");

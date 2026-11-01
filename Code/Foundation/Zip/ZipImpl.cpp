@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.zip - implementation: the central directory, inflating through stb's zlib decoder
-// (its definition in Image.IO's stb unit), CRC-32, and extraction.
+// foundation.zip - implementation: the central directory, inflating through zlib, CRC-32, and
+// extraction.
 
 module;
 #include "Core/Prelude.h"
-#include <climits>
-#include "stb_image.h"
+#include <zlib.h>
 
 module foundation.zip;
 
@@ -42,29 +41,20 @@ namespace foundation::zip
             return size == 0 || stream.Read(out.Data(), size) == size;
         }
 
-        struct CrcTable
-        {
-            u32 values[256];
-            constexpr CrcTable() : values{}
-            {
-                for (u32 i = 0; i < 256; ++i)
-                {
-                    u32 c = i;
-                    for (int k = 0; k < 8; ++k)
-                        c = (c & 1u) != 0 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
-                    values[i] = c;
-                }
-            }
-        };
-        constexpr CrcTable kCrc;
     }
 
     u32 Crc32(Span<const byte> bytes, u32 crc)
     {
-        crc = ~crc;
-        for (const byte b : bytes)
-            crc = kCrc.values[(crc ^ static_cast<u32>(b)) & 0xFFu] ^ (crc >> 8);
-        return ~crc;
+        // zlib's, fed in pieces its 32-bit count holds.
+        uLong value = crc;
+        usize at = 0;
+        while (at < bytes.Size())
+        {
+            const usize piece = Min<usize>(bytes.Size() - at, 1u << 30);
+            value = crc32(value, reinterpret_cast<const Bytef*>(bytes.Data() + at), static_cast<uInt>(piece));
+            at += piece;
+        }
+        return static_cast<u32>(value);
     }
 
     bool IsSafeEntryName(StringView name)
@@ -207,11 +197,6 @@ namespace foundation::zip
             return false;
         }
         const u64 dataAt = entry.localHeader + kLocalHeaderSize + U16(header.Data() + 26) + U16(header.Data() + 28);
-        if (entry.compressedSize > static_cast<u64>(INT_MAX) || entry.size > static_cast<u64>(INT_MAX))
-        {
-            error = Format(u8"{} is over 2 GB, which is not read", entry.name);
-            return false;
-        }
         Array<byte> packed;
         if (!ReadAt(*m_stream, dataAt, static_cast<usize>(entry.compressedSize), packed))
         {
@@ -229,11 +214,21 @@ namespace foundation::zip
         }
         else
         {
+            // Raw deflate (zip keeps no zlib header), into a buffer of the size the directory gives:
+            // it must end the stream exactly there. Sizes fit zlib's 32-bit counts, as Zip64 is
+            // refused.
             out.Resize(static_cast<usize>(entry.size));
-            const int got = entry.size == 0 ? 0
-                                            : stbi_zlib_decode_noheader_buffer(reinterpret_cast<char*>(out.Data()), static_cast<int>(entry.size),
-                                                                               reinterpret_cast<const char*>(packed.Data()), static_cast<int>(packed.Size()));
-            if (got != static_cast<int>(entry.size))
+            z_stream z{};
+            z.next_in = reinterpret_cast<Bytef*>(packed.Data());
+            z.avail_in = static_cast<uInt>(packed.Size());
+            z.next_out = reinterpret_cast<Bytef*>(out.Data());
+            z.avail_out = static_cast<uInt>(out.Size());
+            const bool started = inflateInit2(&z, -MAX_WBITS) == Z_OK;
+            const int result = started ? inflate(&z, Z_FINISH) : Z_MEM_ERROR;
+            const bool whole = result == Z_STREAM_END && z.total_out == entry.size;
+            if (started)
+                (void)inflateEnd(&z);
+            if (!whole)
             {
                 error = Format(u8"{} does not inflate (the archive is damaged)", entry.name);
                 out.Clear();

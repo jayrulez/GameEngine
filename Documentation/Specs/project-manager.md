@@ -87,11 +87,12 @@ it is handed to the user for the visual check.
   opens the docs site.
 - **P3. New Project.** The folder option, the check line, the remembered location; the check
   itself a pure function with its tests (the dialog only shows it).
-- **P4. What downloading needs.** A zip reader (deflate through stb's zlib decoder, no new
-  library), with tests over zips made by the system's tools; the HTTP client's progress callback.
-  Built: `foundation.zip` (stored and deflate, CRC-checked, a name outside the folder refusing the
-  archive, no Zip64), and the HTTP client streams a response (`onHead`, `onBody`) so a download
-  is written as it arrives and its progress is its bytes against the head's length.
+- **P4. What downloading needs.** A zip reader (deflate through zlib, vendored for it and for
+  content compression later), with tests over zips made by the system's tools; the HTTP client's
+  progress callback. Built: `foundation.zip` (stored and deflate through zlib, CRC-checked, a name
+  outside the folder refusing the archive, no Zip64), and the HTTP client streams a response
+  (`onHead`, `onBody`) so a download is written as it arrives and its progress is its bytes
+  against the head's length.
 - **P5. Samples.** release.yml packs the samples and `samples.json`; the Samples tab, its
   download dialog (P3's check), progress and cancel, the SHA-256 check, unpacking, and the entry
   in the list.

@@ -5,10 +5,10 @@
 // tools and GitHub release assets write it), for the sample downloads.
 //
 // The central directory is read from the end of the stream; each entry is stored or deflated
-// (inflated by stb's zlib decoder, which Image.IO already builds for PNG) and checked against its
-// CRC-32. Extracting writes every entry under a folder, refusing the whole archive before anything
-// is written when a name would land outside it. Not read: Zip64 (over 4 GB or 65535 entries),
-// encrypted entries, and compression methods other than stored and deflate.
+// (inflated by zlib) and checked against its CRC-32. Extracting writes every entry under a folder,
+// refusing the whole archive before anything is written when a name would land outside it. Not
+// read: Zip64 (over 4 GB or 65535 entries), encrypted entries, and compression methods other than
+// stored and deflate.
 module;
 #include "Core/Prelude.h"
 

@@ -59,11 +59,50 @@ export namespace editor
     class ProjectManagerController
     {
     public:
-        /// New Project's check for a project named `name` made in `location`, in a folder of its
-        /// name there when `ownFolder` is set, else in `location` itself (Specs/project-manager.md).
-        /// Red, Create waiting: no name, a name holding / \ : * ? " < > |, no location, a location
-        /// that is a file, a target that is a project already or holds files. Amber: the location
-        /// does not exist yet (it is made), the name starts or ends with a space. Else green.
+        /// The folder a project named `name` gets: spaces become '-'; letters, digits, '-', '_', '.'
+        /// and anything past ASCII (accented letters, other scripts) stay; other characters, those
+        /// a file system refuses and those awkward in a path ("'", '!', '&', '#'), go. Runs of '-'
+        /// become one, '-' and '.' at either end go, and a name Windows reserves (CON, NUL, COM1)
+        /// gets "-Project". Empty when nothing usable is left ("???").
+        [[nodiscard]] static String FolderNameFor(StringView name)
+        {
+            String folder;
+            for (const utf8char c : name)
+            {
+                const bool keep = (c >= u8'a' && c <= u8'z') || (c >= u8'A' && c <= u8'Z') || (c >= u8'0' && c <= u8'9') || c == u8'_' ||
+                                  c == u8'.' || static_cast<u8>(c) >= 0x80;
+                if (keep)
+                    folder.Append(c);
+                else if ((c == u8' ' || c == u8'-' || c == u8'\t') && !folder.IsEmpty() && folder[folder.Size() - 1] != u8'-')
+                    folder.Append(u8'-');
+            }
+            usize start = 0, end = folder.Size();
+            while (start < end && (folder[start] == u8'-' || folder[start] == u8'.'))
+                ++start;
+            while (end > start && (folder[end - 1] == u8'-' || folder[end - 1] == u8'.'))
+                --end;
+            folder = String(folder.AsView().SubStr(start, end - start));
+            // CON, PRN, AUX, NUL, COM1 to COM9 and LPT1 to LPT9, before any extension, any case.
+            StringView stem = folder.AsView();
+            for (usize i = 0; i < stem.Size(); ++i)
+                if (stem[i] == u8'.')
+                {
+                    stem = stem.SubStr(0, i);
+                    break;
+                }
+            const auto is = [stem](StringView reserved) { return stem.Size() == reserved.Size() && stem.ContainsIgnoreCase(reserved); };
+            const bool numbered = stem.Size() == 4 && (stem.SubStr(0, 3).ContainsIgnoreCase(u8"COM") || stem.SubStr(0, 3).ContainsIgnoreCase(u8"LPT")) &&
+                                  stem[3] >= u8'1' && stem[3] <= u8'9';
+            if (is(u8"CON") || is(u8"PRN") || is(u8"AUX") || is(u8"NUL") || numbered)
+                folder += u8"-Project";
+            return folder;
+        }
+
+        /// New Project's check for a project named `name` made in `location`, in a folder named
+        /// after it there (FolderNameFor) when `ownFolder` is set, else in `location` itself
+        /// (Specs/project-manager.md). Red, Create waiting: no name, a name with nothing a folder
+        /// can be named by, no location, a location that is a file, a target that is a project
+        /// already or holds files. Amber: the location does not exist yet (it is made). Else green.
         /// Folders in the message show under `home` as ~. A sample's download dialog asks the same
         /// with `action` Download, and the green line says so.
         [[nodiscard]] static NewProjectCheck CheckNewProject(StringView name, StringView location, bool ownFolder, StringView home,
@@ -80,17 +119,16 @@ export namespace editor
             };
             if (trimmed.IsEmpty())
                 return fail(String(u8"Give the project a name."));
-            for (const utf8char c : trimmed)
-                for (const utf8char bad : StringView(u8"/\\:*?\"<>|"))
-                    if (c == bad)
-                        return fail(String(u8"A name cannot hold / \\ : * ? \" < > or |."));
+            const String folder = FolderNameFor(trimmed);
+            if (ownFolder && folder.IsEmpty())
+                return fail(String(u8"The name needs a letter or a digit for its folder."));
             const StringView where = TrimSpaces(location);
             if (where.IsEmpty())
                 return fail(String(u8"Choose the folder it is made in."));
             const String shownWhere = RecentProjects::ShortenHomePath(where, home);
             if (!DirectoryExists(where) && FileExists(where))
                 return fail(Format(u8"{} is a file, not a folder.", shownWhere));
-            check.target = ownFolder ? PathJoin(where, trimmed) : String(where);
+            check.target = ownFolder ? PathJoin(where, folder.AsView()) : String(where);
             const String shownTarget = RecentProjects::ShortenHomePath(check.target.AsView(), home);
             if (FileExists(PathJoin(check.target.AsView(), u8"Project.xml").AsView()))
                 return fail(Format(u8"{} is a project already: Open Folder opens it.", shownTarget));
@@ -102,14 +140,9 @@ export namespace editor
                                                u8"option, or choose an empty one.",
                                                shownTarget));
             check.level = NewProjectCheckLevel::Warning;
-            if (trimmed.Size() != name.Size())
-            {
-                check.message = Format(u8"The name starts or ends with a space; the {} will be {}.", ownFolder ? u8"folder" : u8"name", ownFolder ? shownTarget : check.name);
-                return check;
-            }
             if (!DirectoryExists(where))
             {
-                check.message = ownFolder ? Format(u8"{} does not exist yet; it will be made, then {} inside it.", shownWhere, trimmed)
+                check.message = ownFolder ? Format(u8"{} does not exist yet; it will be made, then {} inside it.", shownWhere, folder)
                                           : Format(u8"{} does not exist yet; it will be made, and the project made in it.", shownWhere);
                 return check;
             }

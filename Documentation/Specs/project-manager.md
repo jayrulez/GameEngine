@@ -47,10 +47,16 @@ Name; Location with Browse...; **Create a folder named after the project in it**
 Under them one check line, kept current as the fields change, coloured by what it says:
 
 - green: "Creates `<folder>`, and opens it";
-- amber: the location does not exist yet (it will be made), or the name starts or ends with a
-  space;
-- red, Create disabled: no name, a name holding `/ \ : * ? " < > |`, no location, a target folder
-  that exists and holds files (with the folder option off, the location itself must be empty).
+- amber: the location does not exist yet (it will be made);
+- red, Create disabled: no name, a name with nothing to name a folder by ("???"), no location, a
+  target folder that exists and holds files (with the folder option off, the location itself must
+  be empty).
+
+The project keeps its name as typed (its ends trimmed); its folder is the name made safe for a file
+system (2026-11-01, the user's ruling): spaces become `-`; letters, digits, `-`, `_`, `.` and letters
+past ASCII stay; other characters go (`/ \ : * ? " < > |`, and `' ! & #` and the like); runs of `-`
+become one and `-` or `.` at either end go; a name Windows reserves (`CON`, `NUL`, `COM1`) gets
+`-Project`. "Bob's Game: Part 2!" goes in `Bobs-Game-Part-2`, which the check line shows.
 
 The location starts where the last project was made or downloaded.
 

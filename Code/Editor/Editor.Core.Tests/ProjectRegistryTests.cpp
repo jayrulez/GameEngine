@@ -574,6 +574,23 @@ TEST_CASE("editor.settings: the preview resolutions seed once and round-trip")
     CHECK(loaded.Find<GamePageSettings>()->resolutionKey == StringView(u8"preset:Handheld"));
 }
 
+TEST_CASE("project-registry: a project's folder is its name made safe for a file system")
+{
+    const auto folder = [](StringView name) { return ProjectManagerController::FolderNameFor(name); };
+    CHECK(folder(u8"Harbour").AsView() == u8"Harbour");
+    CHECK(folder(u8"My Great Game").AsView() == u8"My-Great-Game");
+    CHECK(folder(u8"Bob's Game: Part 2!").AsView() == u8"Bobs-Game-Part-2");
+    CHECK(folder(u8"a/b\\c*d?e\"f<g>h|i").AsView() == u8"abcdefghi");
+    CHECK(folder(u8"  spaced  -  out  ").AsView() == u8"spaced-out");
+    CHECK(folder(u8"..hidden.").AsView() == u8"hidden");
+    CHECK(folder(u8"v1.2_final").AsView() == u8"v1.2_final");
+    CHECK(folder(u8"Caf\u00e9 \u65e5\u672c").AsView() == u8"Caf\u00e9-\u65e5\u672c"); // letters past ASCII stay
+    CHECK(folder(u8"???").IsEmpty());
+    CHECK(folder(u8"con").AsView() == u8"con-Project");
+    CHECK(folder(u8"COM3").AsView() == u8"COM3-Project");
+    CHECK(folder(u8"Console").AsView() == u8"Console");
+}
+
 TEST_CASE("project-registry: New Project's check names where it goes, and refuses what cannot be made")
 {
     using Level = NewProjectCheckLevel;
@@ -610,10 +627,11 @@ TEST_CASE("project-registry: New Project's check names where it goes, and refuse
 
     // Red: what cannot be made, and Create waits.
     CHECK(ProjectManagerController::CheckNewProject(u8"  ", root.AsView(), true, {}).message.AsView() == u8"Give the project a name.");
-    c = ProjectManagerController::CheckNewProject(u8"A/B", root.AsView(), true, {});
+    c = ProjectManagerController::CheckNewProject(u8"???", root.AsView(), true, {});
     CHECK(c.level == Level::Error);
-    CHECK(c.message.AsView() == u8"A name cannot hold / \\ : * ? \" < > or |.");
-    CHECK(ProjectManagerController::CheckNewProject(u8"Why?", root.AsView(), true, {}).level == Level::Error);
+    CHECK(c.message.AsView() == u8"The name needs a letter or a digit for its folder.");
+    // Without a folder of its own, the name is the project's alone: anything goes.
+    CHECK(check(u8"???", u8"Empty", false).level == Level::Ok);
     CHECK(ProjectManagerController::CheckNewProject(u8"Harbour", u8" ", true, {}).message.AsView() == u8"Choose the folder it is made in.");
     c = check(u8"Taken", u8"", true);
     CHECK(c.level == Level::Error);
@@ -628,10 +646,12 @@ TEST_CASE("project-registry: New Project's check names where it goes, and refuse
     CHECK(c.level == Level::Warning);
     CHECK(c.message.AsView() == u8"~/Later/Games does not exist yet; it will be made, then Harbour inside it.");
     CHECK(check(u8"Harbour", u8"Later", false).message.AsView() == u8"~/Later does not exist yet; it will be made, and the project made in it.");
-    c = check(u8" Harbour ", u8"", true);
-    CHECK(c.level == Level::Warning);
-    CHECK(c.name.AsView() == u8"Harbour");
-    CHECK(c.message.AsView() == u8"The name starts or ends with a space; the folder will be ~/Harbour.");
+    // Green with a folder made safe from the name, which the project keeps as typed (trimmed).
+    c = check(u8" Bob's Game: Part 2! ", u8"", true);
+    CHECK(c.level == Level::Ok);
+    CHECK(c.name.AsView() == u8"Bob's Game: Part 2!");
+    CHECK(c.target == PathJoin(root.AsView(), u8"Bobs-Game-Part-2"));
+    CHECK(c.message.AsView() == u8"Creates ~/Bobs-Game-Part-2, and opens it.");
     CHECK_FALSE(DirectoryExists(PathJoin(root.AsView(), u8"Later").AsView())); // checking makes nothing
     (void)RemoveDirectoryRecursive(root.AsView());
 }

@@ -109,8 +109,8 @@ scripts/pack-samples.py <version> <out-dir>
 ```
 
 Packs the sample games `Data/SampleProjects/Samples.json` lists, for the editor's Samples tab: a
-zip of each one's tracked files less its authoring `Tools/` (`sample-<folder>.zip`, under a top
-folder of its name, with fixed timestamps so the same files pack the same), its picture
+zip of each one's tracked files less its authoring `Tools/` (`sample-<folder>.zip`, its
+`Project.xml` at the root, with fixed timestamps so the same files pack the same), its picture
 (`sample-<folder>.png`), and `samples.json` naming them with each zip's size, SHA-256 and unpacked
 size. `release.yml`'s `samples` job runs it on a tag and attaches the files; the editor of that
 version reads `samples.json` from its release. Run it from the repository root in a checkout: only

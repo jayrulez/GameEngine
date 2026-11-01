@@ -7,7 +7,6 @@
 // dropped file as the asset its extension says.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 #include <initializer_list>
 
 import foundation.core;
@@ -34,8 +33,7 @@ namespace
     }
     void RemoveAll(StringView dir)
     {
-        std::error_code ec;
-        std::filesystem::remove_all(std::filesystem::path(reinterpret_cast<const char*>(String(dir).CStr())), ec);
+        RemoveDirectoryRecursive(dir);
     }
     bool Says(const Array<gui::GuiDiagnostic>& all, StringView part)
     {

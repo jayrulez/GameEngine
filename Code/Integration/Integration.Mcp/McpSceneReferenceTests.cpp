@@ -5,7 +5,6 @@
 // is deterministic, and the live surface every host serves.
 
 #include <doctest/doctest.h>
-#include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.json;
@@ -34,12 +33,11 @@ namespace content = foundation::content;
 
 namespace
 {
-    constexpr const char* kDbDir = "mcp_scene_reference_db";
+    constexpr StringView kDbDir = u8"mcp_scene_reference_db";
 
     void RemoveDb()
     {
-        std::error_code ec;
-        std::filesystem::remove_all(kDbDir, ec);
+        RemoveDirectoryRecursive(kDbDir);
     }
 
     // The builders (cooked form -> asset type) and a content database for the round trip. The

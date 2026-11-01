@@ -11,7 +11,6 @@
 #include "Core/Prelude.h"
 #if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
 #include <cmath>
-#include <string>
 
 import foundation.core;
 import foundation.audio;
@@ -175,7 +174,7 @@ namespace
             const Status loaded = ids->Load(byId.AsView(), u8"main");
             if (!loaded.IsOk())
             {
-                MESSAGE(std::string(reinterpret_cast<const char*>(errors.text.CStr())));
+                MESSAGE(doctest::String(reinterpret_cast<const char*>(errors.text.CStr())));
             }
             REQUIRE(loaded.IsOk());
             CHECK(ids->GetGlobal(u8"Played").Get<bool>());

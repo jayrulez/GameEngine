@@ -15,7 +15,6 @@
 #include "Core/Reflection/Reflect.h" // REFLECT_VALUE (the Gadget test component)
 #include <initializer_list>
 #include <cstdio>
-#include <filesystem>
 
 import foundation.core;
 import foundation.vfs; // the data mount the subsystem reads engine data through
@@ -243,16 +242,15 @@ namespace
     // the scene (whether a Turret root exists, where, and with its child) rather than a callback.
     struct PrefabSource
     {
-        std::filesystem::path dir = "scratch_script_prefabs";
+        StringView dir = u8"scratch_script_prefabs";
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<foundation::content::ContentDatabase> db;
         Guid turret;
 
         explicit PrefabSource(ScriptedScene& bed)
         {
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
-            std::filesystem::create_directories(dir, ec);
+            RemoveDirectoryRecursive(dir);
+            CreateDirectories(dir);
             mount = MakeUnique<foundation::vfs::NativeFileSystem>(
                 DefaultAllocator(), u8"scratch_script_prefabs", DefaultAllocator());
             db = MakeUnique<foundation::content::ContentDatabase>(
@@ -273,8 +271,7 @@ namespace
         {
             db.Reset();
             mount.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
+            RemoveDirectoryRecursive(dir);
         }
 
         // The prefab's id as a behavior Asset property (the way a cooked script carries one).

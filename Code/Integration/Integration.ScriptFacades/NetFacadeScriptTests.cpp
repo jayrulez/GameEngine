@@ -8,7 +8,6 @@
 // isClient() and peerCount() and the test reads the results back. It also covers RPCs, spawning
 // over the network, and joins and leaves.
 #include <doctest/doctest.h>
-#include <filesystem>
 #include <utility>
 #include "Core/Prelude.h"
 
@@ -117,7 +116,7 @@ namespace
     // A content database on disk holding one prefab, "Guest": a root with a Networked Transform.
     struct GuestPrefab
     {
-        std::filesystem::path dir = "scratch_net_spawn";
+        StringView dir = u8"scratch_net_spawn";
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<foundation::content::ContentDatabase> db;
         Guid guest;
@@ -125,9 +124,8 @@ namespace
 
         GuestPrefab()
         {
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
-            std::filesystem::create_directories(dir, ec);
+            RemoveDirectoryRecursive(dir);
+            CreateDirectories(dir);
             mount = MakeUnique<foundation::vfs::NativeFileSystem>(DefaultAllocator(), u8"scratch_net_spawn",
                                                                    DefaultAllocator());
             db = MakeUnique<foundation::content::ContentDatabase>(DefaultAllocator(), DefaultAllocator(), *mount,
@@ -149,8 +147,7 @@ namespace
         {
             db.Reset();
             mount.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
+            RemoveDirectoryRecursive(dir);
         }
     };
 

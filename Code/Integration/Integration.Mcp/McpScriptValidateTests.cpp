@@ -5,9 +5,6 @@
 // starter must validate through the tool with its metadata harvested (the class name and handlers
 // recognized), and broken source must come back with real compile errors carrying line numbers.
 #include <doctest/doctest.h>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.json;
@@ -155,8 +152,7 @@ namespace
 TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, and the "
           "create->validate loop")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_script_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_script_project");
     pipeline::RegisterPipelineTypes();
 
     McpServer server;
@@ -198,19 +194,16 @@ TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, 
     CHECK(created.Get(u8"name").AsString() == StringView(u8"Mover"));
     CHECK(created.Get(u8"fileName").AsString() == StringView(u8"Mover.luau"));
     const String sourceFile(created.Get(u8"sourceFile").AsString());
-    REQUIRE(std::filesystem::is_regular_file(
-        reinterpret_cast<const char*>(sourceFile.CStr()), ec));
+    REQUIRE(FileExists(sourceFile.AsView()));
 
     // The created file's content validates through script_validate, as in the authoring loop.
-    std::ifstream in(reinterpret_cast<const char*>(sourceFile.CStr()));
-    std::stringstream text;
-    text << in.rdbuf();
-    const std::string content = text.str();
+    Result<Array<byte>> text = ReadFile(sourceFile.AsView());
+    REQUIRE(text.HasValue());
+    const String content(StringView(reinterpret_cast<const utf8char*>(text.Value().Data()), text.Value().Size()));
     {
         JsonValue a = JsonValue::MakeObject();
         a.Set(u8"language", JsonValue::MakeString(u8"luau"));
-        a.Set(u8"source", JsonValue::MakeString(String(StringView(
-                              reinterpret_cast<const utf8char*>(content.c_str())))));
+        a.Set(u8"source", JsonValue::MakeString(content));
         JsonValue validated = ScCall(server, u8"script_validate", Move(a), true);
         CHECK(validated.Get(u8"valid").AsBool() == true);
         // The class is named after the asset, not NewBehavior.

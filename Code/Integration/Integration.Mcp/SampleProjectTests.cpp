@@ -7,8 +7,6 @@
 // This registers the whole pipeline the way Tools.Cook does, opens a scratch copy so that opening
 // never writes into the tracked tree, and reads every instance back.
 #include <doctest/doctest.h>
-#include <filesystem>
-#include <string>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.vfs;
@@ -64,7 +62,7 @@ namespace
         {
             const RefPtr<ISerializable> object = instance->ReadObject();
             const String name(instance->Name());
-            const std::string shown(reinterpret_cast<const char*>(name.CStr()), name.Size());
+            const doctest::String shown(reinterpret_cast<const char*>(name.CStr()));
             CHECK_MESSAGE(object.Get() != nullptr, "sample project instance refused: ", shown);
             if (instance->TypeName() == StringView(u8"SceneDocument") ||
                 instance->TypeName() == StringView(u8"PrefabDocument"))
@@ -100,7 +98,7 @@ namespace
                 continue;
             }
             const String name(instance->Name());
-            const std::string shown(reinterpret_cast<const char*>(name.CStr()), name.Size());
+            const doctest::String shown(reinterpret_cast<const char*>(name.CStr()));
             foundation::scene::Scene scratch(DefaultAllocator(), name.AsView());
             engine::AddAllSceneManagers(scratch);
             if (!foundation::scene::LoadScene(*instance, scratch).IsOk())
@@ -183,13 +181,8 @@ namespace
         const String source = PathJoin(dataRoot.AsView(), Format(u8"SampleProjects/{}", sample).AsView());
         REQUIRE(DirectoryExists(source.AsView()));
 
-        const std::filesystem::path scratch(std::string(reinterpret_cast<const char*>(scratchDir.Data()),
-                                                        scratchDir.Size()));
-        std::error_code ec;
-        std::filesystem::remove_all(scratch, ec);
-        std::filesystem::copy(std::filesystem::path(reinterpret_cast<const char*>(source.CStr())),
-                              scratch, std::filesystem::copy_options::recursive, ec);
-        REQUIRE_FALSE(ec);
+        RemoveDirectoryRecursive(scratchDir);
+        REQUIRE(CopyDirectoryRecursive(source.AsView(), scratchDir));
         {
             UniquePtr<editor::EditorProject> project =
                 editor::EditorProject::Open(DefaultAllocator(), scratchDir);
@@ -232,7 +225,7 @@ namespace
             const usize overrides = CheckOverrides(*project, *project->SourceDb().RootGroup());
             CHECK(overrides >= expect.overrides);
         }
-        std::filesystem::remove_all(scratch, ec);
+        RemoveDirectoryRecursive(scratchDir);
         GlobalLogger().RemoveSink(&console);
     }
 }

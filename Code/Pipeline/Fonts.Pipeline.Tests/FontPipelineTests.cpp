@@ -7,7 +7,6 @@
 // (coverage size ramp and msdfgen MSDF) and the importer's file claim.
 #include <doctest/doctest.h>
 #include <cstring>
-#include <string>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 

@@ -7,7 +7,6 @@
 // the same layout the MCP host and the export CLI run from.
 #include <doctest/doctest.h>
 #include <cstdlib> // setenv, to point at the scratch templates root
-#include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.vfs; // FindDataRoot: the engine shaders the export cooks
@@ -63,12 +62,11 @@ namespace
 
 TEST_CASE("integration.mcp: project_export - a real dist from an authored project")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_export_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_export_project");
     // An empty templates root, so the export takes the host template (this build's player and its
     // sidecars) and never a template installed on the machine running the test.
-    std::filesystem::remove_all("mcp_export_templates", ec);
-    std::filesystem::create_directories("mcp_export_templates", ec);
+    RemoveDirectoryRecursive(u8"mcp_export_templates");
+    CreateDirectories(u8"mcp_export_templates");
 #ifdef _WIN32
     _putenv_s("ENV_TEMPLATES_DIR", "mcp_export_templates");
 #else
@@ -121,17 +119,16 @@ TEST_CASE("integration.mcp: project_export - a real dist from an authored projec
     CHECK(exported.Get(u8"cookFailed").AsNumber() == doctest::Approx(0.0));
     const String outputDir(exported.Get(u8"outputDir").AsString());
     REQUIRE(outputDir.Size() > 0u);
-    const std::filesystem::path out(reinterpret_cast<const char*>(outputDir.CStr()));
-    CHECK(std::filesystem::is_regular_file(out / "Content.pak", ec));
-    CHECK(std::filesystem::is_regular_file(out / "player.xml", ec));
+    CHECK(FileExists(PathJoin(outputDir.AsView(), u8"Content.pak").AsView()));
+    CHECK(FileExists(PathJoin(outputDir.AsView(), u8"player.xml").AsView()));
     CHECK(exported.Get(u8"filesStaged").AsNumber() >= 1.0); // the player and its sidecars are staged
     // The licence notices for the player's binary ship with it, as a sidecar the build lists.
-    CHECK(std::filesystem::is_regular_file(out / "THIRD-PARTY-NOTICES.txt", ec));
+    CHECK(FileExists(PathJoin(outputDir.AsView(), u8"THIRD-PARTY-NOTICES.txt").AsView()));
 
 #ifdef _WIN32
     _putenv_s("ENV_TEMPLATES_DIR", "");
 #else
     unsetenv("ENV_TEMPLATES_DIR");
 #endif
-    std::filesystem::remove_all("mcp_export_templates", ec);
+    RemoveDirectoryRecursive(u8"mcp_export_templates");
 }

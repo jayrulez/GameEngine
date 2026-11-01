@@ -8,8 +8,6 @@
 // file on disk, which the import consumes.
 #include <doctest/doctest.h>
 #include <initializer_list>
-#include <filesystem>
-#include <fstream>
 #include <cstdlib> // setenv, to point at the scratch templates root
 #include "Core/Prelude.h"
 import foundation.core;
@@ -36,6 +34,11 @@ namespace scene = foundation::scene;
 
 namespace
 {
+    void WriteText(StringView path, StringView text)
+    {
+        (void)WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
+    }
+
     JsonValue FfCall(McpServer& s, StringView tool, JsonValue arguments)
     {
         JsonValue params = JsonValue::MakeObject();
@@ -103,8 +106,7 @@ namespace
 TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, validate, "
           "health, host state")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_full_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_full_project");
 
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     pipeline::ImporterRegistry importers{DefaultAllocator()};
@@ -139,9 +141,7 @@ TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, 
             pipeline::ScriptLanguageCookRegistry::Get().FindByLanguage(u8"luau");
         REQUIRE(cook != nullptr);
         const String starter = cook->NewAssetTemplate(pipeline::ScriptTier::Behavior, {});
-        std::ofstream file("Mover.luau", std::ios::binary);
-        file.write(reinterpret_cast<const char*>(starter.Data()),
-                   static_cast<std::streamsize>(starter.Size()));
+        WriteText(u8"Mover.luau", starter.AsView());
     }
     JsonValue imported =
         FfCall(server, u8"asset_import", FfStr(JsonValue::MakeObject(), u8"source", u8"Mover.luau"));
@@ -185,7 +185,7 @@ TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, 
     CHECK(health.Get(u8"dirty").AsNumber() == doctest::Approx(0.0));
     CHECK(health.Get(u8"failedCooks").AsNumber() == doctest::Approx(0.0));
 
-    std::remove("Mover.luau");
+    FileDelete(u8"Mover.luau");
 }
 
 TEST_CASE("integration.mcp: RegisterEngineTools registers exactly kEngineToolCount tools - the "
@@ -240,15 +240,14 @@ TEST_CASE("integration.mcp: RegisterEngineTools registers exactly kEngineToolCou
 TEST_CASE("integration.mcp: LocateShippingDocs walks up to the checkout layout, accepts the "
           "distribution layout, and leaves a miss empty")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_docs_checkout", ec);
-    std::filesystem::remove_all("mcp_docs_dist", ec);
-    std::filesystem::create_directories("mcp_docs_checkout/Documentation/Shipping", ec);
-    std::filesystem::create_directories("mcp_docs_checkout/Bin/Debug", ec);
-    std::filesystem::create_directories("mcp_docs_dist/tool", ec);
-    std::ofstream("mcp_docs_checkout/Documentation/Shipping/KnownIssues.md") << "# known";
-    std::ofstream("mcp_docs_checkout/Documentation/Shipping/McpGuide.md") << "# guide";
-    std::ofstream("mcp_docs_dist/KnownIssues.md") << "# staged";
+    RemoveDirectoryRecursive(u8"mcp_docs_checkout");
+    RemoveDirectoryRecursive(u8"mcp_docs_dist");
+    CreateDirectories(u8"mcp_docs_checkout/Documentation/Shipping");
+    CreateDirectories(u8"mcp_docs_checkout/Bin/Debug");
+    CreateDirectories(u8"mcp_docs_dist/tool");
+    WriteText(u8"mcp_docs_checkout/Documentation/Shipping/KnownIssues.md", u8"# known");
+    WriteText(u8"mcp_docs_checkout/Documentation/Shipping/McpGuide.md", u8"# guide");
+    WriteText(u8"mcp_docs_dist/KnownIssues.md", u8"# staged");
 
     // The engine checkout: the executable sits under Bin/, the docs two levels up.
     {
@@ -261,7 +260,7 @@ TEST_CASE("integration.mcp: LocateShippingDocs walks up to the checkout layout, 
     // The served docs are listed by name, whatever order the filesystem returns them in. Without
     // the sort, a third file written last would come last on some filesystems and first on others.
     {
-        std::ofstream("mcp_docs_checkout/Documentation/Shipping/Assets.md") << "# assets";
+        WriteText(u8"mcp_docs_checkout/Documentation/Shipping/Assets.md", u8"# assets");
         McpServer server;
         editor::mcp::RegisterShippingDocResources(server,
                                                   u8"mcp_docs_checkout/Documentation/Shipping");
@@ -300,8 +299,8 @@ TEST_CASE("integration.mcp: LocateShippingDocs walks up to the checkout layout, 
         CHECK(paths.knownIssues.IsEmpty());
         CHECK(paths.shippingDocsDir.IsEmpty());
     }
-    std::filesystem::remove_all("mcp_docs_checkout", ec);
-    std::filesystem::remove_all("mcp_docs_dist", ec);
+    RemoveDirectoryRecursive(u8"mcp_docs_checkout");
+    RemoveDirectoryRecursive(u8"mcp_docs_dist");
 }
 
 namespace
@@ -399,8 +398,7 @@ namespace
 TEST_CASE("integration.mcp: the write tools ride a host's operations - not finished until the "
           "host says so, then the shared result shape; a refusal is the tool's error")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_slow_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_slow_project");
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     pipeline::ImporterRegistry importers{DefaultAllocator()};
     pipeline::RegisterPipelineTypes();
@@ -527,7 +525,7 @@ TEST_CASE("integration.mcp: the write tools ride a host's operations - not finis
     CHECK(lockedResult.Get(u8"isError").AsBool());
     CHECK(lockedResult.Get(u8"content").At(0).Get(u8"text").AsString().AsView() ==
           StringView(u8"a cook is already running (the editor's build lock)"));
-    std::filesystem::remove_all("mcp_slow_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_slow_project");
 }
 
 
@@ -987,9 +985,8 @@ TEST_CASE("integration.mcp: export_presets and export_preset_set")
         const String binDir =
             PathJoin(PathJoin(PathJoin(binBase.AsView(), u8"Bin").AsView(), u8"Release").AsView(), leaf.AsView());
         REQUIRE(CreateDirectories(binDir.AsView()));
-        std::ofstream(reinterpret_cast<const char*>(
-                          PathJoin(binDir.AsView(), GetExecutableName(u8"Engine.Player").AsView()).CStr()))
-            << "#!player\n";
+        WriteText(PathJoin(binDir.AsView(), GetExecutableName(u8"Engine.Player").AsView()).AsView(),
+                  u8"#!player\n");
         REQUIRE(editor::CreateTemplate(binDir.AsView(), templatesRoot.AsView(), editor::TemplateOutput::Install).IsOk());
     }
 #ifdef _WIN32
@@ -1138,8 +1135,7 @@ namespace
 // on the built-in PBR it has PBR's layout again, a value that fits carried both ways.
 TEST_CASE("integration.mcp: material_set_shader lays a material out by its shader and saves it")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_material_shader_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_material_shader_project");
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     pipeline::ImporterRegistry importers{DefaultAllocator()};
     pipeline::RegisterPipelineTypes();
@@ -1198,7 +1194,7 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     if (cooked.Get(u8"failed").AsNumber() != 0.0)
     {
         MESSAGE("the shader did not cook here (no DXC?); skipping");
-        std::filesystem::remove_all("mcp_material_shader_project", ec);
+        RemoveDirectoryRecursive(u8"mcp_material_shader_project");
         return;
     }
     const JsonValue material = FfCall(server, u8"asset_create",
@@ -1263,5 +1259,5 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     REQUIRE(onPhong.Get(u8"effects").Count() == 1);
     CHECK(onPhong.Get(u8"effects").At(0).Get(u8"name").AsString() == StringView(u8"Wind"));
 
-    std::filesystem::remove_all("mcp_material_shader_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_material_shader_project");
 }

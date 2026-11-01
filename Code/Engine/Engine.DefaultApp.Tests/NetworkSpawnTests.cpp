@@ -5,7 +5,6 @@
 // database. GameInstanceTests pins the wiring (the controller applies the resolver to every
 // endpoint) and ReplicationTests the handler contract with a stand-in; neither reaches the body.
 #include <doctest/doctest.h>
-#include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.vfs;
@@ -22,7 +21,7 @@ namespace
 {
     struct PrefabFixture
     {
-        std::filesystem::path dir = "scratch_defaultapp_netspawn";
+        StringView dir = u8"scratch_defaultapp_netspawn";
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<content::ContentDatabase> db;
         Guid turret;   // a two-entity prefab: Turret, with Barrel under it
@@ -30,9 +29,8 @@ namespace
 
         PrefabFixture()
         {
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
-            std::filesystem::create_directories(dir, ec);
+            RemoveDirectoryRecursive(dir);
+            CreateDirectories(dir);
             mount = MakeUnique<foundation::vfs::NativeFileSystem>(
                 DefaultAllocator(), u8"scratch_defaultapp_netspawn", DefaultAllocator());
             db = MakeUnique<content::ContentDatabase>(DefaultAllocator(), DefaultAllocator(), *mount,
@@ -58,8 +56,7 @@ namespace
         {
             db.Reset();
             mount.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
+            RemoveDirectoryRecursive(dir);
         }
     };
 }

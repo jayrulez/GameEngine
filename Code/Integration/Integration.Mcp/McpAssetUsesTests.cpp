@@ -8,7 +8,6 @@
 // ResourceManager that has no factories), and a project settings edge (defaultSceneId). It also
 // checks the refusals.
 #include <doctest/doctest.h>
-#include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.vfs; // FindDataRoot, to find the engine library the shader cook reads
@@ -111,8 +110,7 @@ namespace
 
 TEST_CASE("integration.mcp: asset_uses - reverse dependencies across all edge kinds")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_uses_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_uses_project");
 
     McpServer server;
     editor::mcp::ProjectSession session;
@@ -209,8 +207,7 @@ TEST_CASE("integration.mcp: asset_uses - reverse dependencies across all edge ki
 
 TEST_CASE("integration.mcp: project_health - the soundness sweep finds what broke")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_health_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_health_project");
 
     McpServer server;
     editor::mcp::ProjectSession session;
@@ -343,8 +340,7 @@ TEST_CASE("integration.mcp: project_health - the soundness sweep finds what brok
 // deletes anyway.
 TEST_CASE("integration.mcp: asset_delete - refused while used, unless forced")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_delete_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_delete_project");
 
     McpServer server;
     editor::mcp::ProjectSession session;
@@ -418,5 +414,5 @@ TEST_CASE("integration.mcp: asset_delete - refused while used, unless forced")
 
     owner.project.Reset();
     session.project = nullptr;
-    std::filesystem::remove_all("mcp_delete_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_delete_project");
 }

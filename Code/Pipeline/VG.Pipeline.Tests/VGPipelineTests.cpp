@@ -6,7 +6,6 @@
 // the image from its product or its source.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.vfs;
@@ -36,8 +35,7 @@ namespace
 
     void RemoveAll(StringView dir)
     {
-        std::error_code ec;
-        std::filesystem::remove_all(std::filesystem::path(reinterpret_cast<const char*>(String(dir).CStr())), ec);
+        RemoveDirectoryRecursive(dir);
     }
 
     /// A Sources/ tree with the heart and a file that is no SVG, and an output database.

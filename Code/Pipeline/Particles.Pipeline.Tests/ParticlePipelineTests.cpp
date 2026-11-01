@@ -6,7 +6,6 @@
 // back through the ResourceManager and factory and confirm it round-trips and simulates. Shaped
 // like TexturePipelineTests, adapted for an authored (not imported) asset.
 #include <doctest/doctest.h>
-#include <string>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 import foundation.core;
@@ -211,7 +210,7 @@ TEST_CASE("particles.pipeline: a version 0 asset's effect links are read onto it
         (void)stream.Seek(0, SeekOrigin::Begin);
         Result<RefPtr<ISerializable>, String> read = inst->ReadObjectFrom(stream);
         if (!read.HasValue())
-            MESSAGE(std::string(reinterpret_cast<const char*>(read.Error().CStr())));
+            MESSAGE(doctest::String(reinterpret_cast<const char*>(read.Error().CStr())));
         REQUIRE(read.HasValue());
         auto* asset = Cast<ParticleEffectAsset>(read.Value().Get());
         REQUIRE(asset != nullptr);

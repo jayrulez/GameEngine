@@ -830,7 +830,7 @@ TEST_CASE("texture.pipeline: an HDR source cooks to BC6H on the desktop (BC) tar
     REQUIRE(raw);
     CHECK(raw->Format() == rhi::TextureFormat::RGBA32Float); // Compression = None still escapes
 
-    std::remove(srcPath);
+    FileDelete(StringView(reinterpret_cast<const utf8char*>(srcPath)));
     (void)RemoveDirectoryRecursive(u8"scratch_texpipe_hdr_db");
 }
 

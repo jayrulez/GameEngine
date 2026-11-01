@@ -9,8 +9,6 @@
 
 #include <doctest/doctest.h>
 
-#include <filesystem>
-#include <fstream>
 
 #include "Core/Prelude.h"
 
@@ -89,8 +87,7 @@ namespace
 TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via MCP tools")
 {
     // Deterministic fixture: wipe any prior scratch project (.test-scratch is the CWD here).
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_fixture_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_fixture_project");
 
     McpServer server;
     editor::mcp::ProjectSession session;
@@ -144,7 +141,7 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
     CHECK(msaaOnDisplay);
 
     // The manifest is written to disk.
-    CHECK(std::filesystem::exists("mcp_fixture_project/Project.xml"));
+    CHECK(FileExists(u8"mcp_fixture_project/Project.xml"));
 
     // Opening a nonexistent project is a tool error with real text, not a protocol fault.
     JsonValue bad =
@@ -158,8 +155,7 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
 TEST_CASE("integration.mcp: project_create seeds the default UI font, the sky and the primitives")
 {
     pipeline::RegisterPipelineTypes();
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_seeded_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_seeded_project");
     pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
     (void)pipeline::RegisterAllCreators(creators);
     const String dataRoot = foundation::vfs::FindDataRoot();
@@ -188,15 +184,14 @@ TEST_CASE("integration.mcp: project_create seeds the default UI font, the sky an
     foundation::content::Group* root = project->SourceDb().RootGroup();
     REQUIRE(root->GetGroup(u8"Environment") != nullptr);
     CHECK(root->GetGroup(u8"Environment")->GetInstance(u8"Sky") != nullptr);
-    CHECK(std::filesystem::exists("mcp_seeded_project/Sources/kloofendal_48d_partly_cloudy_puresky_1k.hdr"));
-    CHECK_FALSE(std::filesystem::exists("mcp_seeded_project/Sources/BlueSky.hdr")); // the large sky is not seeded
-    CHECK(std::filesystem::exists("mcp_seeded_project/Sources/Roboto-Regular.ttf"));
+    CHECK(FileExists(u8"mcp_seeded_project/Sources/kloofendal_48d_partly_cloudy_puresky_1k.hdr"));
+    CHECK_FALSE(FileExists(u8"mcp_seeded_project/Sources/BlueSky.hdr")); // the large sky is not seeded
+    CHECK(FileExists(u8"mcp_seeded_project/Sources/Roboto-Regular.ttf"));
 }
 
 TEST_CASE("integration.mcp: asset_list / asset_info read the open project's content DB")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_asset_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_asset_project");
 
     McpServer server;
     editor::mcp::ProjectSession session;
@@ -243,11 +238,6 @@ TEST_CASE("integration.mcp: asset_list / asset_info read the open project's cont
 #if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
 namespace
 {
-    std::string Utf8(StringView s)
-    {
-        return std::string(reinterpret_cast<const char*>(String(s).CStr()));
-    }
-
     // The import and cook flow is the same for every backend: RegisterPipelineTypes registers
     // every enabled cook, the ScriptFileImporter accepts each backend's extension, and the cook
     // resolves by language. Only the source language and file extension differ, so the same flow
@@ -255,12 +245,9 @@ namespace
     void DriveImportCookFlow(StringView projectDir, StringView sourceStem, StringView ext,
                              StringView sourceBody)
     {
-        std::error_code ec;
-        const std::string projStd = Utf8(projectDir);
-        const std::string stemStd = Utf8(sourceStem);
-        const std::string srcFileStd = stemStd + "." + Utf8(ext);
-        std::filesystem::remove_all(projStd, ec);
-        std::filesystem::remove(srcFileStd, ec);
+        const String srcFile = Format(u8"{}.{}", sourceStem, ext);
+        RemoveDirectoryRecursive(projectDir);
+        FileDelete(srcFile.AsView());
 
         // The host assembles the pipeline registries once from the composition root, as Tools.Mcp
         // does; asset_cook and asset_import route through them.
@@ -285,12 +272,9 @@ namespace
 
         // A real source file on disk (the working directory is .test-scratch). A trivial class
         // cooks clean.
-        {
-            std::ofstream out(srcFileStd);
-            out << Utf8(sourceBody);
-        }
-        const std::filesystem::path abs = std::filesystem::absolute(srcFileStd);
-        const String absPath(reinterpret_cast<const utf8char*>(abs.string().c_str()));
+        (void)WriteFile(srcFile.AsView(),
+                        Span<const byte>(reinterpret_cast<const byte*>(sourceBody.Data()), sourceBody.Size()));
+        const String absPath = PathAbsolute(srcFile.AsView());
 
         // Import routes by extension through the shared importer set into the source DB.
         JsonValue imported = CallOk(server, u8"asset_import",
@@ -307,15 +291,15 @@ namespace
         CHECK(list.Get(u8"assets").At(0).Get(u8"group").AsString() == StringView(u8"scripts"));
 
         // The raw source was copied under Sources/ and the envelope written under Content/.
-        CHECK(std::filesystem::exists(projStd + "/Sources/" + srcFileStd));
-        CHECK(std::filesystem::exists(projStd + "/Content/scripts/" + stemStd + ".xasset"));
+        CHECK(FileExists(Format(u8"{}/Sources/{}", projectDir, srcFile.AsView()).AsView()));
+        CHECK(FileExists(Format(u8"{}/Content/scripts/{}.xasset", projectDir, sourceStem).AsView()));
 
         // Cook builds it into the cooked DB, with the product guid equal to the source guid.
         JsonValue cooked = CallOk(server, u8"asset_cook", Obj());
         CHECK(cooked.Get(u8"planned").AsInt() == 1);
         CHECK(cooked.Get(u8"cooked").AsInt() == 1);
         CHECK(cooked.Get(u8"failed").AsInt() == 0);
-        CHECK(std::filesystem::exists(projStd + "/Cooked/scripts/" + stemStd + ".rasset"));
+        CHECK(FileExists(Format(u8"{}/Cooked/scripts/{}.rasset", projectDir, sourceStem).AsView()));
 
         // The cooked product is visible through asset_info on the cooked DB, under the source guid.
         JsonValue product =
@@ -412,8 +396,7 @@ TEST_CASE("integration.mcp: project_info before any project is open is a tool er
 TEST_CASE("integration.mcp: asset_import names the other claimants of an extension, and a hint "
           "picks one")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_import_claimants", ec);
+    RemoveDirectoryRecursive(u8"mcp_import_claimants");
     pipeline::RegisterPipelineTypes();
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     pipeline::RegisterAllBuilders(builders, foundation::vfs::FindDataRoot());
@@ -437,12 +420,8 @@ TEST_CASE("integration.mcp: asset_import names the other claimants of an extensi
     REQUIRE_FALSE(dataRoot.IsEmpty());
     const String png = PathJoin(dataRoot.AsView(), u8"Samples/Images/logo.png");
     REQUIRE(FileExists(png.AsView()));
-    std::filesystem::copy_file(std::filesystem::path(reinterpret_cast<const char*>(png.CStr())),
-                               "mcp_import_claimants_second.png",
-                               std::filesystem::copy_options::overwrite_existing, ec);
-    REQUIRE_FALSE(ec);
-    const std::filesystem::path secondAbs = std::filesystem::absolute("mcp_import_claimants_second.png");
-    const String second(reinterpret_cast<const utf8char*>(secondAbs.string().c_str()));
+    REQUIRE(FileCopyPreserving(png.AsView(), u8"mcp_import_claimants_second.png"));
+    const String second = PathAbsolute(u8"mcp_import_claimants_second.png");
 
     // No hint: the first claimant imports, and the result names every other one.
     JsonValue unhinted = CallOk(server, u8"asset_import", With(Obj(), u8"source", png.AsView()));
@@ -483,7 +462,7 @@ TEST_CASE("integration.mcp: asset_import names the other claimants of an extensi
     CHECK(reason.AsView().StartsWith(
         u8"no importer 'Sculpture' claims '.png'; the claimants are: Texture Image Heightfield"));
 
-    std::filesystem::remove("mcp_import_claimants_second.png", ec);
+    FileDelete(u8"mcp_import_claimants_second.png");
     owner.project = nullptr;
-    std::filesystem::remove_all("mcp_import_claimants", ec);
+    RemoveDirectoryRecursive(u8"mcp_import_claimants");
 }

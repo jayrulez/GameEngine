@@ -10,9 +10,6 @@
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
-#include <algorithm>
-#include <vector>
-
 import foundation.core;
 import foundation.geometry;
 import foundation.geometry.resource;
@@ -107,39 +104,39 @@ namespace
     }
     // The triangle set of a submesh range, as position triples (index values may be
     // remapped freely; geometry and winding may not change).
-    [[nodiscard]] std::vector<Tri> TriangleSet(const StaticMeshSource& s, usize submesh)
+    [[nodiscard]] Array<Tri> TriangleSet(const StaticMeshSource& s, usize submesh)
     {
-        std::vector<Tri> tris;
+        Array<Tri> tris;
         const i32 start = s.subStart[submesh];
         const i32 count = s.subCount[submesh];
         for (i32 i = 0; i + 2 < count; i += 3)
         {
-            tris.push_back(Canonical(Tri{PositionOf(s, s.indexData[start + i]),
+            tris.PushBack(Canonical(Tri{PositionOf(s, s.indexData[start + i]),
                                          PositionOf(s, s.indexData[start + i + 1]),
                                          PositionOf(s, s.indexData[start + i + 2])}));
         }
-        std::sort(tris.begin(), tris.end(),
-                  [](const Tri& l, const Tri& r)
-                  {
-                      if (!(l.a == r.a))
-                      {
-                          return Less(l.a, r.a);
-                      }
-                      if (!(l.b == r.b))
-                      {
-                          return Less(l.b, r.b);
-                      }
-                      return Less(l.c, r.c);
-                  });
+        tris.Sort(
+            [](const Tri& l, const Tri& r)
+            {
+                if (!(l.a == r.a))
+                {
+                    return Less(l.a, r.a);
+                }
+                if (!(l.b == r.b))
+                {
+                    return Less(l.b, r.b);
+                }
+                return Less(l.c, r.c);
+            });
         return tris;
     }
-    [[nodiscard]] bool SameTriangles(const std::vector<Tri>& l, const std::vector<Tri>& r)
+    [[nodiscard]] bool SameTriangles(const Array<Tri>& l, const Array<Tri>& r)
     {
-        if (l.size() != r.size())
+        if (l.Size() != r.Size())
         {
             return false;
         }
-        for (usize i = 0; i < l.size(); ++i)
+        for (usize i = 0; i < l.Size(); ++i)
         {
             if (!(l[i].a == r[i].a && l[i].b == r[i].b && l[i].c == r[i].c))
             {
@@ -154,7 +151,7 @@ TEST_CASE("mesh optimize: reorder preserves triangles/ranges/vertices and improv
 {
     StaticMeshSource source;
     BuildHostileGrid(24, source);
-    const std::vector<Tri> before = TriangleSet(source, 0);
+    const Array<Tri> before = TriangleSet(source, 0);
     const usize vertexBytes = source.vertexBlob.Size();
     const usize indexCount = source.indexData.Size();
 
@@ -215,7 +212,7 @@ TEST_CASE("mesh optimize: non-triangle submeshes keep their order; unused vertic
     source.subMaterial.PushBack(1);
     source.subPrim.PushBack(static_cast<u8>(PrimitiveType::Lines));
 
-    const std::vector<Tri> before = TriangleSet(source, 0);
+    const Array<Tri> before = TriangleSet(source, 0);
     Array<Float3> linePositionsBefore;
     for (u32 i = 0; i < 4; ++i)
     {
@@ -290,7 +287,7 @@ TEST_CASE("mesh optimize: the builder runs the pass (cooked cube stays a cube)")
     RefPtr<StaticMesh> cube = Primitives::Cube(DefaultAllocator(), 1.0f);
     StaticMeshAsset asset;
     MeshImporter::Import(*cube, asset);
-    const std::vector<Tri> before = TriangleSet(asset.source, 0);
+    const Array<Tri> before = TriangleSet(asset.source, 0);
 
     // Sources are Object-derived (no copy): import the same cube again and optimize
     // that instance: what Build writes is exactly the optimized source.

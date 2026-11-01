@@ -7,7 +7,6 @@
 // several roots. The seed XML comes from a real SaveScene, so the tools are tested against the
 // exact text the editor writes.
 #include <doctest/doctest.h>
-#include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.json;
@@ -99,8 +98,7 @@ namespace
 
 TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real refusals")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_scene_project", ec);
+    RemoveDirectoryRecursive(u8"mcp_scene_project");
 
     McpServer server;
     editor::mcp::ProjectSession session;
@@ -288,8 +286,7 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
 TEST_CASE("integration.mcp: scene tools - validation counts prefab instances and warns on a missing "
           "prefab")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_scene_prefabs", ec);
+    RemoveDirectoryRecursive(u8"mcp_scene_prefabs");
     McpServer server;
     editor::mcp::ProjectSession session;
     editor::mcp::ProjectOwner owner;

@@ -194,92 +194,98 @@ export namespace editor
         return false;
     }
 
-    // The entries the manager lists, in its order: those matching `query` (in the name or the
-    // folder, any case; empty matches all), pinned ones first, then by name or by recency (the
-    // list's own order). Pointers into `reg`, valid until it changes.
-    [[nodiscard]] inline Array<const RecentProjectEntry*> ArrangeRecentProjects(const RecentProjectsSettings& reg, StringView query, bool byName)
+    // The manager's view of the list: its order, and its words for when and where. Static members
+    // of a struct, not functions at namespace scope: gcc 15 wrote module files it could not read
+    // back (a "Bad file data" for every unit importing editor.core) for the latter here.
+    struct RecentProjects
     {
-        Array<const RecentProjectEntry*> out;
-        for (const RecentProjectEntry& e : reg.entries)
-            if (query.IsEmpty() || e.name.AsView().ContainsIgnoreCase(query) || e.path.AsView().ContainsIgnoreCase(query))
-                out.PushBack(&e);
-        const auto lower = [](utf8char c) { return c >= u8'A' && c <= u8'Z' ? static_cast<utf8char>(c - u8'A' + u8'a') : c; };
-        const auto nameLess = [lower](StringView a, StringView b)
+        // The entries the manager lists, in its order: those matching `query` (in the name or the
+        // folder, any case; empty matches all), pinned ones first, then by name or by recency (the
+        // list's own order). Pointers into `reg`, valid until it changes.
+        [[nodiscard]] static Array<const RecentProjectEntry*> Arrange(const RecentProjectsSettings& reg, StringView query, bool byName)
         {
-            for (usize i = 0; i < a.Size() && i < b.Size(); ++i)
-                if (lower(a[i]) != lower(b[i]))
-                    return lower(a[i]) < lower(b[i]);
-            return a.Size() < b.Size();
-        };
-        out.Sort([byName, nameLess](const RecentProjectEntry* a, const RecentProjectEntry* b)
-                 {
-                     if (a->favourite != b->favourite)
-                         return a->favourite;
-                     return byName && nameLess(a->name.AsView(), b->name.AsView());
-                 });
-        return out;
-    }
+            Array<const RecentProjectEntry*> out;
+            for (const RecentProjectEntry& e : reg.entries)
+                if (query.IsEmpty() || e.name.AsView().ContainsIgnoreCase(query) || e.path.AsView().ContainsIgnoreCase(query))
+                    out.PushBack(&e);
+            const auto lower = [](utf8char c) { return c >= u8'A' && c <= u8'Z' ? static_cast<utf8char>(c - u8'A' + u8'a') : c; };
+            const auto nameLess = [lower](StringView a, StringView b)
+            {
+                for (usize i = 0; i < a.Size() && i < b.Size(); ++i)
+                    if (lower(a[i]) != lower(b[i]))
+                        return lower(a[i]) < lower(b[i]);
+                return a.Size() < b.Size();
+            };
+            out.Sort([byName, nameLess](const RecentProjectEntry* a, const RecentProjectEntry* b)
+                     {
+                         if (a->favourite != b->favourite)
+                             return a->favourite;
+                         return byName && nameLess(a->name.AsView(), b->name.AsView());
+                     });
+            return out;
+        }
 
-    // When a project was last opened, said for a person at `now`: "Just now", "5 minutes ago",
-    // "3 hours ago", "Yesterday", "4 days ago", "2 weeks ago", then the date ("19 Oct 2026").
-    // Empty for an entry that never kept one (0). `offset` is the local time zone's
-    // (GetLocalTimeOffset), so a date is the user's own.
-    [[nodiscard]] inline String DescribeLastOpened(i64 when, i64 now, i64 offset)
-    {
-        if (when <= 0)
-            return String();
-        const i64 ago = now > when ? now - when : 0;
-        const auto count = [](i64 n, StringView unit) { return Format(u8"{} {}{} ago", n, unit, n == 1 ? u8"" : u8"s"); };
-        if (ago < 60)
-            return String(u8"Just now");
-        if (ago < 3600)
-            return count(ago / 60, u8"minute");
-        // From here by calendar days, so "Yesterday" is the day before today, not 24 hours ago.
-        const i64 days = (now + offset) / 86400 - (when + offset) / 86400;
-        if (days == 0)
-            return count(ago / 3600, u8"hour");
-        if (days == 1)
-            return String(u8"Yesterday");
-        if (days < 14)
-            return count(days, u8"day");
-        if (days < 35)
-            return count(days / 7, u8"week");
-        static constexpr StringView kMonths[] = {u8"Jan", u8"Feb", u8"Mar", u8"Apr", u8"May", u8"Jun",
-                                                 u8"Jul", u8"Aug", u8"Sep", u8"Oct", u8"Nov", u8"Dec"};
-        const CivilTime date = CivilTimeOf(when + offset);
-        return Format(u8"{} {} {}", date.day, kMonths[date.month - 1], date.year);
-    }
+        // When a project was last opened, said for a person at `now`: "Just now", "5 minutes ago",
+        // "3 hours ago", "Yesterday", "4 days ago", "2 weeks ago", then the date ("19 Oct 2026").
+        // Empty for an entry that never kept one (0). `offset` is the local time zone's
+        // (GetLocalTimeOffset), so a date is the user's own.
+        [[nodiscard]] static String DescribeLastOpened(i64 when, i64 now, i64 offset)
+        {
+            if (when <= 0)
+                return String();
+            const i64 ago = now > when ? now - when : 0;
+            const auto count = [](i64 n, StringView unit) { return Format(u8"{} {}{} ago", n, unit, n == 1 ? u8"" : u8"s"); };
+            if (ago < 60)
+                return String(u8"Just now");
+            if (ago < 3600)
+                return count(ago / 60, u8"minute");
+            // From here by calendar days, so "Yesterday" is the day before today, not 24 hours ago.
+            const i64 days = (now + offset) / 86400 - (when + offset) / 86400;
+            if (days == 0)
+                return count(ago / 3600, u8"hour");
+            if (days == 1)
+                return String(u8"Yesterday");
+            if (days < 14)
+                return count(days, u8"day");
+            if (days < 35)
+                return count(days / 7, u8"week");
+            static constexpr StringView kMonths[] = {u8"Jan", u8"Feb", u8"Mar", u8"Apr", u8"May", u8"Jun",
+                                                     u8"Jul", u8"Aug", u8"Sep", u8"Oct", u8"Nov", u8"Dec"};
+            const CivilTime date = CivilTimeOf(when + offset);
+            return Format(u8"{} {} {}", date.day, kMonths[date.month - 1], date.year);
+        }
 
-    // The exact local time `when` names, for a tooltip: "31 Oct 2026, 18:42". Empty for 0.
-    [[nodiscard]] inline String DescribeTime(i64 when, i64 offset)
-    {
-        if (when <= 0)
-            return String();
-        static constexpr StringView kMonths[] = {u8"Jan", u8"Feb", u8"Mar", u8"Apr", u8"May", u8"Jun",
-                                                 u8"Jul", u8"Aug", u8"Sep", u8"Oct", u8"Nov", u8"Dec"};
-        const CivilTime t = CivilTimeOf(when + offset);
-        return Format(u8"{} {} {}, {}{}:{}{}", t.day, kMonths[t.month - 1], t.year, t.hour < 10 ? u8"0" : u8"", t.hour,
-                      t.minute < 10 ? u8"0" : u8"", t.minute);
-    }
+        // The exact local time `when` names, for a tooltip: "31 Oct 2026, 18:42". Empty for 0.
+        [[nodiscard]] static String DescribeTime(i64 when, i64 offset)
+        {
+            if (when <= 0)
+                return String();
+            static constexpr StringView kMonths[] = {u8"Jan", u8"Feb", u8"Mar", u8"Apr", u8"May", u8"Jun",
+                                                     u8"Jul", u8"Aug", u8"Sep", u8"Oct", u8"Nov", u8"Dec"};
+            const CivilTime t = CivilTimeOf(when + offset);
+            return Format(u8"{} {} {}, {}{}:{}{}", t.day, kMonths[t.month - 1], t.year, t.hour < 10 ? u8"0" : u8"", t.hour,
+                          t.minute < 10 ? u8"0" : u8"", t.minute);
+        }
 
-    // A folder as the manager shows it: under `home`, the home written as "~" ("~/Games/Snowline");
-    // anywhere else, or with no home, as it is. Only a whole folder name matches, so "/home/rob"
-    // does not shorten "/home/robert".
-    [[nodiscard]] inline String ShortenHomePath(StringView path, StringView home)
-    {
-        while (home.Size() > 1 && (home[home.Size() - 1] == u8'/' || home[home.Size() - 1] == u8'\\'))
-            home = home.SubStr(0, home.Size() - 1);
-        if (home.IsEmpty() || !path.StartsWith(home))
-            return String(path);
-        if (path.Size() == home.Size())
-            return String(u8"~");
-        const utf8char next = path[home.Size()];
-        if (next != u8'/' && next != u8'\\')
-            return String(path);
-        String out(u8"~");
-        out += path.SubStr(home.Size(), path.Size() - home.Size());
-        return out;
-    }
+        // A folder as the manager shows it: under `home`, the home written as "~" ("~/Games/Snowline");
+        // anywhere else, or with no home, as it is. Only a whole folder name matches, so "/home/rob"
+        // does not shorten "/home/robert".
+        [[nodiscard]] static String ShortenHomePath(StringView path, StringView home)
+        {
+            while (home.Size() > 1 && (home[home.Size() - 1] == u8'/' || home[home.Size() - 1] == u8'\\'))
+                home = home.SubStr(0, home.Size() - 1);
+            if (home.IsEmpty() || !path.StartsWith(home))
+                return String(path);
+            if (path.Size() == home.Size())
+                return String(u8"~");
+            const utf8char next = path[home.Size()];
+            if (next != u8'/' && next != u8'\\')
+                return String(path);
+            String out(u8"~");
+            out += path.SubStr(home.Size(), path.Size() - home.Size());
+            return out;
+        }
+    };
 
     // Reads a project's manifest without opening the project (no content DBs, no directory
     // scaffolding). NotFound when there is no manifest at `directory` (not a project, moved or

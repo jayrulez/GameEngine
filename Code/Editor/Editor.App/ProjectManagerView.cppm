@@ -508,7 +508,7 @@ export namespace editor::app
             if (m_services.storeChanged)
                 m_services.storeChanged();
             m_focusPath = String(to);
-            SetNote(Format(u8"Found it: the project is listed at {} now.", ShortenHomePath(to, m_home.AsView())).AsView());
+            SetNote(Format(u8"Found it: the project is listed at {} now.", RecentProjects::ShortenHomePath(to, m_home.AsView())).AsView());
             Later([](ProjectManagerView& self) { self.Rebuild(); });
             return true;
         }
@@ -792,7 +792,7 @@ export namespace editor::app
                     m_services.controller->NoteOpened(d.Target(), probed.name.AsView(), probed.engineVersion.AsView());
                     if (m_services.storeChanged)
                         m_services.storeChanged();
-                    SetNote(Format(u8"{} is in your projects, in {}.", name, ShortenHomePath(d.Target(), m_home.AsView())).AsView());
+                    SetNote(Format(u8"{} is in your projects, in {}.", name, RecentProjects::ShortenHomePath(d.Target(), m_home.AsView())).AsView());
                 }
                 else
                     SetStatus(Format(u8"{} downloaded, but holds no Project.xml.", name).AsView());
@@ -1079,7 +1079,7 @@ export namespace editor::app
             const i64 offset = GetLocalTimeOffset(now);
             const editor::RecentProjectsSettings& recent = m_services.controller->Entries();
             const Array<const editor::RecentProjectEntry*> arranged =
-                editor::ArrangeRecentProjects(recent, m_query.AsView(), m_services.controller->SortByName());
+                editor::RecentProjects::Arrange(recent, m_query.AsView(), m_services.controller->SortByName());
             usize present = 0;
             for (const Probe& probe : m_probes)
                 present += probe.found ? 1u : 0u;
@@ -1097,8 +1097,8 @@ export namespace editor::app
                 card.name = probe->name.IsEmpty() ? entry->name : probe->name;
                 card.engineVersion = probe->engineVersion;
                 card.relation = editor::CompareProjectEngineVersion(probe->engineVersion.AsView());
-                card.opened = editor::DescribeLastOpened(entry->lastOpened, now, offset);
-                card.openedAt = editor::DescribeTime(entry->lastOpened, offset);
+                card.opened = editor::RecentProjects::DescribeLastOpened(entry->lastOpened, now, offset);
+                card.openedAt = editor::RecentProjects::DescribeTime(entry->lastOpened, offset);
                 card.favourite = entry->favourite;
                 if (list != nullptr)
                     list->AddChild((grid ? Tile(card) : Row(card)).Get());
@@ -1295,7 +1295,7 @@ export namespace editor::app
             else if (!version.IsEmpty())
                 title->AddChild(Text(u8"Upgrades when opened", u8"badge info").Get());
             text->AddChild(title.Get());
-            RefPtr<gui::Label> path = Text(ShortenHomePath(card.path.AsView(), m_home.AsView()).AsView(), u8"manager-path");
+            RefPtr<gui::Label> path = Text(RecentProjects::ShortenHomePath(card.path.AsView(), m_home.AsView()).AsView(), u8"manager-path");
             path->SetTooltip(card.path.AsView());
             text->AddChild(path.Get());
             row->AddChild(text.Get());
@@ -1381,7 +1381,7 @@ export namespace editor::app
             RefPtr<gui::Panel> text = MakeRef<gui::Panel>(m_allocator);
             text->AddClass(u8"manager-text");
             text->AddChild(Text(entry.name.AsView(), u8"manager-name").Get());
-            RefPtr<gui::Label> path = Text(ShortenHomePath(entry.path.AsView(), m_home.AsView()).AsView(), u8"manager-path");
+            RefPtr<gui::Label> path = Text(RecentProjects::ShortenHomePath(entry.path.AsView(), m_home.AsView()).AsView(), u8"manager-path");
             path->SetTooltip(entry.path.AsView());
             text->AddChild(path.Get());
             row->AddChild(text.Get());

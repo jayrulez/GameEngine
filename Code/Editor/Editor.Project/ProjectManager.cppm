@@ -87,11 +87,11 @@ export namespace editor
             const StringView where = TrimSpaces(location);
             if (where.IsEmpty())
                 return fail(String(u8"Choose the folder it is made in."));
-            const String shownWhere = ShortenHomePath(where, home);
+            const String shownWhere = RecentProjects::ShortenHomePath(where, home);
             if (!DirectoryExists(where) && FileExists(where))
                 return fail(Format(u8"{} is a file, not a folder.", shownWhere));
             check.target = ownFolder ? PathJoin(where, trimmed) : String(where);
-            const String shownTarget = ShortenHomePath(check.target.AsView(), home);
+            const String shownTarget = RecentProjects::ShortenHomePath(check.target.AsView(), home);
             if (FileExists(PathJoin(check.target.AsView(), u8"Project.xml").AsView()))
                 return fail(Format(u8"{} is a project already: Open Folder opens it.", shownTarget));
             if (!DirectoryExists(check.target.AsView()) && FileExists(check.target.AsView()))

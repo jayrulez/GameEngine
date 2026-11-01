@@ -208,48 +208,48 @@ TEST_CASE("project-registry: a missing project is relocated in place; arranging 
             out += Format(u8"{} ", e->name);
         return out;
     };
-    CHECK(names(ArrangeRecentProjects(reg, {}, false)).AsView() == u8"Mid alpha Zeta ");
-    CHECK(names(ArrangeRecentProjects(reg, {}, true)).AsView() == u8"alpha Mid Zeta ");
+    CHECK(names(RecentProjects::Arrange(reg, {}, false)).AsView() == u8"Mid alpha Zeta ");
+    CHECK(names(RecentProjects::Arrange(reg, {}, true)).AsView() == u8"alpha Mid Zeta ");
     REQUIRE(SetRecentProjectFavourite(store, u8"/games/zeta", true));
-    CHECK(names(ArrangeRecentProjects(reg, {}, false)).AsView() == u8"Zeta Mid alpha ");
-    CHECK(names(ArrangeRecentProjects(reg, {}, true)).AsView() == u8"Zeta alpha Mid ");
+    CHECK(names(RecentProjects::Arrange(reg, {}, false)).AsView() == u8"Zeta Mid alpha ");
+    CHECK(names(RecentProjects::Arrange(reg, {}, true)).AsView() == u8"Zeta alpha Mid ");
 
     // Search looks at the name and the folder, in any case.
-    CHECK(names(ArrangeRecentProjects(reg, u8"ALP", false)).AsView() == u8"alpha ");
-    CHECK(names(ArrangeRecentProjects(reg, u8"games/m", false)).AsView() == u8"Mid ");
-    CHECK(ArrangeRecentProjects(reg, u8"nothing", false).IsEmpty());
+    CHECK(names(RecentProjects::Arrange(reg, u8"ALP", false)).AsView() == u8"alpha ");
+    CHECK(names(RecentProjects::Arrange(reg, u8"games/m", false)).AsView() == u8"Mid ");
+    CHECK(RecentProjects::Arrange(reg, u8"nothing", false).IsEmpty());
 }
 
 TEST_CASE("project-registry: when a project was opened is said for a person, by the local calendar")
 {
     const i64 now = 1793539320; // 2026-11-01 13:22 UTC
-    CHECK(DescribeLastOpened(0, now, 0).IsEmpty()); // never kept one
-    CHECK(DescribeLastOpened(now - 20, now, 0).AsView() == u8"Just now");
-    CHECK(DescribeLastOpened(now - 60, now, 0).AsView() == u8"1 minute ago");
-    CHECK(DescribeLastOpened(now - 45 * 60, now, 0).AsView() == u8"45 minutes ago");
-    CHECK(DescribeLastOpened(now - 3 * 3600, now, 0).AsView() == u8"3 hours ago");
-    CHECK(DescribeLastOpened(now - 14 * 3600, now, 0).AsView() == u8"Yesterday"); // 23:22 the day before
-    CHECK(DescribeLastOpened(now - 3 * 86400, now, 0).AsView() == u8"3 days ago");
-    CHECK(DescribeLastOpened(now - 20 * 86400, now, 0).AsView() == u8"2 weeks ago");
-    CHECK(DescribeLastOpened(now - 60 * 86400, now, 0).AsView() == u8"2 Sep 2026");
+    CHECK(RecentProjects::DescribeLastOpened(0, now, 0).IsEmpty()); // never kept one
+    CHECK(RecentProjects::DescribeLastOpened(now - 20, now, 0).AsView() == u8"Just now");
+    CHECK(RecentProjects::DescribeLastOpened(now - 60, now, 0).AsView() == u8"1 minute ago");
+    CHECK(RecentProjects::DescribeLastOpened(now - 45 * 60, now, 0).AsView() == u8"45 minutes ago");
+    CHECK(RecentProjects::DescribeLastOpened(now - 3 * 3600, now, 0).AsView() == u8"3 hours ago");
+    CHECK(RecentProjects::DescribeLastOpened(now - 14 * 3600, now, 0).AsView() == u8"Yesterday"); // 23:22 the day before
+    CHECK(RecentProjects::DescribeLastOpened(now - 3 * 86400, now, 0).AsView() == u8"3 days ago");
+    CHECK(RecentProjects::DescribeLastOpened(now - 20 * 86400, now, 0).AsView() == u8"2 weeks ago");
+    CHECK(RecentProjects::DescribeLastOpened(now - 60 * 86400, now, 0).AsView() == u8"2 Sep 2026");
     // The day turns at local midnight: 14 hours ago is today where it is 13 hours later in the day.
-    CHECK(DescribeLastOpened(now - 14 * 3600, now, 10 * 3600).AsView() == u8"14 hours ago");
+    CHECK(RecentProjects::DescribeLastOpened(now - 14 * 3600, now, 10 * 3600).AsView() == u8"14 hours ago");
 
-    CHECK(DescribeTime(0, 0).IsEmpty());
-    CHECK(DescribeTime(now, 0).AsView() == u8"1 Nov 2026, 13:22");
-    CHECK(DescribeTime(now - 13 * 3600 - 20 * 60, 0).AsView() == u8"1 Nov 2026, 00:02");
-    CHECK(DescribeTime(now, -14 * 3600).AsView() == u8"31 Oct 2026, 23:22");
+    CHECK(RecentProjects::DescribeTime(0, 0).IsEmpty());
+    CHECK(RecentProjects::DescribeTime(now, 0).AsView() == u8"1 Nov 2026, 13:22");
+    CHECK(RecentProjects::DescribeTime(now - 13 * 3600 - 20 * 60, 0).AsView() == u8"1 Nov 2026, 00:02");
+    CHECK(RecentProjects::DescribeTime(now, -14 * 3600).AsView() == u8"31 Oct 2026, 23:22");
 }
 
 TEST_CASE("project-registry: a folder under the home shows as ~, a whole folder name only")
 {
-    CHECK(ShortenHomePath(u8"/home/rob/Games/Snowline", u8"/home/rob").AsView() == u8"~/Games/Snowline");
-    CHECK(ShortenHomePath(u8"/home/rob/Games", u8"/home/rob/").AsView() == u8"~/Games");
-    CHECK(ShortenHomePath(u8"/home/rob", u8"/home/rob").AsView() == u8"~");
-    CHECK(ShortenHomePath(u8"/home/robert/Games", u8"/home/rob").AsView() == u8"/home/robert/Games");
-    CHECK(ShortenHomePath(u8"/media/usb/Jam", u8"/home/rob").AsView() == u8"/media/usb/Jam");
-    CHECK(ShortenHomePath(u8"C:\\Users\\rob\\Games", u8"C:\\Users\\rob").AsView() == u8"~\\Games");
-    CHECK(ShortenHomePath(u8"/home/rob/Games", u8"").AsView() == u8"/home/rob/Games");
+    CHECK(RecentProjects::ShortenHomePath(u8"/home/rob/Games/Snowline", u8"/home/rob").AsView() == u8"~/Games/Snowline");
+    CHECK(RecentProjects::ShortenHomePath(u8"/home/rob/Games", u8"/home/rob/").AsView() == u8"~/Games");
+    CHECK(RecentProjects::ShortenHomePath(u8"/home/rob", u8"/home/rob").AsView() == u8"~");
+    CHECK(RecentProjects::ShortenHomePath(u8"/home/robert/Games", u8"/home/rob").AsView() == u8"/home/robert/Games");
+    CHECK(RecentProjects::ShortenHomePath(u8"/media/usb/Jam", u8"/home/rob").AsView() == u8"/media/usb/Jam");
+    CHECK(RecentProjects::ShortenHomePath(u8"C:\\Users\\rob\\Games", u8"C:\\Users\\rob").AsView() == u8"~\\Games");
+    CHECK(RecentProjects::ShortenHomePath(u8"/home/rob/Games", u8"").AsView() == u8"/home/rob/Games");
 }
 
 TEST_CASE("project-registry: probe reads the manifest without opening; NotFound for non-projects")

@@ -657,9 +657,9 @@ class Ball
         }
     }
 
-    // Host only: a player has joined. They take a bot's seat: a hunter is spawned for them where
-    // the bot stands, in its costume, and the bot wanders on as a plain guest. If no bot seat is
-    // left, they watch.
+    // Host only: a player has joined. They take a bot's seat with a score of their own, from zero:
+    // a hunter is spawned for them where the bot stands, in its costume, and the bot wanders on as
+    // a plain guest. If no bot seat is left, they watch.
     void onJoined(int player)
     {
         if (Net::isClient())
@@ -686,12 +686,14 @@ class Ball
             }
             m_known.insertLast(hunter);
             setOwner(h, player);
+            addScore(h, -scoreOf(h)); // the player starts at nothing, not at the bot's score
             return;
         }
         Net::rpcNumberTo(player, "note", double(kNoteFull));
     }
 
-    // Host only: a player has left. Their seat goes back to its bot, and their hunter is removed.
+    // Host only: a player has left. Their seat goes back to its bot, keeping the score they made,
+    // and their hunter is removed.
     void onLeft(int player)
     {
         if (Net::isClient())

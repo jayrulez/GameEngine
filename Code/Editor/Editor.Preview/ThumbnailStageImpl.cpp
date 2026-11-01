@@ -278,6 +278,7 @@ namespace editor
                 impl.state = Impl::State::RenderPending;
                 break;
             case ThumbnailStageStep::Failed:
+                LOG_WARNING(u8"Thumbnails", u8"{} could not be staged for its thumbnail", impl.job.id);
                 impl.FailJob();
                 break;
             case ThumbnailStageStep::Pending:

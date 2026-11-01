@@ -137,7 +137,9 @@ D5. **A run has sessions.** A Game tab keeps its `GameInstance` from tab open to
 
 D6. **Pause is the host's pause**: the editor toolbar and a debugger break. A game's own pause
     (`run.timeScale = 0`) is the game's business and is not a run pause: its music plays on, as
-    `AudioSubsystem::SetRunPaused` documents today.
+    `AudioSubsystem::SetRunPaused` documents today. A run paused by its host holds still whole:
+    its scene's simulation, and its Game class too, which gets no update and whose run clock does
+    not count (2026-11-01: Sky Hopper's level clock ran on under the editor's Pause).
 
 D7. **`IRunManager`**, provided by `DefaultApplication` (which already creates, releases and
     enumerates the instances: `CreateInstance`, `ReleaseInstance`, `ForEachInstance`) through the

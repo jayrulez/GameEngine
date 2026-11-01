@@ -1033,6 +1033,42 @@ TEST_CASE("game-instance: run.setTimeScale routes from script to the run binding
     gi.StopScript();
 }
 
+TEST_CASE("game-instance: the host's pause holds the Game class still: no update, the run's clock stopped")
+{
+    RegisterCoreTypes();
+    foundation::script::RegisterScriptFacadeReflection();
+    engine::runtime::RegisterRunScriptFacade();
+    foundation::script::angelscript::RegisterAngelScriptBackend();
+
+    engine::runtime::GameInstance gi;
+    int updates = 0;
+    // Each update reports itself through the binding (run::setTimeScale), so the test counts them.
+    gi.RunBinding().setTimeScale = Function<void(f32)>{[&updates](f32) { ++updates; }};
+    REQUIRE(gi.StartScript(u8"class Game {\n"
+                           u8"  Game() {}\n"
+                           u8"  void launch() {}\n"
+                           u8"  void update(float dt) { run::setTimeScale(1.0f); }\n"
+                           u8"  void exit() {}\n"
+                           u8"}\n",
+                           u8"game.as", Span<const String>{}));
+    gi.Start();
+    gi.TickScript(0.016f, 1.0f);
+    CHECK(updates == 1);
+    const f64 before = gi.RunTime();
+
+    gi.SetPaused(true); // the editor's toolbar
+    gi.TickScript(0.016f, 1.0f);
+    gi.TickScript(0.016f, 1.0f);
+    CHECK(updates == 1);              // a level clock in update does not run on
+    CHECK(gi.RunTime() == before);    // nor does the run's
+
+    gi.SetPaused(false);
+    gi.TickScript(0.016f, 1.0f);
+    CHECK(updates == 2);
+    CHECK(gi.RunTime() > before);
+    gi.StopScript();
+}
+
 TEST_CASE("game-instance: run.setTimeScale/timeScale route from script to the run binding (Luau)")
 {
     RegisterCoreTypes();

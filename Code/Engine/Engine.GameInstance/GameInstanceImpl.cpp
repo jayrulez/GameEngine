@@ -456,6 +456,13 @@ namespace engine::runtime
         {
             return;
         }
+        // The host's pause (the editor's toolbar; Specs/run-context.md, D6) holds the game still
+        // with its scene: no update for the Game class, and the run's clock does not count. A
+        // game's own pause (time scale 0) is the game's business and still ticks it.
+        if (State() == foundation::run::RunState::Paused)
+        {
+            return;
+        }
         // The run's clock counts its frames whether or not the project has a game script: a
         // playtest times its run by it, and a scene of behaviours alone runs as surely as one
         // a game script drives.

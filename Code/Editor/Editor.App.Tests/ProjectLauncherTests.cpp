@@ -429,6 +429,12 @@ TEST_CASE("launcher: New Project starts where the last project went, checks as i
     CHECK_FALSE(create->IsEnabled());
     CHECK(line->HasClass(u8"error"));
     CHECK(where->GetText() == StringView(u8"Give the project a name."));
+    // The window is as tall as what it holds: it ends just under its buttons.
+    (void)l.scene->UpdateLayout();
+    const gui::Rect window = dialog->GetScreenBounds();
+    const gui::Rect button = create->GetScreenBounds();
+    CHECK(button.y + button.height <= window.y + window.height + 0.5f);
+    CHECK(window.y + window.height - (button.y + button.height) < 40.0f);
 
     gui::EventDispatcher& d = *l.scene->GetEventDispatcher();
     name->RequestFocus();

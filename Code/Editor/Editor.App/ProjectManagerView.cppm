@@ -317,6 +317,7 @@ export namespace editor::app
             m_dialog = MakeRef<gui::Window>(m_allocator);
             m_dialog->SetTitle(Format(u8"Download {}", sample.name).AsView());
             m_dialog->SetSize(Float2{kDialogWidth, kDownloadDialogHeight});
+            m_dialog->SetFitsHeightToContent(true); // each stage, and a check line that wraps
             m_dialog->GetContent()->AddChild(body.Get());
             auto* parent = Cast<gui::TextField>(FindIn(*body, u8"download-sample-parent"));
             auto* ownFolder = Cast<gui::CheckBox>(FindIn(*body, u8"download-sample-own-folder"));
@@ -659,6 +660,7 @@ export namespace editor::app
             m_dialog = MakeRef<gui::Window>(m_allocator);
             m_dialog->SetTitle(u8"New Project");
             m_dialog->SetSize(Float2{kDialogWidth, kDialogHeight});
+            m_dialog->SetFitsHeightToContent(true); // a check line that wraps grows it
             m_dialog->GetContent()->AddChild(body.Get());
             auto* name = Cast<gui::TextField>(FindIn(*body, u8"new-project-name"));
             auto* parent = Cast<gui::TextField>(FindIn(*body, u8"new-project-parent"));
@@ -731,7 +733,8 @@ export namespace editor::app
 
     private:
         static constexpr f32 kDialogWidth = 600.0f;
-        static constexpr f32 kDialogHeight = 330.0f;
+        // The heights the dialogs open at; their content's height replaces them at the first layout.
+        static constexpr f32 kDialogHeight = 250.0f;
         static constexpr f32 kDownloadDialogHeight = 200.0f;
         static constexpr const char8_t* kDownloadSamplePath = u8"Editor/DownloadSample.xml";
 

@@ -11,9 +11,7 @@ module;
 #include <cctype>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 #include <functional>
-#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -144,8 +142,7 @@ export namespace foundation::model::fbx
             // Extract base path for loading external resources.
             const String narrowStorage = String(path);
             const char* narrowPath = reinterpret_cast<const char*>(narrowStorage.CStr());
-            std::filesystem::path filePath(narrowPath);
-            m_basePath = filePath.parent_path().string();
+            m_basePath = String(PathParent(path));
 
             // Setup load options.
             m_loadOpts = {};
@@ -198,7 +195,7 @@ export namespace foundation::model::fbx
 
     private:
         ufbx_scene* m_scene = nullptr;
-        std::string m_basePath;
+        String m_basePath;
         ufbx_load_opts m_loadOpts = {};
 
         /// Node typed_id -> model bone index
@@ -476,27 +473,25 @@ export namespace foundation::model::fbx
                 else if (tex->has_file)
                 {
                     // External file: try the relative path, then walk parent directories, then absolute.
-                    std::string relPath;
+                    String relPath;
                     if (tex->relative_filename.data && tex->relative_filename.length > 0)
-                        relPath =
-                            std::string(tex->relative_filename.data, tex->relative_filename.length);
+                        relPath = Utf8FromUfbx(tex->relative_filename);
 
                     bool loaded = false;
-                    std::string resolvedPath;
+                    String resolvedPath;
                     // Take the file at `path`: a DDS stays undecoded (GPU-ready; the pipeline
                     // passes its levels through from the file), anything else decodes.
-                    auto takeFile = [&](const std::string& path) -> bool
+                    auto takeFile = [&](const String& path) -> bool
                     {
-                        const String utf8 = Utf8FromC(path.c_str());
-                        if (image::dds::IsDdsFile(utf8.AsView()))
+                        if (image::dds::IsDdsFile(path.AsView()))
                         {
-                            modelTex->setSourceFile(utf8.AsView());
+                            modelTex->setSourceFile(path.AsView());
                             resolvedPath = path;
                             loaded = true;
                             return true;
                         }
                         foundation::image::Image img;
-                        if (image::io::LoadImage(utf8.AsView(), img) == ErrorCode::Ok)
+                        if (image::io::LoadImage(path.AsView(), img) == ErrorCode::Ok)
                         {
                             storeImageData(img, modelTex);
                             resolvedPath = path;
@@ -506,34 +501,33 @@ export namespace foundation::model::fbx
                         return false;
                     };
 
-                    if (!relPath.empty())
+                    if (!relPath.IsEmpty())
                     {
                         // Try basePath + relative path first.
-                        auto imagePath = (std::filesystem::path(m_basePath) / relPath).string();
+                        String imagePath = PathJoin(m_basePath.AsView(), relPath.AsView());
 
-                        if (!std::filesystem::exists(imagePath))
+                        if (!FileExists(imagePath.AsView()))
                         {
                             // The relative path may be wrong: try just the filename.
-                            auto fileName = std::filesystem::path(relPath).filename().string();
-                            imagePath = (std::filesystem::path(m_basePath) / fileName).string();
+                            imagePath = PathJoin(m_basePath.AsView(), PathFilename(relPath.AsView()));
                         }
 
-                        if (std::filesystem::exists(imagePath))
+                        if (FileExists(imagePath.AsView()))
                         {
                             takeFile(imagePath);
                         }
                         else
                         {
                             // Walk up parent directories (up to 5 levels) looking for the file.
-                            auto searchDir = std::filesystem::path(m_basePath);
+                            StringView searchDir = m_basePath.AsView();
                             for (int depth = 0; depth < 5 && !loaded; ++depth)
                             {
-                                auto parentDir = searchDir.parent_path();
-                                if (parentDir.empty() || parentDir == searchDir)
+                                const StringView parentDir = PathParent(searchDir);
+                                if (parentDir.IsEmpty() || parentDir == searchDir)
                                     break;
 
-                                auto candidatePath = (parentDir / relPath).string();
-                                if (std::filesystem::exists(candidatePath))
+                                const String candidatePath = PathJoin(parentDir, relPath.AsView());
+                                if (FileExists(candidatePath.AsView()))
                                 {
                                     takeFile(candidatePath);
                                 }
@@ -545,14 +539,13 @@ export namespace foundation::model::fbx
                     // Fallback: try absolute filename path.
                     if (!loaded && tex->filename.data && tex->filename.length > 0)
                     {
-                        std::string absPath(tex->filename.data, tex->filename.length);
-                        takeFile(absPath);
+                        takeFile(Utf8FromUfbx(tex->filename));
                     }
 
                     if (loaded)
                     {
                         // Set the URI so TextureConverter can build the source path for dedup.
-                        modelTex->setUri(Utf8FromC(resolvedPath.c_str()));
+                        modelTex->setUri(resolvedPath.AsView());
                     }
                 }
 

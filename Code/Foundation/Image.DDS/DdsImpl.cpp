@@ -4,11 +4,8 @@
 // DDS container parse + write: the two header forms and the payload layout.
 
 module;
-#define _CRT_SECURE_NO_WARNINGS
 #include "Core/Prelude.h"
-#include <cstdio>
 #include <cstring>
-#include <string>
 
 module foundation.image.dds;
 
@@ -216,15 +213,13 @@ namespace foundation::image::dds
 
     bool IsDdsFile(StringView path) noexcept
     {
-        const std::string cPath(reinterpret_cast<const char*>(path.Data()), path.Size());
-        FILE* file = std::fopen(cPath.c_str(), "rb");
-        if (file == nullptr)
+        FileStream file(path, FileMode::Read);
+        if (!file.IsValid())
         {
             return false;
         }
         u8 magic[4] = {};
-        const usize got = std::fread(magic, 1, 4, file);
-        std::fclose(file);
+        const u64 got = file.Read(magic, 4);
         return got == 4 && IsDds(Span<const u8>(magic, 4));
     }
 
@@ -316,15 +311,13 @@ namespace foundation::image::dds
 
     Status ReadDdsHeader(StringView path, DdsHeader& out)
     {
-        const std::string cPath(reinterpret_cast<const char*>(path.Data()), path.Size());
-        FILE* file = std::fopen(cPath.c_str(), "rb");
-        if (file == nullptr)
+        FileStream file(path, FileMode::Read);
+        if (!file.IsValid())
         {
             return ErrorCode::NotFound;
         }
         u8 head[kDdsHeaderBytes] = {};
-        const usize got = std::fread(head, 1, sizeof(head), file);
-        std::fclose(file);
+        const usize got = static_cast<usize>(file.Read(head, sizeof(head)));
         return ParseDdsHeader(Span<const u8>(head, got), out);
     }
 

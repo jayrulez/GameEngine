@@ -10,9 +10,6 @@ module;
 #include <cctype>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <string>
 #include <string_view>
 #include <vector>
 
@@ -88,8 +85,7 @@ export namespace foundation::model::gltf
             // Extract base path for loading external resources.
             const String narrowStorage = String(path);
             const char* narrowPath = reinterpret_cast<const char*>(narrowStorage.CStr());
-            std::filesystem::path filePath(narrowPath);
-            m_basePath = filePath.parent_path().string();
+            m_basePath = String(PathParent(path));
 
             // Parse the file, setting the type explicitly for .glb since auto-detect can fail.
             cgltf_options options = {};
@@ -102,16 +98,10 @@ export namespace foundation::model::gltf
             options.json_token_count = 0;
 
             // Read file data ourselves (cgltf's fopen can fail with certain path formats on Windows).
-            std::ifstream file(narrowPath, std::ios::binary | std::ios::ate);
-            if (!file.is_open())
+            const Result<Array<byte>> read = ReadFile(path);
+            if (!read)
                 return ModelLoadResult::FileNotFound;
-
-            auto fileSize = file.tellg();
-            file.seekg(0, std::ios::beg);
-            Array<uint8_t> fileBytes(static_cast<size_t>(fileSize));
-            if (!file.read(reinterpret_cast<char*>(fileBytes.Data()), fileSize))
-                return ModelLoadResult::FileNotFound;
-            file.close();
+            const Array<byte>& fileBytes = read.Value();
 
             cgltf_result parseResult =
                 cgltf_parse(&options, fileBytes.Data(), fileBytes.Size(), &m_data);
@@ -154,7 +144,7 @@ export namespace foundation::model::gltf
 
     private:
         cgltf_data* m_data = nullptr;
-        std::string m_basePath;
+        String m_basePath;
 
         // -----------------------------------------------------------------------
         // Helpers
@@ -424,10 +414,8 @@ export namespace foundation::model::gltf
                         {
                             // External image file. A DDS stays undecoded: it is GPU-ready,
                             // and the pipeline passes its levels through from the file.
-                            std::filesystem::path imagePath =
-                                std::filesystem::path(m_basePath) / uriC;
-                            const std::string imgPath = imagePath.string();
-                            const String imgPathUtf8 = Utf8FromC(imgPath.c_str());
+                            const String imgPathUtf8 =
+                                PathJoin(m_basePath.AsView(), Utf8FromC(uriC).AsView());
                             if (image::dds::IsDdsFile(imgPathUtf8.AsView()))
                             {
                                 texture->setSourceFile(imgPathUtf8.AsView());

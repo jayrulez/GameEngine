@@ -1121,10 +1121,7 @@ export namespace editor::app
             // Nothing to say: how to open a project, while there are some.
             const bool idle = text.IsEmpty();
             String idleText;
-            if (idle && m_samples)
-                idleText = Format(u8"From the {} release, each checked against its published checksum before it is unpacked.",
-                                  engine::project::kEngineVersionString);
-            else if (idle && !m_shown.IsEmpty())
+            if (idle && !m_samples && !m_shown.IsEmpty())
                 idleText = String(u8"Double-click a project or press Enter to open it.");
             status->SetText(idle ? idleText.AsView() : text);
             SetClass(status, u8"warning", problem && !idle);

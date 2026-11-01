@@ -491,6 +491,50 @@ TEST_CASE("layout: repeat(auto-fill) makes as many columns as the width holds, w
     CHECK(grid->GetLayoutStyle().Rows.IsEmpty());
 }
 
+TEST_CASE("layout: aspect-ratio gives the auto side from the other, stretched or given")
+{
+    Bed bed(400.0f, 800.0f); // a column 400 wide: its children stretch across, with room to stand at their sizes
+    auto column = core::MakeRef<Panel>(core::DefaultAllocator());
+    column->AddClass(SV(u8"column"));
+    bed.root->AddChild(column.Get());
+    auto stretched = core::MakeRef<Panel>(core::DefaultAllocator());
+    stretched->AddClass(SV(u8"wide"));
+    column->AddChild(stretched.Get());
+    auto sized = core::MakeRef<Panel>(core::DefaultAllocator());
+    sized->AddClass(SV(u8"sized"));
+    column->AddChild(sized.Get());
+    auto row = core::MakeRef<Panel>(core::DefaultAllocator());
+    row->AddClass(SV(u8"row"));
+    column->AddChild(row.Get());
+    auto tall = core::MakeRef<Panel>(core::DefaultAllocator());
+    tall->AddClass(SV(u8"tall"));
+    row->AddChild(tall.Get());
+    StyleManager styles(CSSParser::Parse(SV(
+        u8".column { width: 400px; } .wide { aspect-ratio: 16 / 9; } .sized { width: 160px; aspect-ratio: 16/9; align-self: start; }"
+        u8".row { flex-direction: row; align-items: start; } .tall { height: 90px; aspect-ratio: 2; }")));
+    styles.ApplyTree(*bed.root.Get());
+    bed.Layout();
+    CHECK(stretched->GetLayoutStyle().AspectRatio == doctest::Approx(16.0f / 9.0f));
+    CHECK(stretched->GetSize().x == doctest::Approx(400.0f));
+    CHECK(stretched->GetSize().y == doctest::Approx(225.0f)); // the stretch's width, at 16:9
+    CHECK(sized->GetSize().y == doctest::Approx(90.0f));
+    CHECK(tall->GetSize().x == doctest::Approx(180.0f)); // the height given, twice as wide
+
+    // The ratio of the content box when the sizing says so: 16 + 9 inside 8px of padding a side.
+    StyleManager content(CSSParser::Parse(SV(
+        u8".column { width: 400px; } .sized { width: 176px; padding: 8px; box-sizing: content-box; aspect-ratio: 16 / 9; align-self: start; }")));
+    content.ApplyTree(*bed.root.Get());
+    bed.Layout();
+    CHECK(sized->GetSize().x == doctest::Approx(192.0f));
+    CHECK(sized->GetSize().y == doctest::Approx(99.0f + 16.0f));
+
+    StyleManager none(CSSParser::Parse(SV(u8".wide { aspect-ratio: auto; } .sized { aspect-ratio: 0 / 1; } .tall { aspect-ratio: -2; }")));
+    none.ApplyTree(*bed.root.Get());
+    CHECK(stretched->GetLayoutStyle().AspectRatio == 0.0f);
+    CHECK(sized->GetLayoutStyle().AspectRatio == 0.0f); // refused
+    CHECK(tall->GetLayoutStyle().AspectRatio == 0.0f);
+}
+
 TEST_CASE("layout: a label and a button size to their text, and follow it")
 {
     fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);

@@ -233,6 +233,9 @@ export namespace foundation::gui
         LayoutLength MinHeight{};
         LayoutLength MaxWidth = LayoutLength::None();
         LayoutLength MaxHeight = LayoutLength::None();
+        /// Width over height (CSS's `aspect-ratio: 16 / 9`), of the box its sizing names: with one
+        /// side given or fixed by its container and the other auto, the other follows. 0: none.
+        f32 AspectRatio = 0.0f;
         Thickness Margin{};
         /// Percentages of the containing box's width each side adds (CSS's `margin: 5%`), resolved
         /// at layout, where that width is known.
@@ -309,6 +312,7 @@ export namespace foundation::gui
         SlotWhiteSpace, SlotLineHeight, SlotLetterSpacing,
         SlotDirection,
         SlotFontWeight, SlotFontStyle, SlotOverflowWrap,
+        SlotAspectRatio,
         SlotCount,
     };
     /// A set of StyleSlots: the slots code pinned, or the slots a change touched. It takes two
@@ -362,6 +366,7 @@ export namespace foundation::gui
             u8"white-space", u8"line-height", u8"letter-spacing",
             u8"direction",
             u8"font-weight", u8"font-style", u8"overflow-wrap",
+            u8"aspect-ratio",
         };
         static_assert(sizeof(kNames) / sizeof(kNames[0]) == SlotCount, "a name for every slot");
         return kNames[slot];
@@ -410,6 +415,7 @@ export namespace foundation::gui
         f(SlotGridAutoColumns, &LayoutStyle::AutoColumns);
         f(SlotGridColumn, &LayoutStyle::Column);
         f(SlotGridRow, &LayoutStyle::Row);
+        f(SlotAspectRatio, &LayoutStyle::AspectRatio);
         f(SlotScrollBehavior, &LayoutStyle::Scrolling);
         f(SlotOverscrollBehavior, &LayoutStyle::Overscroll);
         f(SlotScrollbarWidth, &LayoutStyle::BarWidth);

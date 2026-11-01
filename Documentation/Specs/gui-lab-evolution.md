@@ -257,7 +257,7 @@ a text field a line, the rest a size of their own), `Arrange(rect)` running `OnL
 no GUI when asked (`UpdateLayout`). Flex by the CSS rules (the automatic minimum is the content's,
 no more than the specified size), grid (px, %, auto and fr tracks, `repeat()` with a count or
 `auto-fill` columns, `minmax()`, spans, auto flow), stack, dock, absolute and relative
-placement; `visibility: hidden`
+placement; `aspect-ratio` (one side from the other, given or stretched); `visibility: hidden`
 keeps its space and `display: none` (code's `SetDisplayed`, a script's `displayed`) gives it up. Scrolling is
 `overflow` on any node: the offset moves the children through their transform, with the wheel,
 keys, drawn and draggable bars and `ScrollIntoView`; `Panel` is the plain element and `ScrollView`

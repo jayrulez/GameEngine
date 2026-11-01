@@ -222,7 +222,23 @@ export namespace foundation::gui
                 return GridTrack{l.Value(), l.Value(), 0.0f};
             return {};
         }
-        // Where a track list's `repeat(auto-fill, <sizes>)` sits: its first track and how many it
+        // aspect-ratio: `auto` (0, none), a number (`1.5`), or a width over a height (`16 / 9`).
+        // Nothing for a ratio that is not positive.
+        [[nodiscard]] inline Optional<f32> ParseAspectRatio(core::StringView text)
+        {
+            text = Trim(text);
+            if (text == core::StringView(u8"auto"))
+                return 0.0f;
+            const Array<core::StringView> parts = SplitTopLevel(text, u8'/');
+            if (parts.IsEmpty() || parts.Size() > 2)
+                return {};
+            const Optional<f32> w = ParseLength(Trim(parts[0]));
+            const Optional<f32> h = parts.Size() == 2 ? ParseLength(Trim(parts[1])) : Optional<f32>(1.0f);
+            if (!w.HasValue() || !h.HasValue() || w.Value() <= 0.0f || h.Value() <= 0.0f)
+                return {};
+            return w.Value() / h.Value();
+        }
+                // Where a track list's `repeat(auto-fill, <sizes>)` sits: its first track and how many it
         // repeats (At -1: none).
         struct GridAutoRepeat
         {
@@ -1068,6 +1084,9 @@ export namespace foundation::gui
                 return {};
             };
             if (const Optional<f32> n = number(u8"flex-grow"); n.HasValue()) assign(ls.Grow, n.Value());
+            if (const StringView t = keyword(u8"aspect-ratio"); t.Size() != 0)
+                if (const Optional<f32> ratio = detail::ParseAspectRatio(t); ratio.HasValue())
+                    assign(ls.AspectRatio, ratio.Value());
             if (const Optional<f32> n = number(u8"flex-shrink"); n.HasValue()) assign(ls.Shrink, n.Value());
             if (const Optional<f32> n = number(u8"order"); n.HasValue()) assign(ls.Order, static_cast<i32>(n.Value()));
             if (const Optional<f32> n = number(u8"z-index"); n.HasValue()) assign(ls.ZIndex, static_cast<i32>(n.Value()));

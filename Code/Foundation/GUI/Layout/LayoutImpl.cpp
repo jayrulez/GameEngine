@@ -923,8 +923,19 @@ namespace foundation::gui
                     return v.Value() + chromeAxis;
                 return v;
             };
-            const Optional<f32> w = box(s.Width, constraints.PercentBase.x, ch);
-            const Optional<f32> h = box(s.Height, constraints.PercentBase.y, cv);
+            Optional<f32> w = box(s.Width, constraints.PercentBase.x, ch);
+            Optional<f32> h = box(s.Height, constraints.PercentBase.y, cv);
+            // An aspect ratio gives the auto side from the other: one the style gives, else one the
+            // container fixes (a stretch). It is the ratio of the box the sizing names.
+            if (s.AspectRatio > 0.0f)
+            {
+                const f32 rw = contentBox ? ch : 0.0f;
+                const f32 rh = contentBox ? cv : 0.0f;
+                if (!h.HasValue() && (w.HasValue() || constraints.ExactWidth))
+                    h = core::Max(0.0f, (w.HasValue() ? w.Value() : constraints.Min.x) - rw) / s.AspectRatio + rh;
+                else if (!w.HasValue() && (h.HasValue() || constraints.ExactHeight))
+                    w = core::Max(0.0f, (h.HasValue() ? h.Value() : constraints.Min.y) - rh) * s.AspectRatio + rw;
+            }
             const f32 minW = box(s.MinWidth, constraints.PercentBase.x, ch).ValueOr(0.0f);
             const f32 minH = box(s.MinHeight, constraints.PercentBase.y, cv).ValueOr(0.0f);
             const f32 maxW = core::Max(minW, box(s.MaxWidth, constraints.PercentBase.x, ch).ValueOr(kUnbounded));

@@ -196,6 +196,7 @@ export namespace foundation::gui
             {u8"flex-grow", StyleGrammar::Number},
             {u8"flex-shrink", StyleGrammar::Number},
             {u8"flex-basis", StyleGrammar::Size},
+            {u8"aspect-ratio", StyleGrammar::Text},
             {u8"align-self", StyleGrammar::Keyword},
             {u8"justify-self", StyleGrammar::Keyword},
             {u8"order", StyleGrammar::Number},

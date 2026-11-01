@@ -315,3 +315,51 @@ TEST_CASE("particles: the simulated (sRGB) colour reaches billboards and lights 
     CHECK(l.x == doctest::Approx(SrgbToLinear(0.5f)));
     CHECK(l.w == doctest::Approx(0.25f));
 }
+
+TEST_CASE("particles: a sorted alpha system's billboards come farthest first, frame after frame")
+{
+    // More particles than one insertion run, so the sort merges, and two frames, so the second
+    // goes through the merge buffer the first one grew.
+    particles::RegisterParticleEffectResource();
+    scene::Scene sceneObj{DefaultAllocator()};
+    auto* manager = sceneObj.AddSystem<engine::particles::ParticleEffectComponentManager>();
+
+    RefPtr<particles::ParticleEffectResource> res =
+        MakeRef<particles::ParticleEffectResource>(DefaultAllocator());
+    particles::ParticleSystem& sys = res->Effect().AddSystem(200);
+    sys.AddInitializer<particles::LifetimeInitializer>().lifetime = particles::RangeFloat{5.0f, 5.0f};
+    sys.blendMode = particles::ParticleBlendMode::Alpha;
+    sys.sortParticles = true;
+    sys.emitter.mode = particles::EmissionMode::Burst;
+    sys.emitter.burstCount = 150;
+
+    const scene::EntityHandle e = sceneObj.CreateEntity(u8"Smoke");
+    engine::particles::ParticleEffectComponent& c = manager->Add(e);
+    c.effectAsset = res.Get();
+    sceneObj.Update(0.016f);
+    REQUIRE(c.instance.Get() != nullptr);
+    particles::ParticleSystem* live = c.instance->Effect().GetSystem(0);
+    REQUIRE(live->AliveCount() == 150);
+
+    for (u32 frame = 0; frame < 2; ++frame)
+    {
+        // Spread them so their distances from the camera (at the origin, there being none) differ.
+        u32 seed = 31u + frame;
+        for (i32 i = 0; i < 150; ++i)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            (*live->Streams().Positions())[i] = Float3{static_cast<f32>(seed >> 24), 0.0f, static_cast<f32>(i % 7)};
+        }
+        foundation::render::ExtractedScene snapshot{DefaultAllocator()};
+        manager->ExtractRenderData(snapshot);
+        REQUIRE(snapshot.Items().Size() == 1u);
+        const auto* batch =
+            static_cast<const engine::particles::ParticleBillboardRenderData*>(snapshot.Items()[0]);
+        REQUIRE(batch->count == 150u);
+        bool farthestFirst = true;
+        for (u32 i = 1; i < batch->count; ++i)
+            if (LengthSquared(batch->instances[i].position) > LengthSquared(batch->instances[i - 1].position))
+                farthestFirst = false;
+        CHECK(farthestFirst);
+    }
+}

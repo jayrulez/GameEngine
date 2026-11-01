@@ -14,7 +14,6 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (compiles to nothing when disabled)
-#include <algorithm>           // std::sort (per-particle back-to-front ordering)
 
 export module engine.particles:components;
 
@@ -388,8 +387,7 @@ export namespace engine::particles
                 m_sortDist[static_cast<usize>(i)] = LengthSquared(p - m_cameraPos);
             }
             const f32* dist = m_sortDist.Data();
-            std::sort(m_sortOrder.Data(), m_sortOrder.Data() + alive,
-                      [dist](i32 a, i32 b) { return dist[a] > dist[b]; }); // farthest first
+            m_sortOrder.Sort([dist](i32 a, i32 b) { return dist[a] > dist[b]; }, m_sortMerge); // farthest first
             return m_sortOrder.Data();
         }
 
@@ -776,6 +774,7 @@ export namespace engine::particles
             Float4x4::Identity(); // current component's emitter transform (Local space)
         Array<i32> m_sortOrder;   // back-to-front particle order (alpha systems)
         Array<f32> m_sortDist;    // squared camera distance per particle (sort key)
+        Array<i32> m_sortMerge;   // the sort's merge buffer, kept so a frame's sort does not allocate
         u16 m_billboardRendererId = 0;
         u16 m_meshRendererId = 0; // set by the subsystem from the render subsystem
         Array<UniquePtr<Array<ParticleBillboardInstance>>> m_scratch;

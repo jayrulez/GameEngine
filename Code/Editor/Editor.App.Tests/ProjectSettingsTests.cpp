@@ -10,7 +10,6 @@
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.gui;
@@ -57,8 +56,7 @@ namespace
 
         Bed()
         {
-            std::error_code ec;
-            std::filesystem::remove_all("project_settings_project", ec);
+            (void)RemoveDirectoryRecursive(u8"project_settings_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"project_settings_project", u8"Settings").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"project_settings_project");
             REQUIRE(project);
@@ -77,8 +75,7 @@ namespace
             dialog.Reset();
             context.SetProject(nullptr);
             project.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("project_settings_project", ec);
+            (void)RemoveDirectoryRecursive(u8"project_settings_project");
         }
         gui::PropertyBag& Bag() { return *dialog->Rows(); }
         void Edit(StringView path, const gui::Variant& value)

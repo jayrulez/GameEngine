@@ -6,7 +6,6 @@
 // and a reload with no module declared says so and touches nothing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem> // remove_all (the scratch project)
 
 import foundation.core;
 import foundation.runtime;
@@ -24,8 +23,7 @@ namespace
         String dir;
         explicit ScratchProject(StringView leaf) : dir(leaf)
         {
-            std::error_code ec;
-            std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+            (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"Native").IsOk());
             project = EditorProject::Open(DefaultAllocator(), dir.AsView());
             REQUIRE(project);
@@ -33,8 +31,7 @@ namespace
         ~ScratchProject()
         {
             project = nullptr;
-            std::error_code ec;
-            std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+            (void)RemoveDirectoryRecursive(dir.AsView());
         }
         void WriteModule(StringView relative, StringView bytes)
         {

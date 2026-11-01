@@ -10,7 +10,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -46,8 +45,7 @@ namespace
 
         Bed()
         {
-            std::error_code ec;
-            std::filesystem::remove_all("asset_ops_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_ops_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"asset_ops_project", u8"Ops").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"asset_ops_project");
             REQUIRE(project);
@@ -77,8 +75,7 @@ namespace
             ops.Reset();
             context.SetProject(nullptr);
             project.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("asset_ops_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_ops_project");
         }
     };
 }

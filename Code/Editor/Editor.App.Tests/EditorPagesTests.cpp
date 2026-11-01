@@ -10,7 +10,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -159,8 +158,7 @@ namespace
 
         Bed()
         {
-            std::error_code ec;
-            std::filesystem::remove_all("editor_pages_project", ec);
+            (void)RemoveDirectoryRecursive(u8"editor_pages_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"editor_pages_project", u8"Pages").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"editor_pages_project");
             REQUIRE(project);
@@ -186,8 +184,7 @@ namespace
         ~Bed()
         {
             pages.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("editor_pages_project", ec);
+            (void)RemoveDirectoryRecursive(u8"editor_pages_project");
         }
         void Frame()
         {

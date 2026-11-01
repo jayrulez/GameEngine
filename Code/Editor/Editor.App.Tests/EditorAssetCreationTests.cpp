@@ -7,7 +7,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem> // remove_all (the scratch project)
 
 import foundation.core;
 import foundation.content;
@@ -50,8 +49,7 @@ TEST_CASE("asset creation: refused with no project or a failed write; a written 
     CHECK(said == String(u8"Create failed: no project is open."));
 
     const String dir(u8"asset-creation-project");
-    std::error_code ec;
-    std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+    (void)RemoveDirectoryRecursive(dir.AsView());
     REQUIRE(EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"Create").IsOk());
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir.AsView());
     REQUIRE(project);
@@ -72,5 +70,5 @@ TEST_CASE("asset creation: refused with no project or a failed write; a written 
     CHECK(project->Settings().defaultSceneId == opened->Id());
 
     project = nullptr;
-    std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+    (void)RemoveDirectoryRecursive(dir.AsView());
 }

@@ -10,7 +10,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -93,8 +92,7 @@ namespace
 
         Bed()
         {
-            std::error_code ec;
-            std::filesystem::remove_all("import_window_project", ec);
+            (void)RemoveDirectoryRecursive(u8"import_window_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"import_window_project", u8"Window").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"import_window_project");
             REQUIRE(project);
@@ -116,8 +114,7 @@ namespace
             import.Reset();
             context.SetProject(nullptr);
             project.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("import_window_project", ec);
+            (void)RemoveDirectoryRecursive(u8"import_window_project");
         }
         RefPtr<AssetImport::Session> Open(Span<const String> paths)
         {

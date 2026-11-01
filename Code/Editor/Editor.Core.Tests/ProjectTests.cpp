@@ -5,7 +5,6 @@
 // subdirectories, and the source (XML) and cooked (binary) content databases).
 
 #include <doctest/doctest.h>
-#include <string>
 
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -452,17 +451,17 @@ TEST_CASE("project: the other UI fonts are an appended list every asset walk rea
         }
         Result<Array<byte>> bytes = ReadFile(PathJoin(dir, u8"Project.xml").AsView());
         REQUIRE(bytes.HasValue());
-        std::string older(reinterpret_cast<const char*>(bytes.Value().Data()), bytes.Value().Size());
-        const usize start = older.find("<array name=\"uiFontIds\"");
-        REQUIRE(start != std::string::npos);
-        const usize close = older.find("/>", start);
-        REQUIRE(close != std::string::npos);
-        CHECK(older.substr(start, close - start).find('<', 1) == std::string::npos); // empty: <array .../>
-        older.erase(start, close + 2 - start);
+        String older(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+        const usize start = older.AsView().Find(u8"<array name=\"uiFontIds\"");
+        REQUIRE(start != StringView::kNotFound);
+        const usize close = older.AsView().Find(u8"/>", start);
+        REQUIRE(close != StringView::kNotFound);
+        CHECK(older.AsView().SubStr(start, close - start).Find(u8'<', 1) == StringView::kNotFound); // empty: <array .../>
+        older.Remove(start, close + 2 - start);
         foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
         REQUIRE(root.AsWritable()
                     ->Save(u8"Project.xml",
-                           Span<const byte>(reinterpret_cast<const byte*>(older.data()), older.size()))
+                           Span<const byte>(reinterpret_cast<const byte*>(older.Data()), older.Size()))
                     .IsOk());
     }
     const Guid title{0x51, 0x52};
@@ -510,26 +509,26 @@ TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset
         // Saved before the list: no key for it.
         Result<Array<byte>> bytes = ReadFile(PathJoin(dir, u8"Project.xml").AsView());
         REQUIRE(bytes.HasValue());
-        std::string older(reinterpret_cast<const char*>(bytes.Value().Data()), bytes.Value().Size());
-        const usize start = older.find("<array name=\"guiStyleSheetIds\"");
-        REQUIRE(start != std::string::npos);
-        const usize close = older.find("/>", start);
-        REQUIRE(close != std::string::npos);
-        older.erase(start, close + 2 - start);
+        String older(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+        const usize start = older.AsView().Find(u8"<array name=\"guiStyleSheetIds\"");
+        REQUIRE(start != StringView::kNotFound);
+        const usize close = older.AsView().Find(u8"/>", start);
+        REQUIRE(close != StringView::kNotFound);
+        older.Remove(start, close + 2 - start);
         // And the GUI loading screen, appended after it.
-        const usize splash = older.find("guiLoadingDocumentId");
-        REQUIRE(splash != std::string::npos);
-        const usize open = older.rfind('<', splash);
-        const usize end = older.find('>', splash);
-        REQUIRE(open != std::string::npos);
-        REQUIRE(end != std::string::npos);
+        const usize splash = older.AsView().Find(u8"guiLoadingDocumentId");
+        REQUIRE(splash != StringView::kNotFound);
+        const usize open = older.AsView().FindLast(u8'<', splash);
+        const usize end = older.AsView().Find(u8'>', splash);
+        REQUIRE(open != StringView::kNotFound);
+        REQUIRE(end != StringView::kNotFound);
         usize stop = end + 1;
-        if (older[end - 1] != '/') // <guid ...>...</guid>: through its closing tag
-            stop = older.find('>', older.find("</", end)) + 1;
-        older.erase(open, stop - open);
+        if (older.AsView()[end - 1] != u8'/') // <guid ...>...</guid>: through its closing tag
+            stop = older.AsView().Find(u8'>', older.AsView().Find(u8"</", end)) + 1;
+        older.Remove(open, stop - open);
         foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
         REQUIRE(root.AsWritable()
-                    ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(older.data()), older.size()))
+                    ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(older.Data()), older.Size()))
                     .IsOk());
     }
     const Guid shared{0x61, 0x62};
@@ -579,21 +578,22 @@ TEST_CASE("project: the display settings are appended, with defaults an older ma
     {
         Result<Array<byte>> bytes = ReadFile(PathJoin(dir, u8"Project.xml").AsView());
         REQUIRE(bytes.HasValue());
-        std::string text(reinterpret_cast<const char*>(bytes.Value().Data()), bytes.Value().Size());
-        for (const char* key : {"renderWidth", "renderHeight", "renderFit", "windowWidth", "windowHeight",
-                                "windowMode", "windowResizable", "orientation"})
+        String text(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+        const StringView keys[] = {u8"renderWidth", u8"renderHeight", u8"renderFit", u8"windowWidth",
+                                   u8"windowHeight", u8"windowMode", u8"windowResizable", u8"orientation"};
+        for (StringView key : keys)
         {
-            const usize name = text.find(std::string("name=\"") + key + "\"");
-            REQUIRE(name != std::string::npos);
-            const usize start = text.rfind('<', name);
-            const usize close = text.find("</", name);
-            const usize end = text.find('>', close);
-            text.erase(start, end + 1 - start);
+            const usize name = text.AsView().Find(Format(u8"name=\"{}\"", key).AsView());
+            REQUIRE(name != StringView::kNotFound);
+            const usize start = text.AsView().FindLast(u8'<', name);
+            const usize close = text.AsView().Find(u8"</", name);
+            const usize end = text.AsView().Find(u8'>', close);
+            text.Remove(start, end + 1 - start);
         }
-        CHECK(text.find("renderWidth") == std::string::npos);
+        CHECK_FALSE(text.AsView().Contains(u8"renderWidth"));
         foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
         REQUIRE(root.AsWritable()
-                    ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(text.data()), text.size()))
+                    ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()))
                     .IsOk());
     }
     {

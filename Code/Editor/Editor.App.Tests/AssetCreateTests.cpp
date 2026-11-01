@@ -11,7 +11,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -67,8 +66,7 @@ namespace
         content::Group* town = nullptr;
         Project()
         {
-            std::error_code ec;
-            std::filesystem::remove_all("asset_create_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_create_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"asset_create_project", u8"Create").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"asset_create_project");
             REQUIRE(project);
@@ -86,8 +84,7 @@ namespace
         ~Project()
         {
             project.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("asset_create_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_create_project");
         }
         [[nodiscard]] content::ContentDatabase& Sources() { return project->SourceDb(); }
     };

@@ -6,7 +6,6 @@
 // and Shutdown joins whatever is in flight.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 
 import foundation.core;
 import pipeline.core;
@@ -37,8 +36,7 @@ namespace
 TEST_CASE("cook-service: a request lands through Update - revision, OnCookFinished, the summary; "
           "a request mid-cook is remembered; Shutdown joins")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("cook_service_project", ec);
+    (void)RemoveDirectoryRecursive(u8"cook_service_project");
     REQUIRE(EditorProject::Create(DefaultAllocator(), u8"cook_service_project", u8"Cooked").IsOk());
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), u8"cook_service_project");
     REQUIRE(project);
@@ -77,5 +75,5 @@ TEST_CASE("cook-service: a request lands through Update - revision, OnCookFinish
     cook.RequestCook(false);
     CHECK(cook.IsIdle());
     project = nullptr;
-    std::filesystem::remove_all("cook_service_project", ec);
+    (void)RemoveDirectoryRecursive(u8"cook_service_project");
 }

@@ -7,7 +7,6 @@
 // chosen tabs.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem> // remove_all
 #include <initializer_list>
 
 import foundation.core;
@@ -42,8 +41,7 @@ namespace
 TEST_CASE("layout store: the dock's layout through the file and back; with none captured the dock keeps its default")
 {
     editor::app::RegisterEditorProjectSettingsTypes();
-    std::error_code ec;
-    std::filesystem::remove_all(reinterpret_cast<const char*>(String(kDir).CStr()), ec);
+    (void)RemoveDirectoryRecursive(kDir);
     (void)CreateDirectories(kDir);
 
     gui::DockController dock(DefaultAllocator());
@@ -67,14 +65,13 @@ TEST_CASE("layout store: the dock's layout through the file and back; with none 
     REQUIRE(editor::app::ApplyDockLayout(restored, loaded).IsOk());
     CHECK(restored.GetLayout().StackOf(u8"assets") != restored.GetLayout().StackOf(u8"console"));
     CHECK(restored.GetLayout().StackOf(u8"assets") == restored.GetLayout().CentralStack());
-    std::filesystem::remove_all(reinterpret_cast<const char*>(String(kDir).CStr()), ec);
+    (void)RemoveDirectoryRecursive(kDir);
 }
 
 TEST_CASE("layout store: the old dock's tree (version 1) reads into the new layout, saved as the new section after")
 {
     editor::app::RegisterEditorProjectSettingsTypes();
-    std::error_code ec;
-    std::filesystem::remove_all(reinterpret_cast<const char*>(String(kDir).CStr()), ec);
+    (void)RemoveDirectoryRecursive(kDir);
     (void)CreateDirectories(kDir);
     // The old section: a split of two tab groups, as the old dock wrote it.
     constexpr StringView kLegacy = u8R"(<root>
@@ -129,7 +126,7 @@ TEST_CASE("layout store: the old dock's tree (version 1) reads into the new layo
     REQUIRE(editor::app::SaveProjectEditorSettings(loaded, kDir).IsOk());
     const String saved = ReadText(path.AsView());
     CHECK(saved.AsView().ContainsIgnoreCase(u8"<bool name=\"captured\">true</bool>"));
-    std::filesystem::remove_all(reinterpret_cast<const char*>(String(kDir).CStr()), ec);
+    (void)RemoveDirectoryRecursive(kDir);
 }
 
 TEST_CASE("layout store: the old tree's nested splits each split their own region, with their shares")

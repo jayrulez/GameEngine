@@ -11,7 +11,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -75,8 +74,7 @@ namespace
 
         Bed()
         {
-            std::error_code ec;
-            std::filesystem::remove_all("asset_picker_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_picker_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"asset_picker_project", u8"Pick").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"asset_picker_project");
             REQUIRE(project);
@@ -108,8 +106,7 @@ namespace
             context.SetProjectEditorSettings(nullptr);
             context.SetProject(nullptr);
             project.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("asset_picker_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_picker_project");
         }
         // A mesh slot holding `current`.
         void Open(const Guid& current)
@@ -305,13 +302,15 @@ TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over 
 {
     Bed bed;
     content::Group* deep = bed.project->SourceDb().RootGroup()->CreateGroup(u8"Models");
-    for (const char8_t* name : {u8"Mechanics", u8"Bridge_Modular_With_A_Long_Name", u8"Bridge_Modular_Pieces_Also_Long"})
+    const char8_t* const groups[] = {u8"Mechanics", u8"Bridge_Modular_With_A_Long_Name", u8"Bridge_Modular_Pieces_Also_Long"};
+    for (const char8_t* name : groups)
         deep = deep->CreateGroup(StringView(name));
     REQUIRE(bed.project->SourceDb().RootGroup()->CreateInstance(u8"Cube.051", PickerMesh::StaticType()) != nullptr);
     REQUIRE(deep->CreateInstance(u8"Cube.051", PickerMesh::StaticType()) != nullptr);
 
     String sheet;
-    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    const char8_t* const sheets[] = {u8"Editor/editor.css", u8"Editor/density-default.css"};
+    for (const char8_t* file : sheets)
     {
         Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
         REQUIRE(bytes.HasValue());

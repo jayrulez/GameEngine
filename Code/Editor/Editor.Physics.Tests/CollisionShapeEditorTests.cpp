@@ -4,7 +4,6 @@
 // The collision shape editor, headless: its cook labels, its outline mesh, its thumbnail generator,
 // and the page over a scratch project.
 #include <doctest/doctest.h>
-#include <filesystem>
 #include "Core/Prelude.h"
 
 import foundation.core;
@@ -74,10 +73,9 @@ TEST_CASE("collision editor: staging without the render managers fails rather th
 {
     // A resource manager over an empty scratch database. Staging should fail before it binds
     // anything through it.
-    const std::filesystem::path dir = "scratch_editor_physics_stage";
-    std::error_code ec;
-    std::filesystem::remove_all(dir, ec);
-    std::filesystem::create_directories(dir, ec);
+    constexpr StringView dir = u8"scratch_editor_physics_stage";
+    (void)RemoveDirectoryRecursive(dir);
+    (void)CreateDirectories(dir);
     {
         foundation::vfs::NativeFileSystem mount(u8"scratch_editor_physics_stage", DefaultAllocator());
         content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
@@ -90,7 +88,7 @@ TEST_CASE("collision editor: staging without the render managers fails rather th
         CHECK(generator->Stage(Guid{}, stage, resources, framing) == editor::ThumbnailStageStep::Failed);
         generator->Unstage(stage); // harmless with nothing staged
     }
-    std::filesystem::remove_all(dir, ec);
+    (void)RemoveDirectoryRecursive(dir);
 }
 
 namespace

@@ -8,7 +8,6 @@
 // format involved is a versioned payload.
 #include <atomic> // gcc modules: pull in std::atomic bodies before this import mix
 #include <doctest/doctest.h>
-#include <filesystem>
 
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -65,8 +64,7 @@ namespace
     }
     void NukeTree(StringView root)
     {
-        std::filesystem::remove_all(
-            std::filesystem::path(reinterpret_cast<const char*>(String(root).CStr())));
+        (void)RemoveDirectoryRecursive(root);
     }
 }
 
@@ -364,8 +362,7 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
 // ships the effective values, and a preset file saved without the overrides reads none.
 TEST_CASE("export: a preset's display overrides what the dist manifest carries")
 {
-    const String dir = PathJoin(StringView(reinterpret_cast<const utf8char*>(
-                                    std::filesystem::temp_directory_path().string().c_str())),
+    const String dir = PathJoin(GetTempDirectory().AsView(),
                                 u8"scratch_preset_display_test");
     NukeTree(dir.AsView());
     REQUIRE(CreateDirectory(dir.AsView()));
@@ -486,8 +483,7 @@ TEST_CASE("export: a preset describes its fields through reflection")
 
 TEST_CASE("export: preset set round-trips through export_presets.xml")
 {
-    const String dir = PathJoin(StringView(reinterpret_cast<const utf8char*>(
-                                    std::filesystem::temp_directory_path().string().c_str())),
+    const String dir = PathJoin(GetTempDirectory().AsView(),
                                 u8"scratch_presets_test");
     NukeTree(dir.AsView());
     REQUIRE(CreateDirectory(dir.AsView()));
@@ -560,9 +556,7 @@ namespace
 {
     String TempDir(StringView leaf)
     {
-        return PathJoin(StringView(reinterpret_cast<const utf8char*>(
-                            std::filesystem::temp_directory_path().string().c_str())),
-                        leaf);
+        return PathJoin(GetTempDirectory().AsView(), leaf);
     }
     void SaveText(foundation::vfs::NativeFileSystem& fs, StringView name, StringView text)
     {

@@ -11,7 +11,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -270,8 +269,7 @@ TEST_CASE("resource-ref: the context's table asks the builders' join for the typ
 
 TEST_CASE("resource-ref: the context's pick asks the asset picker for the slot's types and value; a pick or None answers")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("resource_ref_project", ec);
+    (void)RemoveDirectoryRecursive(u8"resource_ref_project");
     REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"resource_ref_project", u8"Refs").IsOk());
     UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), u8"resource_ref_project");
     REQUIRE(project);
@@ -308,5 +306,5 @@ TEST_CASE("resource-ref: the context's pick asks the asset picker for the slot's
 
     context.SetProject(nullptr);
     project.Reset();
-    std::filesystem::remove_all("resource_ref_project", ec);
+    (void)RemoveDirectoryRecursive(u8"resource_ref_project");
 }

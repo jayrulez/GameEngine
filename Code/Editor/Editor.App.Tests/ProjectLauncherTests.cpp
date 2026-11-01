@@ -9,7 +9,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
-#include <string>
 
 import foundation.core;
 import foundation.settings;

@@ -12,7 +12,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -120,8 +119,7 @@ namespace
 
         explicit Bed(bool second = false)
         {
-            std::error_code ec;
-            std::filesystem::remove_all("asset_import_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_import_project");
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"asset_import_project", u8"Import").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), u8"asset_import_project");
             REQUIRE(project);
@@ -143,8 +141,7 @@ namespace
             import.Reset();
             context.SetProject(nullptr);
             project.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all("asset_import_project", ec);
+            (void)RemoveDirectoryRecursive(u8"asset_import_project");
         }
     };
 }

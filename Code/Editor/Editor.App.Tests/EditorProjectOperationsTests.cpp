@@ -9,7 +9,6 @@
 // again.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -97,8 +96,7 @@ namespace
 
         explicit Bench(StringView leaf) : dir(leaf)
         {
-            std::error_code ec;
-            std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+            (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"Ops").IsOk());
             project = EditorProject::Open(DefaultAllocator(), dir.AsView());
             REQUIRE(project);
@@ -112,8 +110,7 @@ namespace
             cook.Shutdown();
             jobs.Shutdown();
             project = nullptr;
-            std::error_code ec;
-            std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+            (void)RemoveDirectoryRecursive(dir.AsView());
         }
         app::EditorProjectOperationsSeams Seams(f64 timeoutSeconds = 30.0)
         {

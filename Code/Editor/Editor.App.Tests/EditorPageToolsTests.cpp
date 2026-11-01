@@ -7,7 +7,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.content;
@@ -108,8 +107,7 @@ RTTI_DEFINE_OBJECT(PagedAsset, "rtti::editor::app::test")
 TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close, and the "
           "arguments that override them")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_page_tools_project", ec);
+    (void)RemoveDirectoryRecursive(u8"mcp_page_tools_project");
     REQUIRE(EditorProject::Create(DefaultAllocator(), u8"mcp_page_tools_project", u8"Pages").IsOk());
     UniquePtr<EditorProject> project =
         EditorProject::Open(DefaultAllocator(), u8"mcp_page_tools_project");
@@ -230,5 +228,5 @@ TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close
     context.ClosePage(context.ActivePage());
     context.SetProject(nullptr); // before the project goes
     project = nullptr;
-    std::filesystem::remove_all("mcp_page_tools_project", ec);
+    (void)RemoveDirectoryRecursive(u8"mcp_page_tools_project");
 }

@@ -8,7 +8,6 @@
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.settings;
@@ -23,8 +22,7 @@ TEST_CASE("editor session: a project closed with a page open writes that page; a
 {
     app::RegisterEditorProjectSettingsTypes(); // the store's sections, as the editor registers them
     const String dir(u8"scratch_editor_session");
-    std::error_code ec;
-    std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+    (void)RemoveDirectoryRecursive(dir.AsView());
     REQUIRE(EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"Session").IsOk());
 
     EditorContext context{DefaultAllocator()};
@@ -75,5 +73,5 @@ TEST_CASE("editor session: a project closed with a page open writes that page; a
     CHECK(pages[0] == page);
     CHECK(active == page);
     project.Reset();
-    std::filesystem::remove_all(reinterpret_cast<const char*>(dir.CStr()), ec);
+    (void)RemoveDirectoryRecursive(dir.AsView());
 }

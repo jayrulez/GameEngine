@@ -81,7 +81,13 @@ class IHttpClient {
 - Native backend: requests run on a worker (the name lookup blocks), HTTP/1.1 over a `TcpSocket`,
   `https` through a `TlsStream`; bodies by Content-Length or chunked; redirects followed within the
   limit (an https page never redirected to http); timeouts; cancel; a response size cap.
-- Web backend: the browser's `fetch` (`emscripten_fetch`), the same interface.
+- Streaming (2026-11-01, for downloads): a request with `onHead` and `onBody` hears the final
+  response's status, headers and length (-1 when not given) once they arrive, then each piece of
+  its body, all inside `Pump` and before `done`; its response keeps no body. A redirect's own
+  response is not streamed, the size cap still counts every byte, and a cancel (even from inside
+  one of the callbacks) stops them.
+- Web backend: the browser's `fetch` (`emscripten_fetch`), the same interface. It hands a body over
+  whole, so a streamed request there hears its head and one piece together at the end.
 - v1 bounds: no keep-alive or HTTP/2, no cookies, no proxies, IPv4 (the socket layer's), one
   worker. The existing blocking localhost client stays for MCP and tests.
 

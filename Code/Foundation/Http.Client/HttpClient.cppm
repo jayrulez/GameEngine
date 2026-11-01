@@ -42,7 +42,14 @@ export namespace foundation::http
         Array<byte> body;
         f32 timeoutSeconds = 30.0f;            ///< over the whole request, redirects included
         u32 maxRedirects = 5;                  ///< 0: a redirect comes back as it is
-        usize maxResponseBytes = 16 * 1024 * 1024; ///< a body past this fails the request
+        usize maxResponseBytes = 16 * 1024 * 1024; ///< a body past this fails the request (streamed or kept)
+        /// To stream the response (a download): told the final response's status, headers and
+        /// body length (-1 when its head gives none) once they arrive, before any of its body.
+        Function<void(u16 status, const Array<HttpHeader>& headers, i64 length)> onHead;
+        /// To stream the response: each piece of its body as it arrives, in order. When set, the
+        /// response handed to `done` has an empty body. Both are called inside Pump, like `done`,
+        /// and never after a Cancel.
+        Function<void(Span<const byte> piece)> onBody;
 
         [[nodiscard]] static HttpClientRequest Get(StringView url)
         {

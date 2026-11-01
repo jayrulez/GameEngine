@@ -2,7 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The native HTTP client against real loopback servers: the engine's HttpServer for GET, POST,
-// redirects (followed, a POST turned GET by 303, a loop stopped), a timeout, a cancel and the size cap; a raw server for a chunked response, and for
+// redirects (followed, a POST turned GET by 303, a loop stopped), a timeout, a cancel and the size cap; a raw server for a chunked response, a
+// streamed body (its head, then its pieces; a redirect's own not streamed; the cap; a cancel), and for
 // https through the Mbed TLS backend with a self-signed certificate (trusted, and an https
 // request redirected to http refused). Also URL parsing and redirect resolution alone, the only
 // part a wasm build compiles (its client is the browser's: Http.Client.WebCheck checks it by hand).
@@ -333,6 +334,148 @@ TEST_CASE("http client: a chunked response")
     CHECK(r.status == 200);
     CHECK(r.BodyText() == StringView(u8"Wikipedia"));
 }
+
+#if !PLATFORM_WEB
+namespace
+{
+    // What a streamed request heard: its head, its pieces joined, how many pieces, its end.
+    struct Heard
+    {
+        u32 heads = 0;
+        u16 status = 0;
+        i64 length = -2;
+        Array<byte> body;
+        u32 pieces = 0;
+        bool done = false;
+        HttpClientResponse response;
+    };
+    HttpClientRequest Streamed(StringView url, Heard& heard)
+    {
+        HttpClientRequest request = HttpClientRequest::Get(url);
+        request.onHead = [&heard](u16 status, const Array<HttpHeader>&, i64 length)
+        {
+            ++heard.heads;
+            heard.status = status;
+            heard.length = length;
+        };
+        request.onBody = [&heard](Span<const byte> piece)
+        {
+            CHECK(heard.heads == 1u); // the head first
+            ++heard.pieces;
+            for (const byte b : piece)
+                heard.body.PushBack(b);
+        };
+        return request;
+    }
+    void Run(IHttpClient& client, Heard& heard, const Function<void()>& serve)
+    {
+        for (u32 i = 0; i < 10000 && client.Pending() > 0; ++i)
+        {
+            serve();
+            client.Pump();
+            if (client.Pending() > 0)
+                SleepMilliseconds(1);
+        }
+        CHECK(client.Pending() == 0u);
+        (void)heard;
+    }
+}
+
+TEST_CASE("http client: a streamed body arrives in pieces after its head, and the response keeps none of it")
+{
+    // 200 KB with a length: more than one read's worth, so more than one piece.
+    String big;
+    for (u32 i = 0; i < 200 * 1024; ++i)
+        big += static_cast<utf8char>(u8'a' + (i * 7) % 26);
+    RawServer server([&big](StringView) { return Format(u8"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", big.Size(), big.AsView()); });
+    UniquePtr<IHttpClient> client = CreateNativeHttpClient(DefaultAllocator(), nullptr);
+    Heard heard;
+    (void)client->Send(Streamed(Url(server.Port(), u8"/big").AsView(), heard), [&heard](const HttpClientResponse& r)
+                       {
+                           heard.done = true;
+                           heard.response = r;
+                       });
+    Run(*client, heard, [&]() { server.Pump(); });
+    REQUIRE(heard.done);
+    INFO(C(heard.response.error));
+    CHECK(heard.response.Ok());
+    CHECK(heard.response.status == 200);
+    CHECK(heard.response.body.IsEmpty()); // it went to onBody
+    CHECK(heard.heads == 1u);
+    CHECK(heard.status == 200);
+    CHECK(heard.length == static_cast<i64>(big.Size()));
+    CHECK(heard.pieces > 1u);
+    CHECK(StringView(reinterpret_cast<const utf8char*>(heard.body.Data()), heard.body.Size()) == big.AsView());
+
+    // The cap counts a streamed body too.
+    Heard capped;
+    HttpClientRequest small = Streamed(Url(server.Port(), u8"/big").AsView(), capped);
+    small.maxResponseBytes = 64 * 1024;
+    (void)client->Send(Move(small), [&capped](const HttpClientResponse& r)
+                       {
+                           capped.done = true;
+                           capped.response = r;
+                       });
+    Run(*client, capped, [&]() { server.Pump(); });
+    REQUIRE(capped.done);
+    CHECK_FALSE(capped.response.Ok());
+    CHECK(capped.body.Size() <= 64u * 1024u);
+}
+
+TEST_CASE("http client: a streamed chunked body has no length; only the final response of a redirect streams")
+{
+    RawServer server([](StringView head) {
+        if (head.ContainsIgnoreCase(u8"GET /moved "))
+            return String(u8"HTTP/1.1 302 Found\r\nLocation: /here\r\nContent-Length: 5\r\nConnection: close\r\n\r\nmoved");
+        return String(u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+                      u8"4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n");
+    });
+    UniquePtr<IHttpClient> client = CreateNativeHttpClient(DefaultAllocator(), nullptr);
+    Heard heard;
+    (void)client->Send(Streamed(Url(server.Port(), u8"/moved").AsView(), heard), [&heard](const HttpClientResponse& r)
+                       {
+                           heard.done = true;
+                           heard.response = r;
+                       });
+    Run(*client, heard, [&]() { server.Pump(); });
+    REQUIRE(heard.done);
+    INFO(C(heard.response.error));
+    CHECK(heard.heads == 1u); // the 302 is not heard
+    CHECK(heard.status == 200);
+    CHECK(heard.length == -1); // chunked: no length given
+    CHECK(StringView(reinterpret_cast<const utf8char*>(heard.body.Data()), heard.body.Size()) == StringView(u8"Wikipedia"));
+}
+
+TEST_CASE("http client: a streamed request cancelled at its head hears nothing more")
+{
+    String big;
+    for (u32 i = 0; i < 256 * 1024; ++i)
+        big += u8'x';
+    RawServer server([&big](StringView) { return Format(u8"HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", big.Size(), big.AsView()); });
+    UniquePtr<IHttpClient> client = CreateNativeHttpClient(DefaultAllocator(), nullptr);
+    Heard heard;
+    HttpRequestId id = 0;
+    HttpClientRequest request = Streamed(Url(server.Port(), u8"/").AsView(), heard);
+    IHttpClient* raw = client.Get();
+    request.onHead = [&heard, &id, raw](u16 status, const Array<HttpHeader>&, i64)
+    {
+        ++heard.heads;
+        heard.status = status;
+        raw->Cancel(id);
+    };
+    id = client->Send(Move(request), [&heard](const HttpClientResponse&) { heard.done = true; });
+    Run(*client, heard, [&]() { server.Pump(); });
+    for (u32 i = 0; i < 50; ++i) // anything still under way is dropped, not delivered
+    {
+        server.Pump();
+        client->Pump();
+        SleepMilliseconds(1);
+    }
+    CHECK(heard.heads == 1u);
+    CHECK(heard.pieces == 0u);
+    CHECK_FALSE(heard.done);
+}
+#endif
 
 TEST_CASE("http client: https through the TLS backend, and an https request redirected to http refused")
 {

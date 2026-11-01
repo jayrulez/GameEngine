@@ -128,12 +128,72 @@ namespace foundation::http
 
     namespace
     {
+        // What a Pump hands its caller: a streamed response's head or a piece of its body, or the
+        // end of a request.
         struct Delivery
         {
+            enum class Kind : u8
+            {
+                Head,
+                Body,
+                Done,
+            };
+            Kind kind = Kind::Done;
             HttpRequestId id = 0;
-            HttpClientResponse response;
+            HttpClientResponse response; // Head: its status and headers; Done: the whole of it
+            i64 length = -1;             // Head: the body's length, -1 when not given
+            Array<byte> piece;           // Body
             Function<void(const HttpClientResponse&)> done;
         };
+        // A request's stream callbacks, kept on the caller's thread while it runs.
+        struct Stream
+        {
+            HttpRequestId id = 0;
+            Function<void(u16, const Array<HttpHeader>&, i64)> onHead;
+            Function<void(Span<const byte>)> onBody;
+        };
+        // Hands a Pump's deliveries to their callbacks, in order: each stream's head, its pieces,
+        // then its end, after which its callbacks are forgotten. A request a callback cancels
+        // (`cancelled` grows as they run) hears nothing more.
+        void DeliverAll(Array<Delivery>& ready, Array<Stream>& streams, const Array<HttpRequestId>& cancelled)
+        {
+            const auto find = [&streams](HttpRequestId id) -> Stream*
+            {
+                for (Stream& s : streams)
+                    if (s.id == id)
+                        return &s;
+                return nullptr;
+            };
+            for (Delivery& d : ready)
+            {
+                bool dropped = false;
+                for (const HttpRequestId id : cancelled)
+                    dropped = dropped || id == d.id;
+                if (dropped)
+                    continue;
+                Stream* stream = find(d.id);
+                if (d.kind == Delivery::Kind::Head)
+                {
+                    if (stream != nullptr && stream->onHead)
+                        stream->onHead(d.response.status, d.response.headers, d.length);
+                    continue;
+                }
+                if (d.kind == Delivery::Kind::Body)
+                {
+                    if (stream != nullptr && stream->onBody)
+                        stream->onBody(d.piece.AsSpan());
+                    continue;
+                }
+                if (d.done)
+                    d.done(d.response);
+                for (usize i = 0; i < streams.Size(); ++i)
+                    if (streams[i].id == d.id)
+                    {
+                        streams.RemoveAt(i);
+                        break;
+                    }
+            }
+        }
     }
 
 #if !PLATFORM_WEB
@@ -148,6 +208,7 @@ namespace foundation::http
         struct Job
         {
             HttpRequestId id = 0;
+            bool streamed = false; // its head and body go out as they arrive
             HttpClientRequest request;
             Function<void(const HttpClientResponse&)> done;
         };
@@ -176,9 +237,13 @@ namespace foundation::http
             HttpRequestId Send(HttpClientRequest request, Function<void(const HttpClientResponse&)> done) override
             {
                 const HttpRequestId id = ++m_nextId;
+                const bool streamed = request.onHead || request.onBody;
+                if (streamed)
+                    m_streams.PushBack(Stream{id, Move(request.onHead), Move(request.onBody)});
                 {
                     ScopedLock lock(m_mutex);
                     Job job;
+                    job.streamed = streamed;
                     job.id = id;
                     job.request = Move(request);
                     job.done = Move(done);
@@ -191,6 +256,14 @@ namespace foundation::http
 
             void Cancel(HttpRequestId id) override
             {
+                if (m_pumping)
+                    m_cancelledInPump.PushBack(id); // its deliveries this Pump already took go unheard
+                for (usize i = 0; i < m_streams.Size(); ++i)
+                    if (m_streams[i].id == id)
+                    {
+                        m_streams.RemoveAt(i);
+                        break;
+                    }
                 ScopedLock lock(m_mutex);
                 for (usize i = 0; i < m_queue.Size(); ++i)
                     if (m_queue[i].id == id)
@@ -201,12 +274,13 @@ namespace foundation::http
                     }
                 if (m_current == id)
                     m_cancelCurrent = true; // the worker drops it at its next step
-                for (usize i = 0; i < m_delivered.Size(); ++i)
+                // Its head and pieces waiting for a Pump go too; its end, if it came, ends it.
+                for (usize i = m_delivered.Size(); i-- > 0;)
                     if (m_delivered[i].id == id)
                     {
+                        if (m_delivered[i].kind == Delivery::Kind::Done)
+                            --m_pending;
                         m_delivered.RemoveAt(i);
-                        --m_pending;
-                        return;
                     }
             }
 
@@ -217,11 +291,14 @@ namespace foundation::http
                     ScopedLock lock(m_mutex);
                     ready = Move(m_delivered);
                     m_delivered.Clear();
-                    m_pending -= ready.Size();
+                    for (const Delivery& d : ready)
+                        if (d.kind == Delivery::Kind::Done)
+                            --m_pending;
                 }
-                for (Delivery& d : ready)
-                    if (d.done)
-                        d.done(d.response);
+                m_pumping = true;
+                DeliverAll(ready, m_streams, m_cancelledInPump);
+                m_pumping = false;
+                m_cancelledInPump.Clear();
             }
 
             usize Pending() const override
@@ -247,7 +324,7 @@ namespace foundation::http
                         m_current = job.id;
                         m_cancelCurrent = false;
                     }
-                    HttpClientResponse response = Run(job.request);
+                    HttpClientResponse response = Run(job.id, job.streamed, job.request);
                     ScopedLock lock(m_mutex);
                     const bool cancelled = m_cancelCurrent;
                     m_current = 0;
@@ -258,6 +335,7 @@ namespace foundation::http
                         continue;
                     }
                     Delivery d;
+                    d.kind = Delivery::Kind::Done;
                     d.id = job.id;
                     d.response = Move(response);
                     d.done = Move(job.done);
@@ -271,8 +349,17 @@ namespace foundation::http
                 return m_cancelCurrent || m_stopping;
             }
 
-            // One request to its end: each redirect a connection of its own.
-            HttpClientResponse Run(const HttpClientRequest& request)
+            // Queues a streamed response's head or a piece of its body for the next Pump.
+            void Post(Delivery d)
+            {
+                ScopedLock lock(m_mutex);
+                if (!m_cancelCurrent)
+                    m_delivered.PushBack(Move(d));
+            }
+
+            // One request to its end: each redirect a connection of its own. A streamed request's
+            // final response goes out as it arrives (a redirect's own body is never streamed).
+            HttpClientResponse Run(HttpRequestId id, bool streamed, const HttpClientRequest& request)
             {
                 HttpClientResponse response;
                 const Stopwatch clock = Stopwatch::StartNew();
@@ -291,8 +378,40 @@ namespace foundation::http
                     HttpMessageParser parser(HttpMessageParser::Mode::Response, request.maxResponseBytes);
                     if (EqualsIgnoreCase(method.AsView(), u8"HEAD"))
                         parser.SetNoBody();
-                    if (!Exchange(at, method.AsView(), request.headers, body.AsSpan(), request, clock, parser, response.error))
+                    // Whether this hop's response is the one the caller hears: not a redirect
+                    // that will be followed.
+                    const auto heard = [&](const HttpMessageParser& p)
+                    {
+                        const i32 s = p.Status();
+                        const bool redirects = s == 301 || s == 302 || s == 303 || s == 307 || s == 308;
+                        return !(redirects && request.maxRedirects > 0 && !FindHeader(p.Headers(), u8"Location").IsEmpty());
+                    };
+                    bool headSent = false;
+                    const auto stream = [&](HttpMessageParser& p)
+                    {
+                        if (!streamed || !p.HeadParsed() || !heard(p))
+                            return;
+                        if (!headSent)
+                        {
+                            headSent = true;
+                            Delivery head;
+                            head.kind = Delivery::Kind::Head;
+                            head.id = id;
+                            head.response.status = static_cast<u16>(p.Status());
+                            head.response.headers = p.Headers();
+                            head.length = p.BodyLength();
+                            Post(Move(head));
+                        }
+                        Delivery piece;
+                        piece.kind = Delivery::Kind::Body;
+                        piece.id = id;
+                        p.TakeBody(piece.piece);
+                        if (!piece.piece.IsEmpty())
+                            Post(Move(piece));
+                    };
+                    if (!Exchange(at, method.AsView(), request.headers, body.AsSpan(), request, clock, parser, response.error, stream))
                         return response;
+                    stream(parser); // the last of it
                     const u16 status = static_cast<u16>(parser.Status());
                     const StringView location = FindHeader(parser.Headers(), u8"Location");
                     const bool redirect = status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
@@ -330,7 +449,8 @@ namespace foundation::http
             // One connection: the request out, the response read into `parser`. False, `error`
             // saying why, when no whole response arrived.
             bool Exchange(const HttpUrl& at, StringView method, const Array<HttpHeader>& headers, Span<const byte> body,
-                          const HttpClientRequest& request, const Stopwatch& clock, HttpMessageParser& parser, String& error)
+                          const HttpClientRequest& request, const Stopwatch& clock, HttpMessageParser& parser, String& error,
+                          const Function<void(HttpMessageParser&)>& received)
             {
                 using namespace foundation::net;
                 if (at.secure && m_tls == nullptr)
@@ -407,6 +527,8 @@ namespace foundation::http
                         {
                             moved = true;
                             (void)parser.Push(Span<const byte>(buffer, static_cast<usize>(n)));
+                            if (parser.State() == HttpParseState::NeedMore)
+                                received(parser); // a streamed body goes out as it arrives
                             if (parser.State() != HttpParseState::NeedMore)
                                 break;
                             continue;
@@ -442,6 +564,9 @@ namespace foundation::http
             ConditionVariable m_wake;
             Array<Job> m_queue;
             Array<Delivery> m_delivered;
+            Array<Stream> m_streams; // the caller's thread's alone: Send, Cancel and Pump
+            Array<HttpRequestId> m_cancelledInPump; // likewise
+            bool m_pumping = false;
             usize m_pending = 0;
             HttpRequestId m_current = 0;
             bool m_cancelCurrent = false;
@@ -480,6 +605,8 @@ namespace foundation::http
             HttpRequestId Send(HttpClientRequest request, Function<void(const HttpClientResponse&)> done) override
             {
                 const HttpRequestId id = ++m_nextId;
+                if (request.onHead || request.onBody)
+                    m_streams.PushBack(Stream{id, Move(request.onHead), Move(request.onBody)});
                 UniquePtr<Flight> f = MakeUnique<Flight>(*m_allocator);
                 f->owner = this;
                 f->id = id;
@@ -547,6 +674,14 @@ namespace foundation::http
 
             void Cancel(HttpRequestId id) override
             {
+                if (m_pumping)
+                    m_cancelledInPump.PushBack(id); // its deliveries this Pump already took go unheard
+                for (usize i = 0; i < m_streams.Size(); ++i)
+                    if (m_streams[i].id == id)
+                    {
+                        m_streams.RemoveAt(i);
+                        break;
+                    }
                 for (usize i = 0; i < m_flights.Size(); ++i)
                     if (m_flights[i]->id == id)
                     {
@@ -554,24 +689,28 @@ namespace foundation::http
                         m_flights.RemoveAt(i);
                         return;
                     }
-                for (usize i = 0; i < m_delivered.Size(); ++i)
+                for (usize i = m_delivered.Size(); i-- > 0;)
                     if (m_delivered[i].id == id)
-                    {
                         m_delivered.RemoveAt(i);
-                        return;
-                    }
             }
 
             void Pump() override
             {
                 Array<Delivery> ready = Move(m_delivered);
                 m_delivered.Clear();
-                for (Delivery& d : ready)
-                    if (d.done)
-                        d.done(d.response);
+                m_pumping = true;
+                DeliverAll(ready, m_streams, m_cancelledInPump);
+                m_pumping = false;
+                m_cancelledInPump.Clear();
             }
 
-            usize Pending() const override { return m_flights.Size() + m_delivered.Size(); }
+            usize Pending() const override
+            {
+                usize ends = 0;
+                for (const Delivery& d : m_delivered)
+                    ends += d.kind == Delivery::Kind::Done ? 1u : 0u;
+                return m_flights.Size() + ends;
+            }
 
         private:
             struct Flight
@@ -662,9 +801,30 @@ namespace foundation::http
                 return r;
             }
 
-            // The answer queued for Pump, the flight gone.
+            // The answer queued for Pump, the flight gone. The browser hands the body over whole, so
+            // a streamed response's head and its one piece go out together, just before its end.
             void Finish(Flight& f, HttpClientResponse response)
             {
+                bool streamed = false;
+                for (const Stream& s : m_streams)
+                    streamed = streamed || s.id == f.id;
+                if (streamed && response.Ok())
+                {
+                    Delivery head;
+                    head.kind = Delivery::Kind::Head;
+                    head.id = f.id;
+                    head.response.status = response.status;
+                    head.response.headers = response.headers;
+                    head.length = static_cast<i64>(response.body.Size());
+                    m_delivered.PushBack(Move(head));
+                    Delivery piece;
+                    piece.kind = Delivery::Kind::Body;
+                    piece.id = f.id;
+                    piece.piece = Move(response.body);
+                    response.body.Clear();
+                    if (!piece.piece.IsEmpty())
+                        m_delivered.PushBack(Move(piece));
+                }
                 Delivery d;
                 d.id = f.id;
                 d.response = Move(response);
@@ -691,6 +851,9 @@ namespace foundation::http
             IAllocator* m_allocator;
             Array<UniquePtr<Flight>> m_flights;
             Array<Delivery> m_delivered;
+            Array<Stream> m_streams;
+            Array<HttpRequestId> m_cancelledInPump;
+            bool m_pumping = false;
             HttpRequestId m_nextId = 0;
         };
     }

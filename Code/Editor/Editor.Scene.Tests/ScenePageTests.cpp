@@ -170,6 +170,24 @@ namespace
     };
 }
 
+namespace
+{
+    // Measures one entity as a box far from the origin, as a render or physics domain answers.
+    class FarBox final : public scene::SceneSystem, public scene::ISceneEntityBounds
+    {
+    public:
+        scene::EntityHandle entity = scene::EntityHandle::Invalid();
+        [[nodiscard]] scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
+        [[nodiscard]] bool EntityBounds(scene::Scene&, scene::EntityHandle e, AABB& out) override
+        {
+            if (e != entity)
+                return false;
+            out = AABB{Float3{190.0f, 0.0f, -310.0f}, Float3{210.0f, 10.0f, -290.0f}};
+            return true;
+        }
+    };
+}
+
 TEST_CASE("scene page: its scene opened into a scene of its own, the viewport in its pane, its bar's Save following its own page")
 {
     Bed bed;
@@ -398,6 +416,49 @@ TEST_CASE("scene view state: the panes' weights and the prefs' nested ratios con
     SceneViewState::SplitsFromWeights(ScenePaneWeights{2.0f, 6.0f, 2.0f}, hierarchy, inspector); // any scale
     CHECK(hierarchy == doctest::Approx(0.2f));
     CHECK(inspector == doctest::Approx(0.75f));
+}
+
+TEST_CASE("scene view state: a scene is framed whole in perspective from above, and nothing measured leaves the camera")
+{
+    EditorCamera camera;
+    const Float3 before = camera.position;
+    CHECK_FALSE(SceneViewState::FrameWhole(AABB::Empty(), camera));
+    CHECK(camera.position == before);
+
+    const AABB bounds{Float3{90.0f, 0.0f, 90.0f}, Float3{110.0f, 10.0f, 110.0f}};
+    REQUIRE(SceneViewState::FrameWhole(bounds, camera));
+    CHECK_FALSE(camera.orthographic);
+    const Float3 toCenter = bounds.Center() - camera.position;
+    const f32 distance = Length(toCenter);
+    CHECK(Dot(toCenter / distance, camera.Forward()) == doctest::Approx(1.0f).epsilon(0.001)); // it looks at the middle
+    CHECK(camera.position.y > bounds.Center().y);                                            // from above
+    CHECK(distance * Sin(0.5f * camera.fovY) >= Length(bounds.Extents()) - 0.01f);            // the bounds fit its view
+    CHECK(camera.focusDistance == doctest::Approx(distance));                                 // an orbit turns about it
+    CHECK(camera.farZ > distance + Length(bounds.Extents()));
+}
+
+TEST_CASE("scene page: a scene with no saved view opens showing what is in it, not the origin")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    const Float3 opened = page->Viewport().Camera().position;
+    // Content far from the origin, measured as a domain would.
+    auto* boxes = page->ScenePtr()->AddSystem<FarBox>();
+    boxes->entity = page->ScenePtr()->CreateEntity(u8"Far");
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const EditorCamera& camera = page->Viewport().Camera();
+    CHECK_FALSE(camera.position == opened);
+    const Float3 toCenter = Float3{200.0f, 5.0f, -300.0f} - camera.position;
+    CHECK(Dot(Normalized(toCenter), camera.Forward()) == doctest::Approx(1.0f).epsilon(0.001));
+    page->OnClose();
+
+    // Its view was saved as it closed: the next open keeps it, framing nothing again.
+    UniquePtr<SceneEditorPage> again = bed.Open(*bed.level);
+    const Float3 kept = again->Viewport().Camera().position;
+    again->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(again->Viewport().Camera().position == kept);
+    CHECK(kept.x == doctest::Approx(camera.position.x));
+    again->OnClose();
 }
 
 TEST_CASE("prefab flows: a prefab's page refuses an instance of itself, saying so")

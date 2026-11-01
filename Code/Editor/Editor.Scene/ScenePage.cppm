@@ -230,6 +230,12 @@ export namespace editor
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once the scene has
         // settled when there is no picture yet, and on every save of it.
+        // A scene with no saved view is shown whole once its content has loaded (its bounds known),
+        // unless the camera was moved meanwhile: where it opened, to tell.
+        bool m_frameWholePending = false;
+        Float3 m_openedEye{};
+        f32 m_openedYaw = 0.0f;
+        f32 m_openedPitch = 0.0f;
         bool m_thumbnailChecked = false;
         f32 m_thumbnailWait = 0.0f;
     };

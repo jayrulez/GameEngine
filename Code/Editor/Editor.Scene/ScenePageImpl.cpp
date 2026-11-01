@@ -456,6 +456,20 @@ namespace editor
     void SceneEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
     {
         m_viewport->CompleteCapture(host); // a capture recorded last frame: the GPU finished the copy
+        // A scene with no saved view opens showing it whole once nothing is left loading, so its
+        // bounds are whole; a camera the user has moved by then stays where they put it.
+        if (m_frameWholePending && m_scene != nullptr && (m_context->Resources() == nullptr || m_context->Resources()->PendingCount() == 0))
+        {
+            m_frameWholePending = false;
+            EditorCamera& camera = m_viewport->Camera();
+            if (camera.position == m_openedEye && camera.yaw == m_openedYaw && camera.pitch == m_openedPitch)
+            {
+                m_scene->UpdateTransforms(); // the bounds are world bounds
+                AABB bounds = AABB::Empty();
+                if (SceneWorldBounds(*m_scene, bounds))
+                    (void)SceneViewState::FrameWhole(bounds, camera);
+            }
+        }
         // A project with no launcher picture gets one from its default scene, once the view has
         // been up a moment with nothing left loading (content pops in asynchronously).
         if (!m_thumbnailChecked && IsProjectDefaultScene())
@@ -806,7 +820,15 @@ namespace editor
         if (m_tools)
             m_tools->SetPlace(pref.hasToolPanelPlace ? &pref.toolPanelPlace : nullptr);
         if (!SceneViewState::RestoreCamera(pref, m_viewport->Camera()))
-            return; // never saved by a page: the origin's framing stands
+        {
+            // Never saved by a page: shown whole once its content has loaded (OnUpdate).
+            const EditorCamera& camera = m_viewport->Camera();
+            m_frameWholePending = true;
+            m_openedEye = camera.position;
+            m_openedYaw = camera.yaw;
+            m_openedPitch = camera.pitch;
+            return;
+        }
         if (m_editContext && m_scene != nullptr)
         {
             const Array<Guid> live = SceneViewState::LiveSelection(pref, *m_scene);

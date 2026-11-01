@@ -6,7 +6,8 @@
 // Where a scene was left, kept per scene in the project's editor settings (SceneViewPref): the
 // overlays, the camera, the selection and the page's panes. The page reads it when it opens and
 // writes the whole of it on a toggle and when it closes, so saving one part never brings back
-// another's default. The panes are one splitter of three (hierarchy, viewport, inspector), while
+// another's default. A scene with no saved view is shown whole (FrameWhole), as its thumbnail
+// shows it. The panes are one splitter of three (hierarchy, viewport, inspector), while
 // the prefs keep two nested ratios (hierarchy against the rest, then viewport against inspector),
 // so the weights convert both ways and the prefs' format stays as it is.
 
@@ -40,6 +41,26 @@ export namespace editor
     // partition has an inline function at namespace scope that instantiates a template.
     struct SceneViewState
     {
+        /// Places `camera` to show `bounds` (a scene's: SceneWorldBounds) whole: in perspective, 30 degrees above the ground and
+        /// turned a little, far enough back for its field of view to hold them. A shot of the place
+        /// more than a plan of it. False, the camera untouched, when there are no bounds.
+        static bool FrameWhole(const AABB& bounds, EditorCamera& camera)
+        {
+            if (!bounds.IsValid())
+                return false;
+            const Float3 center = bounds.Center();
+            const f32 radius = Max(Length(bounds.Extents()), 0.05f);
+            camera.SetOrthographic(false);
+            camera.yaw = 0.6f;
+            camera.pitch = -0.52f;
+            const f32 distance = radius / Sin(0.5f * camera.fovY);
+            camera.position = center - camera.Forward() * distance;
+            camera.focusDistance = distance; // an orbit turns about the scene's middle
+            camera.nearZ = Max(0.1f, 0.5f * (distance - radius));
+            camera.farZ = Max(camera.farZ, distance + 2.0f * radius);
+            return true;
+        }
+
         /// The weights from the prefs' nested ratios: `hierarchy` of the whole, then `inspector`
         /// (the viewport's share) of the rest.
         [[nodiscard]] static ScenePaneWeights WeightsFromSplits(f32 hierarchy, f32 inspector)

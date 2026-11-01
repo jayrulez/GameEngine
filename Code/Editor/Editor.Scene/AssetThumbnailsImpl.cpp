@@ -323,21 +323,6 @@ namespace editor
             return bounds;
         }
 
-        // Combined world bounds of every entity, as each component kind measures it (a mesh, a body's
-        // shape: a terrain's heightfield): the editor's own framing measures the same.
-        [[nodiscard]] AABB WorldSceneBounds(scene::Scene& stage)
-        {
-            AABB bounds = AABB::Empty();
-            stage.ForEachEntity(
-                [&](scene::EntityHandle entity)
-                {
-                    AABB box;
-                    if (scene::EntityWorldBounds(stage, entity, box))
-                        bounds = bounds.IsValid() ? Merge(bounds, box) : box;
-                });
-            return bounds;
-        }
-
         // True once the ref has loaded or failed: MeshRefsSettled's check for one animator ref.
         template <typename TRef>
         [[nodiscard]] bool RefSettled(TRef& ref)
@@ -507,20 +492,12 @@ namespace editor
                     return ThumbnailStageStep::Pending;
                 }
                 stage.UpdateTransforms();
-                FrameFromBounds(WorldSceneBounds(stage), outFraming);
+                AABB bounds = AABB::Empty();
+                (void)SceneWorldBounds(stage, bounds);
+                FrameFromBounds(bounds, outFraming);
                 EditorCamera camera;
                 if (!SceneViewState::RestoreCamera(SavedView(id), camera))
-                {
-                    // Never viewed: the whole scene in perspective, from 30 degrees above the ground
-                    // and turned a little, far enough back to hold its bounds: a shot of the place
-                    // more than a plan of it.
-                    camera.yaw = 0.6f;
-                    camera.pitch = -0.52f;
-                    const f32 distance = outFraming.radius / Sin(0.5f * camera.fovY);
-                    camera.position = outFraming.center - camera.Forward() * distance;
-                    camera.nearZ = Max(0.1f, 0.5f * (distance - outFraming.radius));
-                    camera.farZ = distance + 2.0f * outFraming.radius;
-                }
+                    (void)SceneViewState::FrameWhole(bounds, camera); // never viewed: the whole scene, as its page first shows it
                 outFraming.hasView = true;
                 outFraming.eye = camera.DrawEye();
                 outFraming.view = Float4x4::LookAtRH(outFraming.eye, outFraming.eye + camera.Forward(), camera.Up());

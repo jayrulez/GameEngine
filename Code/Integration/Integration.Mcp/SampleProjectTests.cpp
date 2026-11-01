@@ -239,11 +239,11 @@ TEST_CASE("sample project: every PaperKid source reads at the CURRENT data versi
     CheckSampleProject(u8"PaperKid", u8"scratch_paperkid_versions", {74u, 53.0, 58u});
 }
 
-TEST_CASE("sample project: Sky Hopper (PlatformerGame) reads, cooks and its overrides match")
+TEST_CASE("sample project: Sky Hopper reads, cooks and its overrides match")
 {
     // 13 models with their parts, 12 clips of audio, 2 fonts, 5 effects and prefabs, 3 levels,
     // 8 scripts, 9 screens and a theme, the input map
-    CheckSampleProject(u8"PlatformerGame", u8"scratch_platformer_versions", {150u, 100.0, 20u});
+    CheckSampleProject(u8"SkyHopper", u8"scratch_skyhopper_versions", {150u, 100.0, 20u});
 }
 
 TEST_CASE("sample project: Snowline reads, cooks and its overrides match")

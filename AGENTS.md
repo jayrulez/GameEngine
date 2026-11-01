@@ -77,7 +77,7 @@ cmake --build build/clang -j4                          # everything
 MCP tools, from authoring scripts kept in its `Tools/` folder (such as Blender models, level and asset
 generators, sounds), each with a README:
 
-- **Sky Hopper** (`PlatformerGame`): a 3D platformer.
+- **Sky Hopper** (`SkyHopper`): a 3D platformer.
 - **PaperKid**: an arcade paper-route game.
 - **Snowline**: a snowboard time trial on generated terrain.
 - **Lamplight**: a stealth heist in a manor at night.

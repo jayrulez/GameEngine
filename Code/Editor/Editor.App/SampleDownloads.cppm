@@ -27,10 +27,10 @@ export namespace editor::app
     /// One sample game a release offers.
     struct SampleInfo
     {
-        String folder;      ///< its folder in the repository ("PlatformerGame"), and the one made for it
+        String folder;      ///< its folder in the repository ("SkyHopper"), and the one made for it
         String name;        ///< its project's name ("Sky Hopper")
         String description; ///< one line on what it is
-        String archive;     ///< its zip in the release ("sample-PlatformerGame.zip")
+        String archive;     ///< its zip in the release ("sample-SkyHopper.zip")
         String picture;     ///< its picture in the release
         String sha256;      ///< the zip's digest, 64 lowercase hex digits
         u64 size = 0;         ///< the zip's bytes

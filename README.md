@@ -72,7 +72,7 @@ games and the Shader Gallery were built through the engine's MCP tools.
 [The website](https://assiduousengine.github.io/#games) plays them in a browser and has their
 Windows, Linux and Steam Deck downloads (the Shader Gallery has no Steam Deck build).
 
-**Sky Hopper** (`PlatformerGame`) is a small 3D platformer, played through to the end over the
+**Sky Hopper** (`SkyHopper`) is a small 3D platformer, played through to the end over the
 MCP tools by an AI agent while it was built: five levels, coins, enemies and hazards, three lives
 with stars and best scores saved, menus with volume settings, music and effects, and gamepad
 support throughout.

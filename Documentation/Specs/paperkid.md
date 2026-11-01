@@ -105,7 +105,7 @@ whichever opened it). Keyboard and gamepad drive every screen, as in Sky Hopper.
 
 ## Engine mapping (today's surface)
 
-What exists is cited by what Sky Hopper ships with (`Data/SampleProjects/PlatformerGame`),
+What exists is cited by what Sky Hopper ships with (`Data/SampleProjects/SkyHopper`),
 which uses all of it through the MCP; the exact signatures come from `script_api`.
 
 - **Game tier** (`PaperKidGame.as`, the project's startup script): the state machine, score,

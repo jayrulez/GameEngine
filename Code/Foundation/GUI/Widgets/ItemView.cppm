@@ -41,7 +41,6 @@
 
 module;
 #include "Core/Prelude.h"
-#include <algorithm> // sort, for the items that have accessibility nodes
 #include "Core/Reflection/Reflect.h"
 
 export module foundation.gui:item_view;
@@ -626,7 +625,7 @@ export namespace foundation::gui
                     (void)wanted.Insert(item);
             for (i32 item : wanted)
                 out.PushBack(item);
-            std::sort(out.begin(), out.end());
+            out.Sort([](i32 a, i32 b) { return a < b; }); // a few pages of items, so this is cheap
         }
         /// Returns the item's key among this view's accessibility nodes, creating it the first time
         /// the item is asked for. The key stays with the item as rows are recycled, scrolled and

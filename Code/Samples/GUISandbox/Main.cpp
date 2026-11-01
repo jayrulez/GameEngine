@@ -13,7 +13,6 @@
 // Drawn through VG with everything it has (analytic boxes, layers and blurs, the MSAA and stencil
 // pass), only on frames that need it. Input reaches the root on show through GuiInputBridge.
 
-#include <algorithm> // sort (the soak's frame times)
 #include <new>
 #include <cstdio> // printf, fprintf
 #include <cstdlib> // atof
@@ -1899,7 +1898,7 @@ void GUISandbox::SoakFrame()
         return;
     m_soakNextRow += 10.0f;
     Array<f32> sorted = m_soakFrames;
-    std::sort(sorted.begin(), sorted.end());
+    sorted.Sort([](f32 a, f32 b) { return a < b; });
     const auto at = [&sorted](f32 share) { return sorted[Min(sorted.Size() - 1, static_cast<usize>(share * static_cast<f32>(sorted.Size())))]; };
     const TrackingAllocator& tracking = AppRoot();
     std::printf("GUISandbox soak %.0fs: p50 %.2f ms, p95 %.2f ms, p99 %.2f ms, %llu live allocations, %.1f MiB resident\n",

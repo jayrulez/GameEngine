@@ -14,9 +14,11 @@ target_sources(Engine.Project
 # Engine version: the single source of truth is project(VERSION) in the root CMakeLists.
 # Scoped to this target (not the global policy) so a version bump only rebuilds engine.project and
 # its importers, not the whole engine. ProjectModule.cppm bakes these into kEngineVersion*, which
-# flows to saved project manifests, export template.xml, and the version report.
+# flows to saved project manifests, export template.xml, and the version report, and the release
+# repository (ENGINE_RELEASE_REPOSITORY in the root CMakeLists) into kEngineReleaseRepository.
 target_compile_definitions(Engine.Project PRIVATE
     ENGINE_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     ENGINE_VERSION_MINOR=${PROJECT_VERSION_MINOR}
     ENGINE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-    ENGINE_VERSION_STRING=u8\"${PROJECT_VERSION}\")
+    ENGINE_VERSION_STRING=u8\"${PROJECT_VERSION}\"
+    ENGINE_RELEASE_REPOSITORY=u8\"${ENGINE_RELEASE_REPOSITORY}\")

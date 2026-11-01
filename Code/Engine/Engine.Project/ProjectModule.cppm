@@ -39,6 +39,21 @@ export namespace engine::project
     inline constexpr u32 kEngineVersionPatch = ENGINE_VERSION_PATCH;
     inline constexpr StringView kEngineVersionString = ENGINE_VERSION_STRING;
 
+    // The GitHub repository (owner/name) whose releases carry what this engine downloads for its
+    // own version, such as the sample games: ENGINE_RELEASE_REPOSITORY in the root CMakeLists.
+#ifndef ENGINE_RELEASE_REPOSITORY
+#define ENGINE_RELEASE_REPOSITORY u8"jayrulez/GameEngine"
+#endif
+    inline constexpr StringView kEngineReleaseRepository = ENGINE_RELEASE_REPOSITORY;
+
+    /// Where `file` attached to this engine's own release is downloaded from: release
+    /// v<version> of the release repository. A build between releases names a release that may
+    /// not exist yet.
+    [[nodiscard]] inline String EngineReleaseDownloadUrl(StringView file)
+    {
+        return Format(u8"https://github.com/{}/releases/download/v{}/{}", kEngineReleaseRepository, kEngineVersionString, file);
+    }
+
     inline constexpr StringView kProjectManifestFile = u8"Project.xml";
     inline constexpr StringView kProjectContentDir = u8"Content";
     inline constexpr StringView kProjectSourcesDir = u8"Sources";

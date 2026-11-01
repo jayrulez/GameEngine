@@ -41,6 +41,9 @@ option(ENGINE_SHARED_LIBS "Build engine libraries as shared libraries" OFF)
 # setting them by hand works too.
 set(ENGINE_GAME_NATIVE_DIR "" CACHE PATH "Game project's native source directory (adds it to this build)")
 set(ENGINE_GAME_NATIVE_TARGET "" CACHE STRING "The game native target name (enables Engine.GamePlayer)")
+# The GitHub repository (owner/name) whose releases carry what an editor downloads for its own
+# version, such as the sample games: release v<project VERSION> of it. Stamped into engine.project.
+set(ENGINE_RELEASE_REPOSITORY "jayrulez/GameEngine" CACHE STRING "GitHub owner/name whose releases carry the editor's downloads (the sample games)")
 if(ENGINE_SHARED_LIBS AND EMSCRIPTEN)
     # Web is always a single self-contained binary: browsers have no runtime plugin
     # loading, Emscripten dynamic linking gives up whole-program optimization and bloats

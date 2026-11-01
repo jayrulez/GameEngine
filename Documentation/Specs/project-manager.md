@@ -67,8 +67,11 @@ opened from this tab. With no network, the tab says it could not reach GitHub, w
 Where they come from: each release (release.yml) attaches one zip per sample (its game: not
 `Tools/`, `Cooked/`, `.cache/`, `Editor/` or `Dist/`) and a `samples.json` naming each sample's
 name, description, picture, size, SHA-256 and folder. The editor reads the `samples.json` of the
-release that matches its own engine version, downloads a zip over the engine's HTTP client
-(HTTPS, redirects, the system's certificate roots), checks its SHA-256, and unpacks it.
+release that matches its own engine version (release v<version> of `ENGINE_RELEASE_REPOSITORY`,
+stamped from CMake: `jayrulez/GameEngine` until the move to the organisation; a build between
+releases says no samples are published for its version, and never takes a newer release's),
+downloads a zip over the engine's HTTP client (HTTPS, redirects, the system's certificate roots),
+checks its SHA-256, and unpacks it.
 
 ## Phases
 

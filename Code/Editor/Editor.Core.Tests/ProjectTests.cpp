@@ -270,6 +270,17 @@ TEST_CASE("project: manifest round-trips the startup-script asset guid under a v
     (void)FileDelete(PathJoin(dir, u8"Project.xml"));
 }
 
+TEST_CASE("project: this engine's release downloads come from its own version's release")
+{
+    // The repository CMake stamps (ENGINE_RELEASE_REPOSITORY), at v<the engine's version>.
+    CHECK(engine::project::kEngineReleaseRepository.ContainsIgnoreCase(u8"/")); // owner/name
+    const String url = engine::project::EngineReleaseDownloadUrl(u8"samples.json");
+    const String expected = Format(u8"https://github.com/{}/releases/download/v{}/samples.json", engine::project::kEngineReleaseRepository,
+                                   engine::project::kEngineVersionString);
+    CHECK(url == expected);
+    CHECK(url.AsView().StartsWith(u8"https://github.com/"));
+}
+
 TEST_CASE("project: manifests carry the engine version stamp; a stale-version manifest is refused")
 {
     const StringView dir = u8"scratch_project_engine_ver_test";

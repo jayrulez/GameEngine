@@ -47,8 +47,19 @@ TEST_CASE("app actions: a menu registers what can run, with its keys; what needs
 
     app::ViewActions view;
     view.screenshot = []() {};
+    int assets = 0, console = 0;
+    view.assets = [&assets]() { ++assets; };
+    view.console = [&console]() { ++console; };
     app::RegisterViewActions(actions, Move(view));
     CHECK(actions.Shortcut(u8"view.screenshot") == EditorShortcut::Of(u8"f12"));
+    // Assets and Console come back from the View menu, with no project as with one.
+    REQUIRE(actions.Find(u8"view.assets") != nullptr);
+    CHECK(actions.Find(u8"view.assets")->menuPath == StringView(u8"View/Assets"));
+    CHECK(actions.Find(u8"view.console")->menuPath == StringView(u8"View/Console"));
+    CHECK(actions.Execute(u8"view.assets", nullptr).IsOk());
+    CHECK(actions.Execute(u8"view.console", nullptr).IsOk());
+    CHECK(assets == 1);
+    CHECK(console == 1);
     CHECK(actions.Find(u8"view.commandPalette") == nullptr);
 }
 

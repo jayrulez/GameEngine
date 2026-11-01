@@ -250,6 +250,8 @@ export namespace editor::app
     struct ViewActions
     {
         Function<void()> resetLayout;
+        Function<void()> assets;  ///< brings the Assets panel back, or to the front
+        Function<void()> console; ///< likewise the Console
         Function<void()> profiler;
         Function<bool()> profilerRecording;
         Function<void()> profilerRecord;
@@ -260,6 +262,20 @@ export namespace editor::app
     {
         detail::Add(actions, detail::Declare(u8"view.resetLayout", u8"Reset Layout", u8"Reset the panel layout to the default", u8"View/Reset Layout", 100),
                     Move(run.resetLayout));
+        // The closable panels, each shown again where it belongs (or brought to the front) without
+        // undoing the rest of the layout, as Reset Layout would.
+        if (run.assets)
+        {
+            EditorActionDeclaration d = detail::Declare(u8"view.assets", u8"Assets", u8"Show the Assets panel", u8"View/Assets", 150);
+            d.readOnly = true; // shows a panel; nothing in the project changes
+            detail::Add(actions, Move(d), Move(run.assets));
+        }
+        if (run.console)
+        {
+            EditorActionDeclaration d = detail::Declare(u8"view.console", u8"Console", u8"Show the Console panel", u8"View/Console", 160);
+            d.readOnly = true;
+            detail::Add(actions, Move(d), Move(run.console));
+        }
         if (run.profiler)
         {
             EditorActionDeclaration d = detail::Declare(

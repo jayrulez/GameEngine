@@ -105,6 +105,25 @@ TEST_CASE("editor dock: Reset Layout takes the default again, a closed panel sho
     CHECK(bed.Layout().StackOf(editor::app::kPanelProject) == bed.Layout().CentralStack());
 }
 
+TEST_CASE("editor dock: a closed Console or Assets comes back where it belongs, the rest of the layout kept")
+{
+    Bed bed;
+    // Moved first, so a reset would show: Assets beside the Project panel instead of under it.
+    REQUIRE(bed.dock.Controller().Edit([](gui::DockLayout& layout)
+                                       { return layout.MoveBeside(editor::app::kPanelAssets, layout.CentralStack(), gui::DockSide::End, 0.3f); })
+                .Ok());
+    const gui::DockNodeId assetsStack = bed.Layout().StackOf(editor::app::kPanelAssets);
+    REQUIRE(bed.dock.Controller().Close(editor::app::kPanelConsole).Ok());
+    CHECK(bed.Layout().StackOf(editor::app::kPanelConsole) == gui::kNoDock);
+    bed.dock.Present(editor::app::kPanelConsole);
+    CHECK(bed.Layout().StackOf(editor::app::kPanelConsole) != gui::kNoDock);
+    CHECK(bed.Layout().StackOf(editor::app::kPanelAssets) == assetsStack); // not reset
+
+    REQUIRE(bed.dock.Controller().Close(editor::app::kPanelAssets).Ok());
+    bed.dock.Present(editor::app::kPanelAssets);
+    CHECK(bed.Layout().StackOf(editor::app::kPanelAssets) != gui::kNoDock);
+}
+
 TEST_CASE("editor dock: the Profiler is a page, out of the default layout until presented, then in the page area and to the front")
 {
     Bed bed;

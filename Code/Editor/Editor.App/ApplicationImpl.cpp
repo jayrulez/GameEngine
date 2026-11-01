@@ -1011,6 +1011,8 @@ namespace editor::app
 
         ViewActions view;
         view.resetLayout = [self]() { self->m_dock.ResetLayout(); };
+        view.assets = [self]() { self->m_dock.Present(kPanelAssets); };
+        view.console = [self]() { self->m_dock.Present(kPanelConsole); };
         view.profiler = [self]() { self->m_dock.Present(kPanelProfiler); };
         view.profilerRecording = [self]() { return self->m_profiler && self->m_profiler->IsRecording(); };
         view.profilerRecord = [self]()

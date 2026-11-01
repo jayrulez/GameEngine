@@ -1,6 +1,6 @@
 # The project manager
 
-Status: P1 to P3 BUILT (2026-10-31); P4 and P5 to come. Agreed with the user over a mockup. Replaces the project manager of
+Status: P1 to P4 BUILT (2026-11-01); P5 to come. Agreed with the user over a mockup. Replaces the project manager of
 editor-gui.md section 5.1 (layer 13) where they differ.
 
 Goal: the screen the editor opens on without a project looks and behaves like a finished tool:
@@ -89,6 +89,9 @@ it is handed to the user for the visual check.
   itself a pure function with its tests (the dialog only shows it).
 - **P4. What downloading needs.** A zip reader (deflate through stb's zlib decoder, no new
   library), with tests over zips made by the system's tools; the HTTP client's progress callback.
+  Built: `foundation.zip` (stored and deflate, CRC-checked, a name outside the folder refusing the
+  archive, no Zip64), and the HTTP client streams a response (`onHead`, `onBody`) so a download
+  is written as it arrives and its progress is its bytes against the head's length.
 - **P5. Samples.** release.yml packs the samples and `samples.json`; the Samples tab, its
   download dialog (P3's check), progress and cancel, the SHA-256 check, unpacking, and the entry
   in the list.

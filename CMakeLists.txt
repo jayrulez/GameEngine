@@ -482,6 +482,7 @@ add_subdirectory(Code/Foundation/Net.WebSocket)     # native WebSocket accept pa
 add_subdirectory(Code/Foundation/Net.Tls)           # TLS interfaces: a session as a byte engine, the backend interface, the system's root certificates
 add_subdirectory(Code/Foundation/Net.Tls.MbedTLS)   # the Mbed TLS backend (the only module linking ThirdParty::MbedTLS)
 add_subdirectory(Code/Foundation/Http.Client)       # the HTTP client interface and the native HTTP/1.1 client over plain and TLS streams
+add_subdirectory(Code/Foundation/Zip)               # reading and extracting zip archives (stored and deflate through stb), for the sample downloads
 add_subdirectory(Code/Foundation/Net.Manager)       # per-instance networked endpoint (NetworkManager) and the Net script facade (over Net and Script)
 add_subdirectory(Code/Foundation/Http.Script)       # the Http script facade over a run's HTTP client
 add_subdirectory(Code/Engine/Engine.Net)     # once-per-context NetworkSubsystem (injects NetworkComponentManager into scenes)
@@ -770,6 +771,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Foundation/Net.Tls.MbedTLS.Tests           Foundation::Net.Tls.MbedTLS)
     util_test_suite(Code/Foundation/Http.Client.Tests               Foundation::Http.Client)
     util_test_suite(Code/Foundation/Http.Tests                      Foundation::Http)
+    util_test_suite(Code/Foundation/Zip.Tests                       Foundation::Zip)
     util_test_suite(Code/Foundation/Particles.Resource.Tests        Foundation::Particles.Resource)
     util_test_suite(Code/Foundation/Particles.Tests                 Foundation::Particles)
     util_test_suite(Code/Foundation/Physics.Tests                   Foundation::Physics)

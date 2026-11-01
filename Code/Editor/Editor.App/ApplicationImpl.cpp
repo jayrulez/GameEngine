@@ -108,6 +108,26 @@ namespace editor::app
                 self->m_home = MakeUnique<ProjectHomeView>(self->m_editorAllocator, self->m_editorAllocator, self->m_context, &self->m_cookService,
                                                            self->m_window.LoadMarkup(ProjectHomeView::kPath));
                 self->m_home->SetOnOpenAsset([self](const Guid& id) { (void)self->m_pages->Open(id); });
+                self->m_home->SetOnNewScene([self]()
+                {
+                    for (const pipeline::AssetCreator& creator : self->m_context.Creators().All())
+                        if (creator.setsDefaultScene) // the scene's creator, as File > New Scene
+                        {
+                            self->m_creation.CreateAndOpen(creator);
+                            return;
+                        }
+                });
+                self->m_home->SetOnShowFolder([self](StringView folder)
+                {
+                    if (foundation::shell::IDialogService* dialogs = self->ShellDialogs())
+                        dialogs->OpenPath(folder);
+                });
+                self->m_home->SetOnProjectSettings([self]() { self->OpenProjectSettings(); });
+                self->m_home->SetOnOpenDocs([self](StringView page)
+                {
+                    if (foundation::shell::IDialogService* dialogs = self->ShellDialogs())
+                        dialogs->OpenPath(Format(u8"{}{}", ProjectManagerView::kDocumentationUrl, page).AsView());
+                });
                 self->m_dock.SetProjectContent(self->m_home->Content());
             }
             if (self->m_export)

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App tests: the Project page over its markup (Data/Editor/ProjectHome.xml). Covers the
-// project's name, the scenes (assets of the default scene setting's type) as links that open them,
-// every reflected setting with its value (an asset shown by its name), the actions of the Game and
-// Project menus as buttons, and a rebuild when the settings change.
+// project's name and summary (location, engine version, the settings marked `summary` with an asset
+// shown by its name, the window), its buttons, the scenes (assets of the default scene setting's
+// type) as cards that open them with the default one marked, a project with no scenes, and a rebuild
+// when the settings change.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -52,21 +53,9 @@ namespace
                 return found;
         return nullptr;
     }
-
-    [[nodiscard]] EditorActionDeclaration Action(StringView id, StringView label, StringView menuPath, i32 order,
-                                                 i32& runs)
-    {
-        EditorActionDeclaration d;
-        d.id = String(id);
-        d.label = String(label);
-        d.menuPath = String(menuPath);
-        d.menuOrder = order;
-        d.execute = [&runs](EditorPage*) { ++runs; };
-        return d;
-    }
 }
 
-TEST_CASE("project page: the scenes, the settings and the project's actions")
+TEST_CASE("project page: the summary, the buttons, and the scenes as cards that open them")
 {
     const StringView dir = u8"scratch_project_home";
     (void)RemoveDirectoryRecursive(dir);
@@ -84,76 +73,116 @@ TEST_CASE("project page: the scenes, the settings and the project's actions")
 
     EditorContext context{DefaultAllocator()};
     context.SetProject(project.Get());
-    i32 plays = 0;
-    i32 exports = 0;
-    i32 others = 0;
-    // Registered out of menu order: the page orders them as the menu does.
-    REQUIRE(context.Actions().Register(Action(u8"test.export", u8"Export...", u8"Project/Export...", 300, exports)));
-    REQUIRE(context.Actions().Register(Action(u8"test.play", u8"Play", u8"Game/Play", 100, plays)));
-    REQUIRE(context.Actions().Register(Action(u8"test.reset", u8"Reset Layout", u8"View/Reset Layout", 100, others)));
-    REQUIRE(context.Actions().Register(
-        Action(u8"test.settings", u8"Project Settings...", u8"Project/Project Settings...", 100, others)));
-
     RefPtr<foundation::gui::Node> content = LoadHome();
     REQUIRE(content.Get() != nullptr);
     app::ProjectHomeView home(DefaultAllocator(), context, nullptr, content);
     Array<Guid> opened;
+    String shown;
+    i32 settingsOpened = 0;
+    i32 scenesMade = 0;
     home.SetOnOpenAsset([&opened](const Guid& id) { opened.PushBack(id); });
+    home.SetOnShowFolder([&shown](StringView folder) { shown = String(folder); });
+    home.SetOnProjectSettings([&settingsOpened]() { ++settingsOpened; });
+    home.SetOnNewScene([&scenesMade]() { ++scenesMade; });
     CHECK(FindId<foundation::gui::Label>(*content, u8"home-name")->GetText() == StringView(u8"Harbour"));
-    auto* openDefault = FindId<foundation::gui::Button>(*content, u8"home-open-default");
-    REQUIRE(openDefault != nullptr);
-    CHECK(openDefault->GetText() == StringView(u8"Open Docks"));
-    CHECK(openDefault->HandleActivate());
-    REQUIRE(opened.Size() == 1u);
-    CHECK(opened[0] == docks->Id());
-    // Each scene is a link that opens it.
-    foundation::gui::Node* scenes = FindId<foundation::gui::Node>(*content, u8"home-scenes");
-    REQUIRE(scenes != nullptr);
-    REQUIRE(scenes->ChildCount() == 2u);
-    auto* first = Cast<foundation::gui::Button>(scenes->GetChildAt(0));
-    REQUIRE(first != nullptr);
-    CHECK(first->GetText() == StringView(u8"Arrival"));
-    CHECK(first->HandleActivate());
-    CHECK(opened.Back() == arrival->Id());
-    // The Game menu's actions as buttons that run them.
-    foundation::gui::Node* game = FindId<foundation::gui::Node>(*content, u8"home-game-actions");
-    REQUIRE(game != nullptr);
-    REQUIRE(game->ChildCount() == 1u);
-    CHECK(Cast<foundation::gui::Button>(game->GetChildAt(0))->HandleActivate());
-    CHECK(plays == 1);
 
-    // Every scene, in the asset tree's order (by name).
+    // The summary: where it is, its engine, the settings marked for it, and the window; no others.
+    Span<const String> rows = home.SummaryRows();
+    REQUIRE(rows.Size() == 7u);
+    CHECK(rows[0].AsView().StartsWith(u8"Location: "));
+    CHECK(rows[1] == Format(u8"Engine version: {}", project->Settings().engineVersion));
+    CHECK(rows[2] == StringView(u8"Default scene: Docks"));
+    CHECK(rows[3] == StringView(u8"Startup script: (none)"));
+    CHECK(rows[4] == StringView(u8"Input map: (none)"));
+    CHECK(rows[5].AsView().StartsWith(u8"UI font: "));
+    CHECK(rows[6] == StringView(u8"Window: 1280 × 720, windowed"));
+    CHECK_FALSE(Has(rows, u8"Default bus layout: (built-in)"));
+
+    // Its buttons.
+    CHECK(FindId<foundation::gui::Button>(*content, u8"home-show-folder")->HandleActivate());
+    CHECK(shown == project->Directory());
+    CHECK(FindId<foundation::gui::Button>(*content, u8"home-settings")->HandleActivate());
+    CHECK(settingsOpened == 1);
+    auto* newScene = FindId<foundation::gui::Button>(*content, u8"home-new-scene");
+    REQUIRE(newScene != nullptr);
+    CHECK(newScene->IsDisplayed());
+    CHECK(newScene->HandleActivate());
+    CHECK(scenesMade == 1);
+    CHECK_FALSE(FindId<foundation::gui::UIWidget>(*content, u8"home-no-scenes")->IsDisplayed());
+
+    // A card per scene, in the asset tree's order (by name); each opens its scene, and the default
+    // one is marked. With no thumbnail service, each shows the scene type's icon.
     REQUIRE(home.Scenes().Size() == 2u);
     CHECK(home.Scenes()[0] == arrival->Id());
     CHECK(home.Scenes()[1] == docks->Id());
-
-    // Every labelled setting: an asset shows its name, and an unset one shows empty text.
-    CHECK(Has(home.SettingRows(), u8"Name: Harbour"));
-    CHECK(Has(home.SettingRows(), u8"Default scene: Docks"));
-    CHECK(Has(home.SettingRows(), u8"Default bus layout: (built-in)"));
-    CHECK(Has(home.SettingRows(), u8"MSAA: Off"));
-    CHECK(Has(home.SettingRows(), u8"Window mode: Windowed"));
-    CHECK(Has(home.SettingRows(), u8"Window resizable: On"));
-
-    // The Game menu's actions, then the Project menu's, each in menu order; no others.
-    REQUIRE(home.ActionIds().Size() == 3u);
-    CHECK(home.ActionIds()[0] == StringView(u8"test.play"));
-    CHECK(home.ActionIds()[1] == StringView(u8"test.settings"));
-    CHECK(home.ActionIds()[2] == StringView(u8"test.export"));
+    CHECK(FindId<foundation::gui::Label>(*content, u8"home-scene-count")->GetText() == StringView(u8"2"));
+    foundation::gui::Node* grid = FindId<foundation::gui::Node>(*content, u8"home-scenes");
+    REQUIRE(grid != nullptr);
+    REQUIRE(grid->ChildCount() == 2u);
+    auto* first = Cast<foundation::gui::Button>(grid->GetChildAt(0));
+    REQUIRE(first != nullptr);
+    CHECK(first->HandleActivate());
+    REQUIRE(opened.Size() == 1u);
+    CHECK(opened[0] == arrival->Id());
+    const auto marked = [](foundation::gui::Node& card)
+    {
+        foundation::gui::Node& picture = *card.GetChildAt(0);
+        for (usize i = 0; i < picture.ChildCount(); ++i)
+            if (auto* label = Cast<foundation::gui::Label>(picture.GetChildAt(i)); label != nullptr && label->GetText() == StringView(u8"Default"))
+                return true;
+        return false;
+    };
+    CHECK_FALSE(marked(*grid->GetChildAt(0)));
+    CHECK(marked(*grid->GetChildAt(1)));
+    CHECK(home.ThumbnailsShown() == 0u);
 
     // A change to the settings shows at the next refresh, once marked.
     project->Settings().defaultSceneId = arrival->Id();
     home.Refresh();
-    CHECK(Has(home.SettingRows(), u8"Default scene: Docks"));
+    CHECK(Has(home.SummaryRows(), u8"Default scene: Docks"));
     home.MarkChanged();
     home.Refresh();
-    CHECK(Has(home.SettingRows(), u8"Default scene: Arrival"));
+    CHECK(Has(home.SummaryRows(), u8"Default scene: Arrival"));
+    CHECK(marked(*grid->GetChildAt(0)));
 
     // Without a project, nothing to show.
     context.SetProject(nullptr);
     home.Rebuild();
     CHECK(home.Scenes().IsEmpty());
-    CHECK(home.SettingRows().IsEmpty());
+    CHECK(home.SummaryRows().IsEmpty());
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}
+
+TEST_CASE("project page: a project with no scenes shows a note with New Scene and the first-project page")
+{
+    const StringView dir = u8"scratch_project_home_empty";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"Harbour").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    EditorContext context{DefaultAllocator()};
+    context.SetProject(project.Get());
+    RefPtr<foundation::gui::Node> content = LoadHome();
+    REQUIRE(content.Get() != nullptr);
+    app::ProjectHomeView home(DefaultAllocator(), context, nullptr, content);
+    i32 scenesMade = 0;
+    String docs;
+    home.SetOnNewScene([&scenesMade]() { ++scenesMade; });
+    home.SetOnOpenDocs([&docs](StringView page) { docs = String(page); });
+
+    CHECK(home.Scenes().IsEmpty());
+    CHECK(Has(home.SummaryRows(), u8"Default scene: (none)"));
+    CHECK(FindId<foundation::gui::Label>(*content, u8"home-scene-count")->GetText() == StringView(u8"0"));
+    CHECK(FindId<foundation::gui::UIWidget>(*content, u8"home-no-scenes")->IsDisplayed());
+    CHECK_FALSE(FindId<foundation::gui::UIWidget>(*content, u8"home-scenes")->IsDisplayed());
+    CHECK_FALSE(FindId<foundation::gui::UIWidget>(*content, u8"home-new-scene")->IsDisplayed()); // the note has its own
+    CHECK(FindId<foundation::gui::Button>(*content, u8"home-first-scene")->HandleActivate());
+    CHECK(scenesMade == 1);
+    CHECK(FindId<foundation::gui::Button>(*content, u8"home-first-docs")->HandleActivate());
+    CHECK(docs == StringView(app::ProjectHomeView::kFirstProjectPage));
+
+    context.SetProject(nullptr);
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
 }

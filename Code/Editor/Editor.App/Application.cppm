@@ -29,6 +29,7 @@ import pipeline.core;
 import engine.defaultapp; // the embedded game application
 import editor.core;
 import foundation.net.tls;        // the Samples tab's https
+import foundation.http;        // the --release-files folder's server
 import foundation.http.client;
 import :window_capture;   // EditorWindowCapture (View > Screenshot, --screenshot, the MCP tool)
 import :editor_window;
@@ -100,6 +101,10 @@ export namespace editor::app
         f32 screenshotAfterSeconds = 0.0f;
         // `--screenshot-exit`: shut down cleanly once that capture is written (or has failed).
         bool screenshotExit = false;
+        // `--release-files <url or folder>`: where the Samples tab reads this version's release
+        // files instead of GitHub: a base URL, or a folder scripts/pack-samples.py wrote, served on
+        // loopback (to try the tab before a release carries samples). Empty: the release itself.
+        String releaseFiles;
         // The MCP host for this run: `--mcp` enables it whatever the preference says and
         // `--mcp-port <n>` picks its port (0 = the preference's).
         bool mcpEnabled = false;
@@ -218,6 +223,8 @@ export namespace editor::app
         [[nodiscard]] foundation::shell::IDialogService* ShellDialogs() const;
         /// Shows the project manager over the whole window.
         void EnterManagerMode();
+        // The Samples tab's release files, as --release-files names them (empty: GitHub's release).
+        [[nodiscard]] Function<String(StringView)> ReleaseFiles();
         void OpenFromManager(StringView directory);
         void CreateFromManager(StringView directory, StringView name);
         bool OpenProject(StringView directory, bool seed);
@@ -272,6 +279,7 @@ export namespace editor::app
         // Declared before the manager, which pumps it and cancels its requests as it goes.
         UniquePtr<foundation::net::ITlsBackend> m_tls;
         UniquePtr<foundation::http::IHttpClient> m_http;
+        UniquePtr<foundation::http::HttpServer> m_releaseFiles; // --release-files <folder>, on loopback
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content
         UniquePtr<ProfilerPanel> m_profiler;     // the Profiler page's content

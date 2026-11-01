@@ -595,3 +595,10 @@ is a headless proof of what the editor drew: `Tools.Editor <project> --seed --sc
 device arrived kept its placeholder forever (fixed: `ViewportView::Initialize` makes the targets
 for a view that already has a size).
 
+`--release-files <url or folder>` (2026-11-01) points the project manager's Samples tab at this
+version's release files somewhere other than GitHub's release: a base URL, or a folder that
+`scripts/pack-samples.py` wrote, which the editor serves on loopback (127.0.0.1, a port of the
+OS's choosing) and reads through the same download path. Such a run opens the manager on the
+Samples tab. It is for trying the tab before a release carries samples:
+`scripts/pack-samples.py 0.1.0 out && Tools.Editor --release-files out`.
+

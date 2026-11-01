@@ -9,6 +9,7 @@
 
 import foundation.core;
 import foundation.net;
+import foundation.http;
 import foundation.http.client;
 import editor.app;
 
@@ -143,4 +144,29 @@ TEST_CASE("sample downloads: a wrong digest, a missing sample and a cancel leave
         CHECK(download.GetState() == app::SampleDownload::State::Cancelled);
         CHECK(f.LeftNothing(target.AsView()));
     }
+}
+
+TEST_CASE("sample downloads: a release folder serves its files by plain name, and nothing outside it")
+{
+    const String folder = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_release_folder");
+    (void)RemoveDirectoryRecursive(folder.AsView());
+    REQUIRE(CreateDirectories(PathJoin(folder.AsView(), u8"inner").AsView()));
+    const StringView text = u8"{\"samples\": []}";
+    REQUIRE(WriteFile(PathJoin(folder.AsView(), u8"samples.json").AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())).IsOk());
+    const auto get = [&folder](StringView target, StringView method = u8"GET")
+    {
+        foundation::http::HttpRequest request;
+        request.method = String(method);
+        request.target = String(target);
+        return app::ReleaseFolder::Serve(folder.AsView(), request);
+    };
+    const foundation::http::HttpResponse found = get(u8"/samples.json");
+    CHECK(found.status == 200);
+    CHECK(found.BodyText() == text);
+    CHECK(get(u8"/missing.zip").status == 404);
+    CHECK(get(u8"/../secret").status == 404);
+    CHECK(get(u8"/inner/x").status == 404);
+    CHECK(get(u8"/").status == 404);
+    CHECK(get(u8"/samples.json", u8"POST").status == 404);
+    (void)RemoveDirectoryRecursive(folder.AsView());
 }

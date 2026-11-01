@@ -781,13 +781,48 @@ namespace editor::app
                 m_http = foundation::http::CreateHttpClient(m_editorAllocator, m_tls.Get());
             }
             services.http = m_http.Get();
+            services.releaseFile = ReleaseFiles();
             m_manager = MakeUnique<ProjectManagerView>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ProjectManagerView::kPath));
+            if (!m_config.releaseFiles.IsEmpty())
+                m_manager->ShowSamples(true); // a run pointed at release files is there to try the Samples tab
         }
         else
             m_manager->Rebuild(); // returning from a project: probe the list again
         m_manager->SetStatus({});
         m_window.ShowScreen(m_manager->Content());
         m_manager->Shown();
+    }
+
+    // Where the Samples tab reads the release's files: GitHub's release for this version, or what
+    // --release-files names (a base URL, or a folder served on loopback).
+    Function<String(StringView)> EditorApplication::ReleaseFiles()
+    {
+        const StringView from = m_config.releaseFiles.AsView();
+        if (from.IsEmpty())
+            return {};
+        if (from.StartsWith(u8"http://") || from.StartsWith(u8"https://"))
+        {
+            String base(from);
+            while (base.Size() > 0 && base[base.Size() - 1] == u8'/')
+                base = String(base.AsView().SubStr(0, base.Size() - 1));
+            return [base](StringView file) { return Format(u8"{}/{}", base, file); };
+        }
+        if (!m_releaseFiles)
+        {
+            m_releaseFiles = MakeUnique<foundation::http::HttpServer>(m_editorAllocator, m_editorAllocator);
+            const String folder(from);
+            m_releaseFiles->SetHandler([folder](const foundation::http::HttpRequest& request)
+                                       { return Optional<foundation::http::HttpResponse>(ReleaseFolder::Serve(folder.AsView(), request)); });
+            if (!m_releaseFiles->Start(foundation::http::HttpServerConfig{}))
+            {
+                LOG_ERROR(u8"Editor", u8"--release-files: the folder {} could not be served", folder);
+                m_releaseFiles.Reset();
+                return {};
+            }
+            LOG_INFO(u8"Editor", u8"--release-files: serving {} on 127.0.0.1:{}", folder, m_releaseFiles->BoundPort());
+        }
+        const u16 port = m_releaseFiles->BoundPort();
+        return [port](StringView file) { return Format(u8"http://127.0.0.1:{}/{}", port, file); };
     }
 
     // Opens a project from the manager. A project saved by another engine version asks first: the
@@ -1053,6 +1088,8 @@ namespace editor::app
     {
         if (m_mcp)
             m_mcp->Pump(); // a waiting agent call is answered here: tools touch main-thread state
+        if (m_releaseFiles)
+            (void)m_releaseFiles->Pump(); // --release-files <folder>: before the client asks again
         if (m_manager)
             m_manager->Tick(); // the Samples tab's fetches and downloads, which go on while a project is open
         
@@ -1258,6 +1295,7 @@ namespace editor::app
         m_preferences.Reset();
         m_manager.Reset();
         m_http.Reset(); // after the manager, which cancels its requests as it goes
+        m_releaseFiles.Reset();
         m_tls.Reset();
         m_palette.Reset();
         m_menus.Reset();

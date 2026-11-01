@@ -95,6 +95,31 @@ export namespace editor::app
         }
     };
 
+    /// A folder of release files served for `--release-files <folder>` (a copy that
+    /// scripts/pack-samples.py made, to try the Samples tab before a release has them): the file a
+    /// GET names, by a plain name in the folder alone, or a 404.
+    struct ReleaseFolder
+    {
+        [[nodiscard]] static foundation::http::HttpResponse Serve(StringView folder, const foundation::http::HttpRequest& request)
+        {
+            foundation::http::HttpResponse response;
+            StringView name = request.target.AsView();
+            if (name.StartsWith(u8"/"))
+                name = name.SubStr(1, name.Size() - 1);
+            bool plain = !name.IsEmpty() && name != StringView(u8".") && name != StringView(u8"..") && request.method.AsView() == StringView(u8"GET");
+            for (const utf8char c : name)
+                plain = plain && c != u8'/' && c != u8'\\' && c != u8':' && c != u8'?';
+            Result<Array<byte>> bytes = plain ? ReadFile(PathJoin(folder, name).AsView()) : Err(ErrorCode::NotFound);
+            if (!bytes.HasValue())
+            {
+                response.status = 404;
+                return response;
+            }
+            response.body = Move(bytes.Value());
+            return response;
+        }
+    };
+
     /// One sample's download into `target` (made if need be; a new or empty folder, as New
     /// Project's check requires): streamed to `<target's parent>/.<folder>.download`, checked,
     /// extracted, the zip deleted. Keep it where it does not move: its callbacks hold it.

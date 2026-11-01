@@ -16,6 +16,8 @@
 //     over 127.0.0.1; the persistent setting is in Preferences)
 //   [--screenshot <png> [--screenshot-after <s>] [--screenshot-exit]] (writes the main window,
 //   UI included, as a PNG; --screenshot-exit quits once it is written)
+//   [--release-files <url or folder>] (where the project manager's Samples tab reads this version's
+//   release files instead of GitHub: a base URL, or a folder scripts/pack-samples.py wrote)
 //   [--seed] [--seed-primitives] [--version].
 //   GPU: [--vulkan|--dx12|--webgpu|--null-gpu] [--gpu-validation|--no-gpu-validation]
 //   (validation defaults to on in Debug, off in RelWithDebInfo and Release).
@@ -248,6 +250,10 @@ int main(int argc, char** argv)
         if (std::strcmp(argv[i], "--screenshot-after") == 0)
         {
             config.screenshotAfterSeconds = static_cast<f32>(std::atof(argv[i + 1]));
+        }
+        if (std::strcmp(argv[i], "--release-files") == 0)
+        {
+            config.releaseFiles = String(StringView(reinterpret_cast<const utf8char*>(argv[i + 1])));
         }
         if (std::strcmp(argv[i], "--mcp-port") == 0)
         {

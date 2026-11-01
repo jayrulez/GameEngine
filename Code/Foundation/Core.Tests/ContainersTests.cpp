@@ -137,6 +137,58 @@ TEST_CASE("containers: Array sort orders and keeps equal keys in order at merge 
     }
 }
 
+namespace
+{
+    // An element whose operator& does not answer its address, as COM's ComPtr returns a reference
+    // wrapper: the containers must never take an element's address with &.
+    struct Wrapped
+    {
+        i32 value = 0;
+        struct Ref
+        {
+        };
+        Ref operator&() const { return Ref{}; }
+    };
+}
+
+TEST_CASE("containers: an element that overloads operator& is stored, grown, moved, found and removed")
+{
+    Array<Wrapped> items;
+    for (i32 i = 0; i < 40; ++i) // past the first capacities, so it grows
+        items.PushBack(Wrapped{i});
+    items.EmplaceBack(Wrapped{40});
+    items.Insert(0, Wrapped{-1});
+    REQUIRE(items.Size() == 42u);
+    CHECK(items[0].value == -1);
+    CHECK(items[41].value == 40);
+    items.RemoveAt(0);
+    items.PopBack();
+    items.Sort([](const Wrapped& a, const Wrapped& b) { return a.value > b.value; });
+    CHECK(items[0].value == 39);
+    Array<Wrapped> copy = items;
+    CHECK(copy.Size() == 40u);
+    items.Resize(3);
+    CHECK(items.Size() == 3u);
+    items.Clear();
+    CHECK(items.IsEmpty());
+
+    HashMap<i32, Wrapped> map;
+    map.InsertOrAssign(7, Wrapped{70});
+    const Wrapped* found = map.Find(7);
+    REQUIRE(found != nullptr);
+    CHECK(found->value == 70);
+    CHECK(map.Find(8) == nullptr);
+
+    RingBuffer<Wrapped> ring(4);
+    (void)ring.PushBack(Wrapped{1});
+    (void)ring.PushBack(Wrapped{2});
+    CHECK(ring.Front().value == 1);
+    Wrapped out;
+    CHECK(ring.PopFront(out));
+    CHECK(out.value == 1);
+    CHECK(ring.Front().value == 2);
+}
+
 TEST_CASE("containers: Array sort through a kept buffer allocates only while the buffer grows")
 {
     TrackingAllocator tracking(DefaultAllocator());

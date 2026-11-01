@@ -85,6 +85,15 @@ export namespace foundation::core
     // =======================================================================
     // Small utilities
     // =======================================================================
+    // The address of `value` even when its type overloads operator& (COM's ComPtr returns a
+    // reference wrapper from it), as std::addressof answers. Containers take an element's address
+    // with this or with pointer arithmetic, never with &.
+    template <typename T>
+    [[nodiscard]] constexpr T* AddressOf(T& value) noexcept
+    {
+        return __builtin_addressof(value);
+    }
+
     template <typename T>
     [[nodiscard]] constexpr const T& Min(const T& a, const T& b)
     {

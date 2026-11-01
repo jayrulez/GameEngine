@@ -77,7 +77,7 @@ export namespace foundation::core
             {
                 return false;
             }
-            Construct<T>(&m_data[TailIndex()], value);
+            Construct<T>(m_data + (TailIndex()), value);
             ++m_count;
             return true;
         }
@@ -88,7 +88,7 @@ export namespace foundation::core
             {
                 return false;
             }
-            Construct<T>(&m_data[TailIndex()], Move(value));
+            Construct<T>(m_data + (TailIndex()), Move(value));
             ++m_count;
             return true;
         }
@@ -101,7 +101,7 @@ export namespace foundation::core
                 return false;
             }
             out = Move(m_data[m_head]);
-            Destruct(&m_data[m_head]);
+            Destruct(m_data + m_head);
             m_head = (m_head + 1) % m_capacity;
             --m_count;
             return true;
@@ -134,7 +134,7 @@ export namespace foundation::core
         {
             for (usize i = 0; i < m_count; ++i)
             {
-                Destruct(&m_data[(m_head + i) % m_capacity]);
+                Destruct(m_data + ((m_head + i) % m_capacity));
             }
             m_head = 0;
             m_count = 0;

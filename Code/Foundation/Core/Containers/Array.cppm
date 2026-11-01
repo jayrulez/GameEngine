@@ -17,6 +17,8 @@ export namespace foundation::core
 {
     // =======================================================================
     // Array - growable, allocator-backed dynamic array.
+    // An element's storage is addressed as m_data + i, never &m_data[i]: an element type may
+    // overload operator& (COM's ComPtr returns a reference wrapper from it).
     // =======================================================================
     template <typename T>
     class Array
@@ -48,7 +50,7 @@ export namespace foundation::core
             Reserve(other.m_size);
             for (usize i = 0; i < other.m_size; ++i)
             {
-                Construct<T>(&m_data[i], other.m_data[i]);
+                Construct<T>(m_data + i, other.m_data[i]);
             }
             m_size = other.m_size;
         }
@@ -70,7 +72,7 @@ export namespace foundation::core
                 Reserve(other.m_size);
                 for (usize i = 0; i < other.m_size; ++i)
                 {
-                    Construct<T>(&m_data[i], other.m_data[i]);
+                    Construct<T>(m_data + i, other.m_data[i]);
                 }
                 m_size = other.m_size;
             }
@@ -126,8 +128,8 @@ export namespace foundation::core
             {
                 for (usize i = 0; i < m_size; ++i)
                 {
-                    Construct<T>(&newData[i], Move(m_data[i]));
-                    Destruct(&m_data[i]);
+                    Construct<T>(newData + i, Move(m_data[i]));
+                    Destruct(m_data + i);
                 }
             }
 
@@ -145,7 +147,7 @@ export namespace foundation::core
             {
                 for (usize i = newSize; i < m_size; ++i)
                 {
-                    Destruct(&m_data[i]);
+                    Destruct(m_data + i);
                 }
             }
             else if (newSize > m_size)
@@ -163,7 +165,7 @@ export namespace foundation::core
                 {
                     for (usize i = m_size; i < newSize; ++i)
                     {
-                        Construct<T>(&m_data[i]);
+                        Construct<T>(m_data + i);
                     }
                 }
             }
@@ -177,7 +179,7 @@ export namespace foundation::core
             {
                 for (usize i = newSize; i < m_size; ++i)
                 {
-                    Destruct(&m_data[i]);
+                    Destruct(m_data + i);
                 }
             }
             else if (newSize > m_size)
@@ -185,7 +187,7 @@ export namespace foundation::core
                 ReserveForGrowth(newSize);
                 for (usize i = m_size; i < newSize; ++i)
                 {
-                    Construct<T>(&m_data[i], value);
+                    Construct<T>(m_data + i, value);
                 }
             }
             m_size = newSize;
@@ -196,7 +198,7 @@ export namespace foundation::core
         {
             for (usize i = 0; i < m_size; ++i)
             {
-                Destruct(&m_data[i]);
+                Destruct(m_data + i);
             }
             m_size = 0;
         }
@@ -241,14 +243,14 @@ export namespace foundation::core
         T& PushBack(const T& value)
         {
             EnsureCapacityForOne();
-            Construct<T>(&m_data[m_size], value);
+            Construct<T>(m_data + m_size, value);
             return m_data[m_size++];
         }
 
         T& PushBack(T&& value)
         {
             EnsureCapacityForOne();
-            Construct<T>(&m_data[m_size], Move(value));
+            Construct<T>(m_data + m_size, Move(value));
             return m_data[m_size++];
         }
 
@@ -256,14 +258,14 @@ export namespace foundation::core
         T& EmplaceBack(Args&&... args)
         {
             EnsureCapacityForOne();
-            Construct<T>(&m_data[m_size], Forward<Args>(args)...);
+            Construct<T>(m_data + m_size, Forward<Args>(args)...);
             return m_data[m_size++];
         }
 
         void PopBack() noexcept
         {
             DIAGNOSTIC_ASSERT(m_size > 0);
-            Destruct(&m_data[--m_size]);
+            Destruct(m_data + (--m_size));
         }
 
         // Removes element `index`, shifting the tail down (order preserved).
@@ -274,7 +276,7 @@ export namespace foundation::core
             {
                 m_data[i] = Move(m_data[i + 1]);
             }
-            Destruct(&m_data[--m_size]);
+            Destruct(m_data + (--m_size));
         }
 
         // Removes element `index` by swapping in the last element (O(1), order not preserved).
@@ -285,7 +287,7 @@ export namespace foundation::core
             {
                 m_data[index] = Move(m_data[m_size - 1]);
             }
-            Destruct(&m_data[--m_size]);
+            Destruct(m_data + (--m_size));
         }
 
         // Inserts `value` before `index` (index == Size appends), shifting the tail up. Order preserved.
@@ -295,10 +297,10 @@ export namespace foundation::core
             EnsureCapacityForOne();
             if (index == m_size)
             {
-                Construct<T>(&m_data[m_size], value);
+                Construct<T>(m_data + m_size, value);
                 return m_data[m_size++];
             }
-            Construct<T>(&m_data[m_size], Move(m_data[m_size - 1]));
+            Construct<T>(m_data + m_size, Move(m_data[m_size - 1]));
             for (usize i = m_size - 1; i > index; --i)
             {
                 m_data[i] = Move(m_data[i - 1]);
@@ -314,10 +316,10 @@ export namespace foundation::core
             EnsureCapacityForOne();
             if (index == m_size)
             {
-                Construct<T>(&m_data[m_size], Move(value));
+                Construct<T>(m_data + m_size, Move(value));
                 return m_data[m_size++];
             }
-            Construct<T>(&m_data[m_size], Move(m_data[m_size - 1]));
+            Construct<T>(m_data + m_size, Move(m_data[m_size - 1]));
             for (usize i = m_size - 1; i > index; --i)
             {
                 m_data[i] = Move(m_data[i - 1]);

@@ -164,13 +164,13 @@ export namespace foundation::core
         [[nodiscard]] V* Find(const K& key) noexcept
         {
             const usize index = FindIndex(key);
-            return (index != kNoSlot) ? &m_entries[index].value : nullptr;
+            return (index != kNoSlot) ? AddressOf(m_entries[index].value) : nullptr;
         }
 
         [[nodiscard]] const V* Find(const K& key) const noexcept
         {
             const usize index = FindIndex(key);
-            return (index != kNoSlot) ? &m_entries[index].value : nullptr;
+            return (index != kNoSlot) ? AddressOf(m_entries[index].value) : nullptr;
         }
 
         [[nodiscard]] bool Contains(const K& key) const noexcept

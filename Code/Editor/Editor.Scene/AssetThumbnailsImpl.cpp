@@ -323,6 +323,21 @@ namespace editor
             return bounds;
         }
 
+        // Combined world bounds of every entity, as each component kind measures it (a mesh, a body's
+        // shape: a terrain's heightfield): the editor's own framing measures the same.
+        [[nodiscard]] AABB WorldSceneBounds(scene::Scene& stage)
+        {
+            AABB bounds = AABB::Empty();
+            stage.ForEachEntity(
+                [&](scene::EntityHandle entity)
+                {
+                    AABB box;
+                    if (scene::EntityWorldBounds(stage, entity, box))
+                        bounds = bounds.IsValid() ? Merge(bounds, box) : box;
+                });
+            return bounds;
+        }
+
         // True once the ref has loaded or failed: MeshRefsSettled's check for one animator ref.
         template <typename TRef>
         [[nodiscard]] bool RefSettled(TRef& ref)
@@ -454,9 +469,10 @@ namespace editor
             bool m_spawned = false;
         };
 
-        // Scene documents: the whole scene loaded into the job's private scene, viewed through its
-        // own primary camera when it has one (framing by the bounds is the fallback). The scene
-        // owns its lighting, so no sun is added.
+        // Scene documents: the whole scene loaded into the job's private scene, viewed as its page
+        // last showed it (the editor camera the page saved when it closed), else framed by its
+        // bounds. A scene's own camera is often placed by a script at play time, so in the editor
+        // it can look at nothing. The scene owns its lighting, so no sun is added.
         class SceneThumbnailGenerator final : public ISceneThumbnailGenerator
         {
         public:
@@ -491,15 +507,41 @@ namespace editor
                     return ThumbnailStageStep::Pending;
                 }
                 stage.UpdateTransforms();
-                FrameFromBounds(WorldMeshBounds(stage), outFraming);
-                outFraming.preferSceneCamera = true;
+                FrameFromBounds(WorldSceneBounds(stage), outFraming);
+                EditorCamera camera;
+                if (SceneViewState::RestoreCamera(SavedView(id), camera))
+                {
+                    outFraming.hasView = true;
+                    outFraming.eye = camera.DrawEye();
+                    outFraming.view = Float4x4::LookAtRH(outFraming.eye, outFraming.eye + camera.Forward(), camera.Up());
+                    outFraming.projection = camera.Projection(1.0f); // the thumbnail is square
+                    outFraming.farZ = camera.DrawFar();
+                }
                 return ThumbnailStageStep::Ready;
             }
 
             void Unstage(scene::Scene&) override { m_loaded = false; } // scene is per-job
-            [[nodiscard]] u64 ContentHash(foundation::content::Instance& instance) override { return DocumentHash(instance); }
+            // The document and the view it is shown from: a new view is a new thumbnail.
+            [[nodiscard]] u64 ContentHash(foundation::content::Instance& instance) override
+            {
+                u64 hash = DocumentHash(instance);
+                const SceneViewPref view = SavedView(instance.Id());
+                if (view.hasCamera)
+                {
+                    const f32 numbers[] = {view.cameraPosition.x, view.cameraPosition.y, view.cameraPosition.z, view.cameraYaw, view.cameraPitch,
+                                           view.cameraFocusDistance, view.cameraOrthographic ? 1.0f : 0.0f};
+                    hash = HashBytes(numbers, sizeof(numbers), hash);
+                }
+                return hash != 0 ? hash : 1;
+            }
 
         private:
+            // The view the scene's page saved when it last closed (none: hasCamera is false).
+            [[nodiscard]] SceneViewPref SavedView(const Guid& id) const
+            {
+                return LoadSceneViewPref(m_context->ProjectEditorSettings(), id, SceneViewPref{id});
+            }
+
             EditorContext* m_context;
             bool m_loaded = false;
         };

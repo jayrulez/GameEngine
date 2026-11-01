@@ -374,28 +374,32 @@ namespace editor
         // extraction (generators set entity transforms during Stage).
         impl.jobScene->UpdateTransforms();
 
-        // Ortho along (1,1,1) aimed at the framing center, sized from the staged bounds.
-        const Float3 direction = Normalized(Float3{1.0f, 1.0f, 1.0f});
-        const f32 distance = impl.framing.radius * 4.0f;
-        const f32 halfExtent = impl.framing.radius * 1.1f;
+        // The generator's own view when it has one, else ortho along (1,1,1) aimed at the framing
+        // center, sized from the staged bounds.
         render::ViewCamera camera;
-        const Float3 eye = impl.framing.center + direction * distance;
-        camera.view = Float4x4::LookAtRH(eye, impl.framing.center, Float3{0.0f, 1.0f, 0.0f});
-        camera.projection = Float4x4::OrthographicRH(halfExtent * 2.0f, halfExtent * 2.0f, 0.05f,
-                                                     distance + impl.framing.radius * 4.0f);
-        camera.position = eye;
-        camera.farZ = distance + impl.framing.radius * 4.0f;
+        if (impl.framing.hasView)
+        {
+            camera.view = impl.framing.view;
+            camera.projection = impl.framing.projection;
+            camera.position = impl.framing.eye;
+            camera.farZ = impl.framing.farZ;
+        }
+        else
+        {
+            const Float3 direction = Normalized(Float3{1.0f, 1.0f, 1.0f});
+            const f32 distance = impl.framing.radius * 4.0f;
+            const f32 halfExtent = impl.framing.radius * 1.1f;
+            const Float3 eye = impl.framing.center + direction * distance;
+            camera.view = Float4x4::LookAtRH(eye, impl.framing.center, Float3{0.0f, 1.0f, 0.0f});
+            camera.projection = Float4x4::OrthographicRH(halfExtent * 2.0f, halfExtent * 2.0f, 0.05f,
+                                                         distance + impl.framing.radius * 4.0f);
+            camera.position = eye;
+            camera.farZ = distance + impl.framing.radius * 4.0f;
+        }
 
         render::CameraOverride cameraOverride;
         cameraOverride.camera = camera;
         cameraOverride.clearColor = Color{0.10f, 0.11f, 0.13f, 1.0f}; // linear (a render view)
-
-        // Scene documents look like themselves: their own primary camera and clear color when
-        // one exists (RenderScene extracts both when no override is passed).
-        render::ViewCamera sceneCamera;
-        const bool useSceneCamera =
-            impl.framing.preferSceneCamera &&
-            engine::render::ExtractPrimaryCamera(*impl.jobScene, sceneCamera, nullptr);
 
         render::TargetState targetState;
         targetState.texture = impl.target;
@@ -405,7 +409,7 @@ namespace editor
         impl.render->RenderScene(*impl.jobScene, impl.targetView, rhi::TextureFormat::RGBA16Float,
                                  kRenderSize, kRenderSize,
                                  render::ViewportRect{0, 0, kRenderSize, kRenderSize},
-                                 useSceneCamera ? nullptr : &cameraOverride, targetState);
+                                 &cameraOverride, targetState);
         impl.targetState = rhi::ResourceState::CopySrc;
         impl.state = Impl::State::CopyPending;
     }

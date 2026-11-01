@@ -785,7 +785,12 @@ namespace editor
             SceneViewState::Capture(InstanceId(), m_overlays.settings, m_viewport->Camera(), shown, Span<const Guid>(selection.Data(), selection.Size()),
                                     m_tools ? m_tools->Place() : nullptr);
         if (SaveSceneViewPref(m_context->ProjectEditorSettings(), pref))
+        {
             m_context->RequestProjectEditorSettingsSave();
+            // The scene's thumbnail is taken from this view: the next one asked for takes the new view.
+            if (ThumbnailService* thumbnails = m_context->Thumbnails())
+                thumbnails->Invalidate(InstanceId());
+        }
     }
 
     void SceneEditorPage::RestoreViewState()

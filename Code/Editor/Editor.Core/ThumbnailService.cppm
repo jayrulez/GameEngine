@@ -110,15 +110,20 @@ export namespace editor
     };
 
     /// How the stage views a staged job. By default, an orthographic camera along (1,1,1) aimed at
-    /// `center`, sized from `radius`. `preferSceneCamera` asks the stage to use the scene's own
-    /// primary camera when one exists (so scene documents look like themselves), with the framing
-    /// fields as the fallback. `prewarmSteps` simulation ticks (1/60 s each) run before the render,
-    /// for content that is empty at t=0 (particles).
+    /// `center`, sized from `radius`. A generator that has a view of its own (a scene document,
+    /// as its page last showed it) sets `hasView` with that camera's view and projection (a square
+    /// aspect), its eye and its far plane, and the stage renders through it instead.
+    /// `prewarmSteps` simulation ticks (1/60 s each) run before the render, for content that is
+    /// empty at t=0 (particles).
     struct ThumbnailFraming
     {
         Float3 center{};
         f32 radius = 1.0f;
-        bool preferSceneCamera = false;
+        bool hasView = false;
+        Float4x4 view{};
+        Float4x4 projection{};
+        Float3 eye{};
+        f32 farZ = 1000.0f;
         u32 prewarmSteps = 0;
     };
 

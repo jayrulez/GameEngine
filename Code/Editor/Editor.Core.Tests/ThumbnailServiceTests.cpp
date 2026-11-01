@@ -543,7 +543,7 @@ TEST_CASE("thumbnails: jobs route to the generator covering the asset's type")
 
     ThumbnailFraming framing;
     CHECK(framing.radius == 1.0f);
-    CHECK(!framing.preferSceneCamera);
+    CHECK(!framing.hasView); // the stage frames the bounds unless the generator has a view
     CHECK(framing.prewarmSteps == 0u);
     fx.service.Reset();
 }

@@ -31,6 +31,7 @@ export import :string;
 export import :string_hash;
 export import :string_util;
 export import :hash;
+export import :sha256;
 export import :hash_map;
 export import :hash_set;
 export import :format;

@@ -46,6 +46,7 @@ target_sources(Core
             Containers/RingBuffer.cppm
             Containers/IntrusiveList.cppm
             Hash.cppm
+            Sha256.cppm
             Containers/HashMap.cppm
             Containers/HashSet.cppm
             Text/String.cppm

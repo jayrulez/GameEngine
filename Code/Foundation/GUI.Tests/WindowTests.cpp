@@ -4,7 +4,7 @@
 // GUI - Window tests: title-bar drag moves the window, the grip resizes it (clamped
 // to the minimum), title clicks fall through to the draggable bar, and a press raises the
 // window to the front. A move or resize is reported when the press is released, and the title
-// bar can be handed to a drag source.
+// bar can be handed to a drag source. One asked to fit its height to its content.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -284,4 +284,34 @@ TEST_CASE("window: a move or resize the user made is reported once the press let
     d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     d->InjectMouseUp(core::Float2{at.x + 20.0f, at.y}, MouseButton::Left);
     CHECK(arranged == 2);
+}
+
+TEST_CASE("window: one that fits its height to its content follows the content at each layout, its middle kept")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    auto win = Make<Window>();
+    win->SetSize(core::Float2{200.0f, 150.0f});
+    win->SetPosition(core::Float2{50.0f, 50.0f}); // its middle at y 125
+    win->SetTitleBarHeight(30.0f);
+    auto body = Make<UIWidget>();
+    body->SetSize(core::Float2{100.0f, 80.0f});
+    win->GetContent()->AddChild(body.Get());
+    root->AddChild(win.Get());
+
+    (void)root->UpdateLayout();
+    CHECK(win->GetSize().y == doctest::Approx(150.0f)); // not asked to fit: as set
+
+    win->SetFitsHeightToContent(true);
+    (void)root->UpdateLayout();
+    CHECK(win->GetSize().x == doctest::Approx(200.0f));
+    CHECK(win->GetSize().y == doctest::Approx(110.0f)); // the title bar and the content
+    CHECK(win->GetPosition().y == doctest::Approx(70.0f));
+    CHECK(win->GetContent()->GetSize().y == doctest::Approx(80.0f));
+
+    // The content grows (a line that wraps, a stage shown): the window grows with it.
+    body->SetSize(core::Float2{100.0f, 120.0f});
+    (void)root->UpdateLayout();
+    CHECK(win->GetSize().y == doctest::Approx(150.0f));
+    CHECK(win->GetPosition().y == doctest::Approx(50.0f));
 }

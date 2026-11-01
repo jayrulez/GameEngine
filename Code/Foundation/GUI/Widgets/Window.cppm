@@ -236,6 +236,15 @@ export namespace foundation::gui
         void SetTitle(core::StringView text) { m_title->SetText(text); }
         [[nodiscard]] core::StringView GetTitle() const { return m_title->GetText(); }
         void SetMinSize(core::Float2 size) { m_minSize = size; }
+        /// Sets whether the window's height follows its content: at each layout, the height becomes
+        /// what the content asks for at the window's width, under the title bar, keeping the
+        /// window's middle where it was. For a dialog whose content changes while it is open (a
+        /// stage shown, a line that wraps). The resize grip then changes only the width.
+        void SetFitsHeightToContent(bool fit)
+        {
+            m_fitsHeight = fit;
+            RequestLayout();
+        }
         /// Sets whether the close button shows. Clicking it closes the window, as Escape does on a
         /// dialog.
         void SetClosable(bool closable)
@@ -373,7 +382,12 @@ export namespace foundation::gui
         virtual void OnWindowGone() {}
         void OnSizeChange() override { Relayout(); }
         // Places the parts: the title bar across the top, the content below it, the grip in the corner.
-        void OnLayout() override { Relayout(); }
+        void OnLayout() override
+        {
+            if (m_fitsHeight)
+                FitHeight();
+            Relayout();
+        }
         // The title uses the window's font; with a sheet, inheritance gives the same.
         void OnTextStyleChange() override { ShareTextStyle(*m_title, false); }
 
@@ -469,6 +483,17 @@ export namespace foundation::gui
             SetSize(core::Float2{width, core::Max(m_minSize.y, s.y + delta.y)});
         }
 
+        void FitHeight()
+        {
+            const core::Float2 size = GetSize();
+            const LayoutConstraints across{core::Float2{size.x, 0.0f}, core::Float2{size.x, kUnbounded}, core::Float2{size.x, -1.0f}, true, false};
+            const f32 height = m_titleBarHeight + m_contentHost->Measure(across).y;
+            if (core::Abs(height - size.y) <= 0.5f)
+                return;
+            SetPosition(core::Float2{GetPosition().x, GetPosition().y + (size.y - height) * 0.5f});
+            SetSize(core::Float2{size.x, height});
+        }
+
         void Relayout()
         {
             const core::Float2 s = GetSize();
@@ -496,6 +521,7 @@ export namespace foundation::gui
         bool m_modal = false;
         u32 m_backHandler = 0; // the `back` command handler while open as a modal
         core::Float2 m_minSize{120.0f, 60.0f};
+        bool m_fitsHeight = false; // the height follows the content (SetFitsHeightToContent)
         f32 m_titleBarHeight = 28.0f;
         f32 m_gripSize = 14.0f;
         Color m_bodyColor{0.16f, 0.17f, 0.21f, 1.0f};

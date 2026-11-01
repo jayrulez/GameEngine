@@ -18,10 +18,6 @@
   - Compare against the old editor's painting (on the `vg` branch, before the editor moved to the
     new GUI) for regressions in behaviour, brushes and controls.
 
-- **The project's picture is taken before its scene has drawn** (user 2026-11-01, from the welcome
-  page): the picture a project gets the first time a scene page settles can be the viewport before
-  anything drew (Snowline's is a grey gradient). Take it once the scene has drawn its content.
-
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
   names, as Lamplight's levels share theirs), else from hard-coded defaults; other domains are

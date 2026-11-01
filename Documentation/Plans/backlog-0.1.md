@@ -18,10 +18,9 @@
   - Compare against the old editor's painting (on the `vg` branch, before the editor moved to the
     new GUI) for regressions in behaviour, brushes and controls.
 
-- **The project's welcome page looks good** (user 2026-11-01): the page a project opens on (its
-  name and folder, the default scene, the Game commands, the scenes, the settings and the Project
-  commands) does not look good yet; give it the design pass the project manager had. After the
-  terrain and vegetation fixes, before the import UX work.
+- **The project's picture is taken before its scene has drawn** (user 2026-11-01, from the welcome
+  page): the picture a project gets the first time a scene page settles can be the viewport before
+  anything drew (Snowline's is a grey gradient). Take it once the scene has drawn its content.
 
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
@@ -59,16 +58,6 @@
   `EditorPages.cppm`): the Game tab focuses its run when it becomes the active page, as well as on
   a viewport click.
 
-- **Scene and prefab thumbnails never draw** (user 2026-10-26; the old editor too): the assets
-  browser and the pickers show a scene's and a prefab's icon, never a picture, while meshes and
-  materials draw. The generators exist (Editor.Scene's AssetThumbnailsImpl.cpp: Prefab- and
-  SceneThumbnailGenerator) and are registered with the scene editor; they are the two that stage
-  into a private scene (`NeedsPrivateScene`), which the thumbnail stage creates on its own scene
-  manager (Editor.Preview's ThumbnailStageImpl.cpp), whose installer the scene subsystem does set.
-  Not yet found: whether their jobs are queued at all, whether their Stage fails (the prefab
-  payload read, the spawn, the scene load) or times out waiting on meshes, or whether the private
-  scene renders empty. Their failures log nothing today: a warning on a failed thumbnail would
-  have shown which.
 - **The assets browser's slow-click rename and a typed guid selecting** (X8 parity check, gap 8;
   user 2026-10-27: evaluate later): the old browser started a rename on a slow second click
   (AssetsView.cppm:330 at 4fe177db2) and selected the asset a whole typed guid names, so Enter or

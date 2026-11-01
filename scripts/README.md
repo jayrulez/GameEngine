@@ -101,3 +101,18 @@ both Windows backends by default (DXIL for DX12, SPIR-V for Vulkan). It builds t
 `build-msvc.cmd` or `build-clang.cmd`, as the templates script does, so only `ninja` needs to be on
 PATH; confirm `dxcompiler.dll`/`SDL3.dll` stage and that `Tools.Editor.pdb` lands in the symbols
 archive.
+
+## pack-samples.py - the sample games for a release
+
+```sh
+scripts/pack-samples.py <version> <out-dir>
+```
+
+Packs the sample games `Data/SampleProjects/Samples.json` lists, for the editor's Samples tab: a
+zip of each one's tracked files less its authoring `Tools/` (`sample-<folder>.zip`, under a top
+folder of its name, with fixed timestamps so the same files pack the same), its picture
+(`sample-<folder>.png`), and `samples.json` naming them with each zip's size, SHA-256 and unpacked
+size. `release.yml`'s `samples` job runs it on a tag and attaches the files; the editor of that
+version reads `samples.json` from its release. Run it from the repository root in a checkout: only
+tracked files go in. A sample joins the tab by an entry in `Samples.json` (its folder, its name,
+one line on what it is, its picture from `Documentation/Images`).

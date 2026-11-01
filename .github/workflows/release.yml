@@ -262,3 +262,28 @@ jobs:
         with:
           files: dist/DeploymentTemplate-*-Web.tar.gz
           fail_on_unmatched_files: true
+
+  # The sample games for the editor's Samples tab: a zip of each (its tracked files, less its
+  # authoring Tools/), its picture, and samples.json naming them with their sizes and SHA-256
+  # (scripts/pack-samples.py, from Data/SampleProjects/Samples.json). The editor of this version
+  # reads samples.json from this release. Needs no build.
+  samples:
+    name: Sample games
+    needs: guard
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # publishes release assets
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pack the samples
+        run: |
+          VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
+          python3 scripts/pack-samples.py "${VERSION}" dist/samples
+      - name: Publish to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/samples/samples.json
+            dist/samples/sample-*.zip
+            dist/samples/sample-*.png
+          fail_on_unmatched_files: true

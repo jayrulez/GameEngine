@@ -244,6 +244,29 @@ namespace editor
                 }};
         }
 
+        // What a scene's or a prefab's thumbnail shows, as a hash: its envelope and its "scene"
+        // stream. No builder cooks these documents, so the cook keeps no recipe for them.
+        [[nodiscard]] u64 DocumentHash(foundation::content::Instance& instance)
+        {
+            u64 hash = HashBytes(nullptr, 0);
+            const auto fold = [&hash](IStream* stream)
+            {
+                if (stream == nullptr)
+                {
+                    hash = HashBytes(u8"-", 1, hash); // absent differs from empty
+                    return;
+                }
+                byte chunk[16 * 1024];
+                for (u64 read = stream->Read(chunk, sizeof(chunk)); read != 0; read = stream->Read(chunk, sizeof(chunk)))
+                    hash = HashBytes(chunk, static_cast<usize>(read), hash);
+            };
+            const UniquePtr<IStream> envelope = instance.OpenEnvelope();
+            fold(envelope.Get());
+            const UniquePtr<IStream> body = instance.ReadData(u8"scene");
+            fold(body.Get());
+            return hash != 0 ? hash : 1; // 0 means unknown to the service
+        }
+
         // Loading settles when every mesh ref with an identity has resolved or failed. A broken ref
         // is skipped, so one missing submesh does not kill the composite's thumbnail.
         [[nodiscard]] bool MeshRefsSettled(scene::Scene& stage)
@@ -424,6 +447,7 @@ namespace editor
             }
 
             void Unstage(scene::Scene&) override { m_spawned = false; } // scene is per-job
+            [[nodiscard]] u64 ContentHash(foundation::content::Instance& instance) override { return DocumentHash(instance); }
 
         private:
             EditorContext* m_context;
@@ -473,6 +497,7 @@ namespace editor
             }
 
             void Unstage(scene::Scene&) override { m_loaded = false; } // scene is per-job
+            [[nodiscard]] u64 ContentHash(foundation::content::Instance& instance) override { return DocumentHash(instance); }
 
         private:
             EditorContext* m_context;

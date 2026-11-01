@@ -60,7 +60,7 @@ namespace editor
         // An unknown content hash (mid-cook, no record yet) means RAM only: never write a cache
         // file that can never match again. The invalidation when the cook finishes regenerates
         // with the real hash and then persists.
-        const u64 hash = m_contentHash ? m_contentHash(id) : 0;
+        const u64 hash = HashFor(id);
         if (hash != 0)
         {
             slot->diskPath = CachePathFor(id, hash);
@@ -227,6 +227,18 @@ namespace editor
         editor::EditorRootAllocator().Delete(slot);
     }
 
+    u64 ThumbnailService::HashFor(const Guid& id)
+    {
+        if (const u64 recipe = m_contentHash ? m_contentHash(id) : 0; recipe != 0)
+            return recipe;
+        // A document no builder cooks (a scene, a prefab) has no recipe: its generator names it.
+        content::Instance* instance = m_resolve ? m_resolve(id) : nullptr;
+        if (instance == nullptr || GeneratorFor(instance->TypeName()) != nullptr)
+            return 0;
+        ISceneThumbnailGenerator* generator = SceneGeneratorFor(instance->TypeName());
+        return generator != nullptr ? generator->ContentHash(*instance) : 0;
+    }
+
     void ThumbnailService::AcceptSceneResult(const Guid& id, image::Image pixels, bool ok)
     {
         // Main thread (the stage runs on the frame loop). Only the active job may complete; a
@@ -247,7 +259,7 @@ namespace editor
 
         // Persist on the light lane (PNG encoding off the main thread) and publish immediately:
         // the drawable owns its pixels, so the UI can swap it in before the file lands.
-        const u64 hash = m_contentHash ? m_contentHash(id) : 0;
+        const u64 hash = HashFor(id);
         if (hash != 0 && m_jobs != nullptr)
         {
             auto* file = editor::EditorRootAllocator().New<image::Image>(pixels); // copy: publish keeps the original

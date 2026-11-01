@@ -429,6 +429,57 @@ TEST_CASE("thumbnails: a scene-generated type waits for its cook rather than fai
     (void)RemoveDirectoryRecursive(u8"thumbs_gpu_uncooked");
 }
 
+namespace
+{
+    // A document no builder cooks (a scene, a prefab): the cook keeps no recipe for it, so its
+    // generator names its content.
+    class DocumentSceneGenerator final : public ISceneThumbnailGenerator
+    {
+    public:
+        [[nodiscard]] Span<const StringView> AssetTypeNames() const override
+        {
+            static constexpr StringView kTypes[] = {u8"StubGpuAsset"};
+            return Span<const StringView>(kTypes, 1);
+        }
+        [[nodiscard]] ThumbnailStageStep Stage(const Guid&, foundation::scene::Scene&, foundation::resource::ResourceManager&,
+                                               ThumbnailFraming&) override
+        {
+            return ThumbnailStageStep::Failed;
+        }
+        void Unstage(foundation::scene::Scene&) override {}
+        [[nodiscard]] u64 ContentHash(content::Instance&) override { return 85; }
+    };
+}
+
+// The cook keeps no record of a scene or a prefab, so its recipe hash is always 0; waiting for
+// one left them with their icons for good. The generator's own hash names them instead.
+TEST_CASE("thumbnails: a document the cook keeps no record of is named by its generator's hash")
+{
+    (void)RemoveDirectoryRecursive(u8"thumbs_gpu_document");
+    content::ContentDatabase db(DefaultAllocator(), Fixture::NullMount(), nullptr, u8"asset");
+    content::Instance instance(db, *db.RootGroup(), Guid{0x5555, 0x6666}, u8"Doc", u8"tests", u8"StubGpuAsset");
+    EditorJobService jobs{DefaultAllocator()};
+    ThumbnailService service;
+    (void)CreateDirectory(u8"thumbs_gpu_document");
+    service.RegisterSceneGenerator(MakeUnique<DocumentSceneGenerator>(DefaultAllocator()));
+    content::Instance* inst = &instance;
+    const Guid known{0x5555, 0x6666};
+    service.Configure(u8"thumbs_gpu_document",
+                      Function<content::Instance*(const Guid&)>{[inst, known](const Guid& id) { return id == known ? inst : nullptr; }}, &jobs,
+                      Function<u64(const Guid&)>{[](const Guid&) { return u64{0}; }}, u8"thumbs_empty_mount");
+
+    CHECK(service.Get(known).Get() == nullptr);
+    CHECK(service.QueuedSceneJobs() == 1u); // queued, not left waiting for a cook
+    SceneThumbnailJob job = service.TakeSceneJob();
+    REQUIRE(job.id == known);
+    service.AcceptSceneResult(known, SolidTile(90), true);
+    CHECK(service.Get(known).Get() != nullptr);
+    PumpLight(jobs);
+    CHECK(FileExists(Format(u8"thumbs_gpu_document/{}-85.png", known).AsView())); // saved under its own hash
+    service.Reset();
+    (void)RemoveDirectoryRecursive(u8"thumbs_gpu_document");
+}
+
 TEST_CASE("thumbnails: a failed stage result caches a negative and never re-queues")
 {
     (void)RemoveDirectoryRecursive(u8"thumbs_gpu_fail");

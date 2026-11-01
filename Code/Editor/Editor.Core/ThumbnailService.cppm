@@ -143,6 +143,14 @@ export namespace editor
                                                        foundation::resource::ResourceManager& resources,
                                                        ThumbnailFraming& outFraming) = 0;
         virtual void Unstage(foundation::scene::Scene& scene) = 0;
+        /// A hash of what the thumbnail shows, for a type the cook keeps no record of (a scene or
+        /// a prefab document, which no builder cooks): the cache file is named by it, so a change
+        /// to it makes a new thumbnail. 0, the default, leaves it to the cook's recipe hash.
+        [[nodiscard]] virtual u64 ContentHash(foundation::content::Instance& instance)
+        {
+            (void)instance;
+            return 0;
+        }
     };
 
     /// One queued GPU thumbnail job (the stage drives it; the service owns the bookkeeping).
@@ -344,6 +352,9 @@ export namespace editor
         }
 
         void ScheduleLoad(const Guid& id);
+        // What names an asset's cache file: the cook's recipe hash, else (a document no builder
+        // cooks) its GPU generator's ContentHash; 0 when neither knows it yet.
+        [[nodiscard]] u64 HashFor(const Guid& id);
         void CompleteLoad(JobSlot* slot);
 
         String m_cacheDirectory;

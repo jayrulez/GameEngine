@@ -11,10 +11,17 @@
 - **Terrain and vegetation tools: fixes and a regression check** (user 2026-11-01):
   - Sculpting (and maybe the vegetation tool) still acts when the pointer is over UI: a press or
     drag over a panel or the tool's own controls goes through to the viewport.
-  - The paint tool's layers UI looks poor and needs a design pass.
+  - The paint tool's layers UI looks poor and needs a design pass. Its slots spilled over their
+    row and were too small to tell apart: they fit, at 40 pixels, and wrap (2f6f0c9b8); the help
+    line names the minus key (9d70e997b). The vegetation panel checked on Meadow: fine.
   - Check the vegetation tool the same way.
   - Compare against the old editor's painting (on the `vg` branch, before the editor moved to the
     new GUI) for regressions in behaviour, brushes and controls.
+
+- **The project's welcome page looks good** (user 2026-11-01): the page a project opens on (its
+  name and folder, the default scene, the Game commands, the scenes, the settings and the Project
+  commands) does not look good yet; give it the design pass the project manager had. After the
+  terrain and vegetation fixes, before the import UX work.
 
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it

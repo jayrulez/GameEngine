@@ -274,6 +274,7 @@ namespace editor::app
         mcp.windows.shots = [self]() { return self->m_windowCapture.Shots(); };
         mcp.guiRoot = [self]() { return self->m_window.Root(); };
         mcp.dropFiles = [self](Span<const String> paths, String& error) { return self->DropFiles(paths, error); };
+        mcp.screen = [self]() { return self->m_window.ShowsScreen() ? StringView(u8"projectManager") : StringView(u8"editor"); };
         m_mcp = MakeUnique<EditorMcpService>(m_editorAllocator, m_editorAllocator, Move(mcp));
 
         // Per-subsystem editor plugins register here with the embedded host (every page's scenes
@@ -517,11 +518,11 @@ namespace editor::app
             services.contributions = &m_context.EditorSettingsContributions();
             services.mcpChanged = [self]()
             {
-                // The MCP host follows the saved settings for the open project.
-                if (!self->m_mcp || self->m_session.Project() == nullptr)
+                // The MCP host follows the saved settings, over the open project or the manager.
+                if (!self->m_mcp)
                     return;
                 self->m_mcp->Stop();
-                (void)self->m_mcp->Start(*self->m_session.Project());
+                (void)self->m_mcp->Start(self->m_session.Project());
             };
             services.showLook = [self](const EditorLook& look) { self->m_window.SetLook(look); };
             services.persist = [self]() { return editor::SaveEditorSettingsToUserData(self->m_editorSettings).IsOk(); };
@@ -791,6 +792,10 @@ namespace editor::app
         m_manager->SetStatus({});
         m_window.ShowScreen(m_manager->Content());
         m_manager->Shown();
+        // With no project, the MCP host serves the manager (when enabled): an agent can see and
+        // drive it as it does the editor.
+        if (m_mcp && m_session.Project() == nullptr)
+            (void)m_mcp->EnsureRunning();
     }
 
     // Where the Samples tab reads the release's files: GitHub's release for this version, or what

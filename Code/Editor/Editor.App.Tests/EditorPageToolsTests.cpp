@@ -151,8 +151,12 @@ TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close
     REQUIRE(listed.ok);
     CHECK(listed.payload.Get(u8"pages").Count() == 0);
 
-    // Open by guid: created once, active, clean; opening again focuses instead of recreating.
+    // With no project in the editor (the project manager), page_open refuses.
     const String oneGuid = GuidText(one->Id());
+    CHECK_FALSE(Call(server, u8"page_open", Format(u8"{{\"guid\":\"{}\"}}", oneGuid.AsView()).AsView()).ok);
+    context.SetProject(project.Get()); // as the editor does once it opens one
+
+    // Open by guid: created once, active, clean; opening again focuses instead of recreating.
     Answer opened = Call(server, u8"page_open", Format(u8"{{\"guid\":\"{}\"}}", oneGuid.AsView()).AsView());
     REQUIRE(opened.ok);
     CHECK(opened.payload.Get(u8"title").AsString() == StringView(u8"One"));
@@ -224,6 +228,7 @@ TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close
     CHECK(reload.error.AsView().StartsWith(u8"no open page for guid"));
 
     context.ClosePage(context.ActivePage());
+    context.SetProject(nullptr); // before the project goes
     project = nullptr;
     std::filesystem::remove_all("mcp_page_tools_project", ec);
 }

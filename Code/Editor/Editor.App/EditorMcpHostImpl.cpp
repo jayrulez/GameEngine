@@ -52,13 +52,17 @@ namespace editor::app
                                   {
                                       JsonValue host = JsonValue::MakeObject();
                                       host.Set(u8"kind", JsonValue::MakeString(u8"editor"));
-                                      host.Set(u8"projectOpen", JsonValue::MakeBool(true));
-                                      host.Set(u8"projectName",
-                                               JsonValue::MakeString(
-                                                   String(m_session->project->Name())));
-                                      host.Set(u8"projectDirectory",
-                                               JsonValue::MakeString(
-                                                   String(m_session->project->Directory())));
+                                      const bool open = m_session->project != nullptr;
+                                      host.Set(u8"projectOpen", JsonValue::MakeBool(open));
+                                      if (open)
+                                      {
+                                          host.Set(u8"projectName", JsonValue::MakeString(String(m_session->project->Name())));
+                                          host.Set(u8"projectDirectory", JsonValue::MakeString(String(m_session->project->Directory())));
+                                      }
+                                      // What the window shows: the project manager, or the editor.
+                                      const StringView shows = screen ? screen() : StringView{};
+                                      host.Set(u8"screen", JsonValue::MakeString(String(
+                                                               !shows.IsEmpty() ? shows : (open ? StringView(u8"editor") : StringView(u8"projectManager")))));
                                       return host;
                                   }});
         m_server.SetToolObserver(

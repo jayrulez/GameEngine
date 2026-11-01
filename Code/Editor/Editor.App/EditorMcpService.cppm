@@ -5,7 +5,9 @@
 //
 // EditorMcpService: the editor's MCP host over the open project, kept out of the application. It
 // starts when a project opens (when the user enabled it, or --mcp asked for it), creating the token
-// the first time. It serves the shared engine tools over the application's own services, so an
+// the first time, and while the project manager shows it serves with no project: the engine's tools
+// refuse as they do before project_open, and the input, screenshot, layout and action tools drive
+// the manager. It serves the shared engine tools over the application's own services, so an
 // agent's cook, import or export takes the same paths the menus do, plus the editor host's live
 // additions: the pages, the windows' screenshots, the profiler. The application adds the tools that
 // need its other parts (the dock's layout tools, the action bridge) through `addTools`. It stops
@@ -74,6 +76,9 @@ export namespace editor::app
             Function<foundation::gui::SceneRoot*()> guiRoot;
             /// What a file dropped on the main window does (editor_drop); false with `error` when it cannot.
             Function<bool(Span<const String> paths, String& error)> dropFiles;
+            /// What the window shows, for host_info's `screen`: "projectManager" or "editor" (empty:
+            /// it follows whether a project is open).
+            Function<StringView()> screen;
             /// The tools the application adds over its other parts (the dock, the actions).
             Function<void(foundation::mcp::McpServer&)> addTools;
         };
@@ -85,7 +90,15 @@ export namespace editor::app
 
         /// Starts the host over `project` when enabled: false when it is not, or it could not
         /// listen (logged: another editor may hold the port).
-        bool Start(editor::EditorProject& project)
+        bool Start(editor::EditorProject& project) { return Start(&project); }
+        /// Starts the host with no project (the project manager's).
+        bool StartWithoutProject() { return Start(nullptr); }
+        /// The host running, with or without a project: started without one when it is not running.
+        /// False when it is disabled or could not listen.
+        bool EnsureRunning() { return IsRunning() || StartWithoutProject(); }
+
+        /// Starts the host over `project`, or over none (null).
+        bool Start(editor::EditorProject* project)
         {
             Stop();
             editor::EditorMcpSettings& settings = m_services.userSettings->Section<editor::EditorMcpSettings>();
@@ -109,11 +122,11 @@ export namespace editor::app
             editor::mcp::LocateShippingDocs(Span<const String>(starts, 2), paths);
             // shader_validate compiles against the engine's shader library under the data root.
             paths.shaderLibrary = foundation::vfs::DataPath(m_services.dataRoot.AsView(), foundation::shaders::kShaderFolder);
-            m_session.project = &project;
+            m_session.project = project;
 
             EditorProjectOperationsSeams operations;
             operations.allocator = &m_allocator;
-            operations.project = &project;
+            operations.project = project; // null without a project: the tools that use it refuse first
             operations.context = m_services.context;
             operations.cook = m_services.cook;
             operations.jobs = m_services.jobs;
@@ -138,6 +151,7 @@ export namespace editor::app
             m_host = MakeUnique<EditorMcpHost>(m_allocator, m_allocator, *m_services.context, m_session, *m_services.log, *m_services.builders,
                                                m_services.context->Importers(), m_services.context->Creators(), paths, *m_operations,
                                                String(reinterpret_cast<const char8_t*>(BuildStamp())));
+            m_host->screen = [self]() { return self->m_services.screen ? self->m_services.screen() : StringView{}; };
             editor::EditorContext* context = m_services.context;
             m_host->OnToolFinished = [context](StringView tool, bool isError)
             { context->SetStatus(Format(u8"MCP: {} {}", tool, isError ? u8"failed" : u8"done")); };

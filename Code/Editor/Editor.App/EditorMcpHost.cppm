@@ -80,6 +80,9 @@ export namespace editor::app
         /// Called with (tool, isError) after every finished tools/call, so the application can
         /// show the agent's activity.
         Function<void(StringView, bool)> OnToolFinished;
+        /// What the window shows, for host_info's `screen` ("projectManager" or "editor"; empty:
+        /// it follows whether a project is open).
+        Function<StringView()> screen;
 
     private:
         IAllocator* m_allocator;

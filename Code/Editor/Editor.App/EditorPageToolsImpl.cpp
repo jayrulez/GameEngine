@@ -111,6 +111,10 @@ namespace editor::app
                     return Err(Move(id.Error()));
                 }
                 editor::EditorContext& context = *state->seams.context;
+                if (context.Project() == nullptr)
+                {
+                    return Err(String(u8"no project is open (call project_open first)"));
+                }
                 editor::EditorPage* page = FindOpenPage(context, id.Value());
                 if (page == nullptr)
                 {

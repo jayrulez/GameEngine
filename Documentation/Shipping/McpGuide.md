@@ -62,6 +62,14 @@ for the game to see it). A `scene_write` / `prefab_write` / `asset_data_write` o
 reaches its page at once: a clean page reloads in place, a page with unsaved edits keeps
 them and warns the user - ask before `page_reload` with `force`, which discards them.
 
+With no project open, the editor host serves the project manager (when enabled; `--mcp` turns it
+on for a run): `host_info.host.projectOpen` is false and `host_info.host.screen` is
+`projectManager` (else `editor`). The engine tools refuse as they do before `project_open` on the
+stdio host, `page_open` refuses, and `page_list` and `pie_list` answer empty; `log_read`, the
+input tools, `editor_screenshot`, `layout_get` and the action bridge work on the manager as they
+are. To look at the Samples tab without a release: `scripts/pack-samples.py 0.1.0 <folder>`, then
+`Tools.Editor --mcp --release-files <folder>` (it opens on Samples) and `editor_screenshot`.
+
 To build ON AN OPEN PAGE instead, live and undoable (the editor host): `entity_create`,
 `entity_update` (name, parent, active, transform), `entity_delete`, `component_add`,
 `component_remove`, `prefab_spawn`, `behavior_add` and `behavior_set` (a script behaviour's

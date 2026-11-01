@@ -6,6 +6,7 @@
 // the report of finished calls.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include <cstdlib>
 #include <filesystem>
 
 import foundation.core;
@@ -14,6 +15,7 @@ import foundation.http;
 import foundation.json;
 import foundation.mcp;
 import foundation.mcp.http;
+import foundation.settings;
 import pipeline.core;
 import editor.core;
 import pipeline.importer; // the import framework (a consumer imports it itself)
@@ -249,4 +251,131 @@ TEST_CASE("editor-mcp-host: an empty token never serves")
     // The session outlives the host; what the host wired on it went with the host.
     CHECK_FALSE(static_cast<bool>(session.onAssetWritten));
     std::filesystem::remove_all("mcp_host_project2", ec);
+}
+
+namespace
+{
+    // Points the user-data folder (where the host writes its token file) at the test's scratch
+    // while it lives, so a test never touches the real one.
+    struct ScratchUserData
+    {
+        const char* name;
+        std::string before;
+        bool had = false;
+        explicit ScratchUserData(const char* folder)
+#if defined(_WIN32)
+            : name("LOCALAPPDATA")
+#else
+            : name("XDG_DATA_HOME")
+#endif
+        {
+            if (const char* v = std::getenv(name))
+            {
+                before = v;
+                had = true;
+            }
+            const std::string path = std::filesystem::absolute(folder).string();
+#if defined(_WIN32)
+            _putenv_s(name, path.c_str());
+#else
+            setenv(name, path.c_str(), 1);
+#endif
+        }
+        ~ScratchUserData()
+        {
+#if defined(_WIN32)
+            _putenv_s(name, had ? before.c_str() : "");
+#else
+            if (had)
+                setenv(name, before.c_str(), 1);
+            else
+                unsetenv(name);
+#endif
+        }
+    };
+}
+
+TEST_CASE("editor-mcp-host: with no project the host serves the manager; the engine's tools refuse, host_info says so")
+{
+    std::error_code ec;
+    std::filesystem::remove_all("mcp_manager_userdata", ec);
+    ScratchUserData userData("mcp_manager_userdata");
+    RegisterEditorSettingsTypes();
+    EditorLogBuffer logBuffer{DefaultAllocator()};
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    EditorContext context{DefaultAllocator()};
+    foundation::settings::Settings settings{DefaultAllocator()};
+    settings.Section<EditorMcpSettings>().token = String(u8"sekrit"); // none minted, so nothing is saved
+
+    const auto make = [&](bool forced)
+    {
+        app::EditorMcpService::Services services;
+        services.context = &context;
+        services.builders = &builders;
+        services.userSettings = &settings;
+        services.log = &logBuffer;
+        services.forceEnabled = forced; // --mcp
+        services.screen = []() { return StringView(u8"projectManager"); };
+        return services;
+    };
+    {
+        // Disabled (no preference, no --mcp): no host, with or without a project.
+        app::EditorMcpService disabled(DefaultAllocator(), make(false));
+        CHECK_FALSE(disabled.EnsureRunning());
+        CHECK_FALSE(disabled.IsRunning());
+    }
+
+    app::EditorMcpService service(DefaultAllocator(), make(true));
+    REQUIRE(service.EnsureRunning());
+    app::EditorMcpHost* host = service.Host();
+    REQUIRE(host != nullptr);
+    CHECK(service.EnsureRunning()); // already running: the same host, not a second
+    CHECK(service.Host() == host);
+    const u16 port = host->BoundPort();
+
+    struct Outcome
+    {
+        JsonValue info, assets, page, validate, pages, log;
+    } got;
+    bool done = false;
+    const auto call = [port](StringView tool, StringView args)
+    {
+        return Call(port, u8"sekrit",
+                    Format(u8"{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"{}\",\"arguments\":{}}}}}", tool, args)
+                        .AsView());
+    };
+    Thread client(
+        [&]
+        {
+            got.info = call(u8"host_info", u8"{}");
+            got.assets = call(u8"asset_list", u8"{}");
+            got.page = call(u8"page_open", u8"{\"guid\":\"00000000-0000-0000-0000-000000000001\"}");
+            got.validate = call(u8"scene_validate", u8"{}");
+            got.pages = call(u8"page_list", u8"{}");
+            got.log = call(u8"log_read", u8"{}");
+            done = true;
+        });
+    for (u32 i = 0; i < 5000 && !done; ++i)
+    {
+        service.Pump();
+        SleepMilliseconds(1);
+    }
+    client.Join();
+
+    const auto refused = [](const JsonValue& response)
+    { return response.Get(u8"result").Get(u8"isError").AsBool() || response.Has(u8"error"); };
+    REQUIRE(got.info.IsObject());
+    const JsonValue info = Payload(got.info).Get(u8"host");
+    CHECK_FALSE(info.Get(u8"projectOpen").AsBool());
+    CHECK_FALSE(info.Has(u8"projectName"));
+    CHECK(info.Get(u8"screen").AsString() == StringView(u8"projectManager"));
+    CHECK(refused(got.assets));
+    CHECK(refused(got.page));
+    CHECK(got.page.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString().AsView().ContainsIgnoreCase(u8"no project is open"));
+    CHECK(refused(got.validate));
+    CHECK_FALSE(refused(got.pages)); // nothing open: an empty list
+    CHECK_FALSE(refused(got.log));
+
+    service.Stop();
+    std::filesystem::remove_all("mcp_manager_userdata", ec);
 }

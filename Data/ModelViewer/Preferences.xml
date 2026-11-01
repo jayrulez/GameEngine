@@ -1,8 +1,8 @@
 <!--
-  The model viewer's Preferences (Documentation/Specs/model-viewer.md, P9), the editor's dialog
-  (Editor/Preferences.xml) in its classes: a tab per category, Save keeps the changes (through the
-  settings.set command, as an agent changes them), Cancel or closing forgets them. Clear cache acts
-  at once, through cache.clear.
+  The model viewer's Preferences dialog, built with the classes of the editor's dialog
+  (Editor/Preferences.xml). It has a tab per category. Save keeps the changes (through the
+  settings.set command, the same way an agent changes them); Cancel or closing the dialog discards
+  them. Clear cache acts at once, through cache.clear.
 -->
 <Panel class="preferences">
     <TabView id="pref-tabs" class="pref-tabs">

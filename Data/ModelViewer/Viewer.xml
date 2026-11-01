@@ -1,14 +1,14 @@
 <!--
-  The model viewer's window (Documentation/Specs/model-viewer.md): a bar with a tab per open model,
-  Open and Screenshot; under it the stage (the 3D view over the animation bar) and the side panel
-  (the model's numbers, the view's light, the turntable, the skeleton). With nothing open, the
-  stage says how to open a model. Its look is the editor's sheet with the viewer's own after it
+  The model viewer's window: a bar with a tab per open model, Open, Recent and Preferences. A model
+  tab shows its own toolbar over the stage (the 3D view over the animation bar) and the side panel
+  (the model's numbers, materials, textures and library entry). With nothing open, the stage says
+  how to open a model. Its look is the editor's sheet followed by the viewer's own
   (ModelViewer/viewer.css). Code puts the viewport in `viewer-view`, a tab per model in
   `viewer-tabs` after the Browse and Library tabs, the numbers in `viewer-stats` and the clips in
-  `viewer-clip`. With the Browse tab in front, the browser takes the stage's place: the folders,
-  the filters and a thumbnail per model under the chosen folder (`viewer-grid`). With the Library
-  tab in front, the library: its collections (`viewer-lib-tree`) and its tags as chips (`viewer-tag-chips`), the search, and the
-  models of what is chosen (`viewer-lib-grid`).
+  `viewer-clip`. With the Browse tab in front, the browser takes the stage's place: the folders, the
+  filters and a thumbnail per model in the chosen folder (`viewer-grid`). With the Library tab in
+  front, the library takes it: its collections (`viewer-lib-tree`), its tags as chips
+  (`viewer-tag-chips`), the search, and the models of the chosen collection (`viewer-lib-grid`).
 -->
 <Panel class="viewer">
     <Panel id="viewer-bar" class="panel-toolbar viewer-bar">
@@ -20,7 +20,8 @@
         <Button id="viewer-preferences" class="icon-button" icon="Editor/Icons/settings.svg" tooltip="Preferences: screenshots, the view's defaults, thumbnails and the cache"/>
     </Panel>
     <Panel class="viewer-body">
-        <!-- Browse: the folders, the grid and the chosen model's details, a splitter's panes. -->
+        <!-- Browse: the folders, the grid and the chosen model's details, as the panes of a
+           splitter. -->
         <Splitter id="viewer-browser" class="viewer-browser page-body" axis="horizontal" weights="0.2 0.56 0.24">
             <Panel class="viewer-folders page-pane">
                 <Panel class="panel-toolbar viewer-folders-bar">
@@ -81,7 +82,8 @@
                 </Panel>
             </Panel>
         </Splitter>
-        <!-- Library: the collections and tags, the grid and the chosen model's details, a splitter's panes. -->
+        <!-- Library: the collections and tags, the grid and the chosen model's details, as the
+           panes of a splitter. -->
         <Splitter id="viewer-library" class="viewer-browser page-body" axis="horizontal" weights="0.2 0.56 0.24">
             <Panel class="viewer-folders page-pane">
                 <Panel class="panel-toolbar viewer-lib-bar">
@@ -91,7 +93,8 @@
                     <Button id="viewer-lib-undo" class="icon-button" icon="Editor/Icons/undo.svg" tooltip="Undo the last change to the library"/>
                 </Panel>
                 <TreeView id="viewer-lib-tree" class="viewer-folder-tree"/>
-                <!-- The tags, each on or off: the grid shows the models with any tag that is on. -->
+                <!-- The tags, each turned on or off: the grid shows the models that have any tag
+                   that is on. -->
                 <Panel class="panel-toolbar viewer-lib-bar">
                     <Label class="viewer-pane-title" text="Tags"/>
                     <Spacer/>
@@ -150,13 +153,15 @@
                 </Panel>
             </Panel>
         </Splitter>
-        <!-- A model tab: its own bar, as an editor page's, over its view and its side panel (a splitter's panes). -->
+        <!-- A model tab: its own toolbar, like an editor page's, over its view and its side panel
+           (the panes of a splitter). -->
         <Panel id="viewer-model-page" class="viewer-model-page">
             <ToolBar id="viewer-page-bar" class="page-toolbar">
                 <ToolButton id="viewer-frame" icon="Editor/Icons/frame-selection.svg" tooltip="Frame the model (F)"/>
                 <ToolButton id="viewer-screenshot" icon="Editor/Icons/camera.svg" tooltip="Save this view as a PNG: the 3D view only, grid and bones as shown (where and how named: Preferences)"/>
                 <Separator/>
-                <!-- The view's options: the stage every model tab shares (one scene, one light). -->
+                <!-- The view's options, for the stage that every model tab shares (one scene, one
+                   light). -->
                 <ToolButton id="viewer-grid-toggle" toggle="true" icon="Editor/Icons/grid.svg" tooltip="The ground grid (kept as a preference)"/>
                 <ToolButton id="viewer-skeleton-toggle" toggle="true" icon="Editor/Icons/character.svg" tooltip="Draw the bones over the model"/>
                 <ToolButton id="viewer-turntable-toggle" toggle="true" icon="Editor/Icons/rotate.svg" tooltip="Turn the model slowly about its middle"/>
@@ -217,7 +222,8 @@
             <Label class="preview-hint viewer-hint" text="Alt drag orbits · right drag looks, WASD flies · middle drag pans · wheel zooms · F frames"/>
         </Panel>
             </Splitter>
-            <!-- The light's popover (code takes it out of the page and opens it under the Lighting button). -->
+            <!-- The light's popover (code takes it out of the page and opens it under the light
+               button). -->
             <Panel id="viewer-light-pop" class="viewer-light-pop">
                 <Panel class="prop-row">
                     <Label class="prop-name" text="Exposure"/>

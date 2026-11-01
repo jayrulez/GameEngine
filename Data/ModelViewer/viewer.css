@@ -1,11 +1,11 @@
 /*
-  The model viewer's own rules (Documentation/Specs/model-viewer.md), after the editor's sheet and
-  its density, whose tokens they use: the viewer looks like the editor. The side panel reuses the
-  inspector's section headers and rows.
+  The model viewer's own rules. They come after the editor's sheet and its density and use their
+  tokens, so the viewer looks like the editor. The side panel reuses the inspector's section headers
+  and rows.
 */
 .viewer { background-color: var(--chrome); flex-direction: column; width: 100%; height: 100%; }
 .viewer-bar { background-color: var(--surface); border-bottom: 1px solid var(--separator); }
-.viewer-tabs { flex-grow: 1; min-width: 0; margin-left: var(--space-s); } /* the bar starts with the tabs */
+.viewer-tabs { flex-grow: 1; min-width: 0; margin-left: var(--space-s); } /* The bar starts with the tabs. */
 .viewer-body { flex-grow: 1; min-height: 0; flex-direction: row; }
 .viewer-stage { flex-grow: 1; min-width: 0; flex-direction: column; }
 .viewer-view { flex-grow: 1; min-height: 0; flex-direction: column; }
@@ -17,7 +17,8 @@
 .viewer-speed { width: 72px; flex-shrink: 0; }
 .viewer-empty { flex-grow: 1; }
 .viewer-browser { flex-grow: 1; min-width: 0; flex-direction: row; }
-/* Panes of a splitter (Browse's three, a model tab's two): the splitter sizes them by weight. */
+/* The panes of a splitter (three in Browse, two in a model tab): the splitter sizes them by weight.
+   */
 .viewer-folders { flex-direction: column; background-color: var(--surface); }
 .viewer-model-page { flex-grow: 1; min-width: 0; flex-direction: column; }
 .viewer-details { flex-direction: column; }
@@ -26,10 +27,11 @@
 .viewer-folder-tree { flex-grow: 1; min-height: 0; }
 .viewer-grid-pane { flex-grow: 1; min-width: 0; flex-direction: column; }
 .viewer-filter { background-color: var(--surface); border-bottom: 1px solid var(--separator); align-items: center;
-                 flex-wrap: wrap; row-gap: var(--space-xs); height: auto; } /* a narrow pane takes a second line */
+                 flex-wrap: wrap; row-gap: var(--space-xs); height: auto; } /* A narrow pane wraps onto a second line. */
 
 .viewer-grid-count { color: var(--text-dim); flex-grow: 1; text-align: right; }
-/* The grids: the editor's asset tiles, larger (a model's picture), the list's own selection. */
+/* The grids: the editor's asset tiles, larger to fit a model's picture, with the list's own
+   selection. */
 .viewer-tiles { flex-grow: 1; min-height: 0; background-color: var(--surface); padding: var(--space-m); }
 .viewer-tiles listviewrow { border-radius: var(--radius); }
 .viewer-tiles::selection { border-radius: var(--radius); }
@@ -38,7 +40,7 @@
                align-items: center; justify-content: center; }
 .model-glyph { width: 32px; height: 32px; image-color: var(--icon-dim); }
 .model-picture { width: 128px; height: 128px; border-radius: var(--radius-small); object-fit: cover; }
-/* The tile size slider's small and large steps (medium is the rules above). */
+/* The tile size slider's small and large steps (medium uses the rules above). */
 .viewer-tile-size { width: 72px; flex-shrink: 0; }
 .tiles-small .model-thumb, .tiles-small .model-picture { width: 96px; height: 96px; }
 .tiles-large .model-thumb, .tiles-large .model-picture { width: 192px; height: 192px; }
@@ -50,11 +52,12 @@
 .viewer-pane-title { color: var(--text-strong); font-weight: 600; }
 .viewer-filter > .search { flex-grow: 1; min-width: 160px; max-width: 360px; }
 .viewer-filter > .viewer-lib-search { max-width: none; }
-/* The Library section, as an inspector's rows: a label, then its value; In, Tags and Note stack theirs. */
+/* The Library section, as inspector rows: a label, then its value; In, Tags and Note stack their
+   values. */
 .viewer-lib-row { align-items: flex-start; padding-top: var(--space-xs); padding-bottom: var(--space-xs); }
 .viewer-lib-row > .prop-name { line-height: var(--control-height); }
 .viewer-memberships { flex-direction: column; row-gap: var(--space-xs); }
-.viewer-memberships > .viewer-empty-note { padding: 6px 0 0; white-space: normal; } /* level with its label's line */
+.viewer-memberships > .viewer-empty-note { padding: 6px 0 0; white-space: normal; } /* Level with its label's line. */
 .viewer-membership { flex-direction: row; align-items: center; column-gap: var(--space-s); }
 .viewer-membership > label { width: 40%; flex-shrink: 0; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
 .viewer-membership > textfield { flex-grow: 1; min-width: 0; }
@@ -65,7 +68,7 @@ button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-di
 .viewer-empty-note { color: var(--text-dim); padding: var(--space-s) var(--space-m); }
 .viewer-note { flex-grow: 1; min-width: 0; }
 .viewer-panel { flex-direction: column; background-color: var(--surface); min-height: 0; overflow-y: auto; overflow-x: hidden; }
-/* Its rows keep their height (a stacked one grows with what it holds); the panel scrolls instead. */
+/* Rows keep their height (a stacked row grows with its contents); the panel scrolls instead. */
 .viewer-panel > *, .viewer-details > *, .viewer-stats > * { flex-shrink: 0; }
 .viewer-file { color: var(--text-dim); padding: var(--space-s) var(--space-m); text-overflow: ellipsis; white-space: nowrap; }
 .viewer-stats { flex-direction: column; padding-bottom: var(--space-s); }
@@ -74,16 +77,17 @@ button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-di
 .viewer-panel > .prop-row > slider { flex-grow: 1; min-width: 0; }
 .viewer-hint { padding: var(--space-m); white-space: normal; }
 
-/* Preferences (P9): the folder fields wide enough for a path. */
+/* Preferences: the folder fields are wide enough for a path. */
 .pref-folder { width: 340px; }
-/* A material's or a texture's line: what it is, cut short with its whole in the row's tooltip. */
+/* A material's or a texture's line: what it is, cut short, with the full text in the row's tooltip.
+   */
 .viewer-content { min-width: 0; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-/* The light's popover under the toolbar's Lighting button: its three sliders as panel rows. */
+/* The light's popover under the toolbar's light button: its three sliders as panel rows. */
 .viewer-light-pop { flex-direction: column; width: 280px; padding: var(--space-s) 0; background-color: var(--surface-overlay);
                     border: 1px solid var(--border-strong); border-radius: var(--radius); }
 .viewer-light-pop > .prop-row { padding-left: var(--space-m); padding-right: var(--space-m); }
 .viewer-light-pop > .prop-row > slider { flex-grow: 1; min-width: 0; }
-/* The Library tab's tags: chips that turn on and off, under the collections. */
+/* The Library tab's tags: chips that toggle on and off, under the collections. */
 .viewer-tag-filter { padding: var(--space-s) var(--space-m) var(--space-m); flex-shrink: 0; max-height: 40%; overflow-y: auto; }
 .viewer-tag-filter > textfield { width: 120px; }
 

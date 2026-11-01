@@ -732,7 +732,7 @@ export namespace editor::app
     private:
         static constexpr f32 kDialogWidth = 600.0f;
         static constexpr f32 kDialogHeight = 330.0f;
-        static constexpr f32 kDownloadDialogHeight = 260.0f;
+        static constexpr f32 kDownloadDialogHeight = 200.0f;
         static constexpr const char8_t* kDownloadSamplePath = u8"Editor/DownloadSample.xml";
 
         // Where the download dialog is: choosing where, downloading, or how it ended.

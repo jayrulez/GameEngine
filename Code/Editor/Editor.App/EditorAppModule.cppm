@@ -27,6 +27,7 @@ export import :shortcut_capture;
 export import :preferences_dialog;
 export import :project_picture;
 export import :project_home;
+export import :sample_downloads;
 export import :project_manager_view;
 export import :log_view;
 export import :profiler_panel;

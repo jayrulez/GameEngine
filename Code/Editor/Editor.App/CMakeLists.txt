@@ -16,6 +16,7 @@ target_link_libraries(Editor.App
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
         Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::GUI # the game GUI's defaults, as the runtime sets them
         Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
+        Foundation::Http.Client Foundation::Net.Tls Foundation::Net.Tls.MbedTLS Foundation::Zip Foundation::Json # the Samples tab's downloads
         Editor::ViewportTools # the viewport tools' panels
         Editor::Mcp Foundation::Mcp Foundation::Mcp.Http) # the MCP host: the shared engine surface over HTTP
 
@@ -54,6 +55,7 @@ target_sources(Editor.App
             PreferencesDialog.cppm
             ProjectPicture.cppm
             ProjectHome.cppm
+            SampleDownloads.cppm
             ProjectManagerView.cppm
             LogView.cppm
             ProfilerPanel.cppm

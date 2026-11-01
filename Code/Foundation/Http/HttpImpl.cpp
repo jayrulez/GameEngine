@@ -341,22 +341,22 @@ namespace foundation::http
 
         if (m_bodyUntilClose)
         {
-            if (m_body.Size() > m_maxBody)
+            if (BodySoFar() > m_maxBody)
             {
                 m_tooLarge = true;
                 m_state = HttpParseState::Failed;
             }
             return m_state; // NeedMore until the peer closes
         }
-        if (m_body.Size() > m_maxBody)
+        if (BodySoFar() > m_maxBody)
         {
             m_tooLarge = true;
             m_state = HttpParseState::Failed;
             return m_state;
         }
-        if (m_body.Size() >= m_bodyExpected)
+        if (BodySoFar() >= m_bodyExpected)
         {
-            m_body.Resize(m_bodyExpected); // drop any over-read (Connection: close model)
+            m_body.Resize(m_bodyExpected - m_bodyTaken); // drop any over-read (Connection: close model)
             m_state = HttpParseState::Complete;
         }
         return m_state;
@@ -425,7 +425,7 @@ namespace foundation::http
                     m_chunk = Chunk::Trailers;
                     continue;
                 }
-                if (m_body.Size() + size > m_maxBody)
+                if (BodySoFar() + size > m_maxBody)
                 {
                     m_tooLarge = true;
                     m_state = HttpParseState::Failed;

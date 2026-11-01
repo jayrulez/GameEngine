@@ -158,6 +158,44 @@ TEST_CASE("http: parser - a chunked response body, split anywhere, extensions an
     }
 }
 
+TEST_CASE("http: parser - a body taken as it arrives still completes, trims and caps by every byte")
+{
+    const auto text = [](const Array<byte>& b) { return StringView(reinterpret_cast<const utf8char*>(b.Data()), b.Size()); };
+    // With a length: taken piece by piece, the over-read past it dropped.
+    HttpMessageParser p(HttpMessageParser::Mode::Response, 64);
+    CHECK_FALSE(p.HeadParsed());
+    CHECK(p.Push(Bytes(u8"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nhello")) == HttpParseState::NeedMore);
+    CHECK(p.HeadParsed());
+    CHECK(p.BodyLength() == 10);
+    String all;
+    Array<byte> piece;
+    p.TakeBody(piece);
+    all += text(piece);
+    CHECK(p.Body().IsEmpty());
+    CHECK(p.Push(Bytes(u8"world!!")) == HttpParseState::Complete); // two bytes over
+    p.TakeBody(piece);
+    all += text(piece);
+    CHECK(all == StringView(u8"helloworld"));
+
+    // Chunked: no length; the pieces are the decoded chunks.
+    HttpMessageParser c(HttpMessageParser::Mode::Response, 64);
+    CHECK(c.Push(Bytes(u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n")) == HttpParseState::NeedMore);
+    CHECK(c.BodyLength() == -1);
+    c.TakeBody(piece);
+    CHECK(text(piece) == StringView(u8"Wiki"));
+    CHECK(c.Push(Bytes(u8"5\r\npedia\r\n0\r\n\r\n")) == HttpParseState::Complete);
+    c.TakeBody(piece);
+    CHECK(text(piece) == StringView(u8"pedia"));
+
+    // The cap counts what was taken: 8 taken, then 8 more is past 12. (A length past the cap is
+    // refused at the head; a chunked body is counted as it comes.)
+    HttpMessageParser capped(HttpMessageParser::Mode::Response, 12);
+    CHECK(capped.Push(Bytes(u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n8\r\n12345678\r\n")) == HttpParseState::NeedMore);
+    capped.TakeBody(piece);
+    CHECK(capped.Push(Bytes(u8"8\r\n12345678\r\n")) == HttpParseState::Failed);
+    CHECK(capped.TooLarge());
+}
+
 TEST_CASE("http: parser - responses with no body (204, 304, 1xx, a HEAD's) complete at their head")
 {
     const StringView heads[] = {u8"HTTP/1.1 204 No Content\r\n\r\n", u8"HTTP/1.1 304 Not Modified\r\nContent-Length: 50\r\n\r\n"};

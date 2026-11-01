@@ -138,6 +138,23 @@ export namespace foundation::http
         // Both:
         [[nodiscard]] const Array<HttpHeader>& Headers() const noexcept { return m_headers; }
         [[nodiscard]] Array<byte>& Body() noexcept { return m_body; }
+        /// Response mode, to stream a body: moves the body decoded so far into `out` (replacing
+        /// what it held), so the parser keeps none of it. Completion and the cap still count every
+        /// byte, taken or not.
+        void TakeBody(Array<byte>& out)
+        {
+            out = Move(m_body);
+            m_body.Clear();
+            m_bodyTaken += out.Size();
+        }
+        /// Whether the head has been read (status and headers known).
+        [[nodiscard]] bool HeadParsed() const noexcept { return m_headParsed; }
+        /// The body's length as its head gives it (Content-Length), or -1 when it does not
+        /// (chunked, or read until the peer closes).
+        [[nodiscard]] i64 BodyLength() const noexcept
+        {
+            return m_headParsed && !m_chunked && !m_bodyUntilClose ? static_cast<i64>(m_bodyExpected) : -1;
+        }
 
     private:
         [[nodiscard]] bool ParseHead();
@@ -167,6 +184,8 @@ export namespace foundation::http
         i32 m_status = 0;
         Array<HttpHeader> m_headers;
         Array<byte> m_body;
+        usize m_bodyTaken = 0; // body bytes TakeBody moved out
+        [[nodiscard]] usize BodySoFar() const noexcept { return m_bodyTaken + m_body.Size(); }
     };
 
     // ---- server --------------------------------------------------------------------------

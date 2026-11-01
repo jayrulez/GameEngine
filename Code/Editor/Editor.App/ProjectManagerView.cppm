@@ -412,8 +412,8 @@ export namespace editor::app
                                      self->Open(target.AsView());
                                  });
             refresh();
-            ShowDialogStage(DialogStage::Choosing);
             m_dialog->OpenModal(*root);
+            ShowDialogStage(DialogStage::Choosing); // once open: a closed window's stages are left alone
         }
         /// The download dialog's window while it is open (for tests).
         [[nodiscard]] gui::Window* DownloadDialog() const noexcept { return CreateDialog(); }

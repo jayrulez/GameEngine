@@ -599,6 +599,16 @@ TEST_CASE("launcher: the Samples tab lists the release's samples, and one downlo
     gui::Window* dialog = l.view->DownloadDialog();
     REQUIRE(dialog != nullptr);
     CHECK(FindId<gui::Label>(*dialog, u8"download-sample-where")->GetText().StartsWith(u8"Downloads into"));
+    // It opens on choosing where: the download's and the end's panels and buttons are hidden.
+    const auto shown = [&](const char8_t* id) { return FindId<gui::UIWidget>(*dialog, id)->IsDisplayed(); };
+    CHECK(shown(u8"download-sample-choose"));
+    CHECK(shown(u8"download-sample-go"));
+    CHECK(shown(u8"download-sample-cancel"));
+    CHECK_FALSE(shown(u8"download-sample-progress"));
+    CHECK_FALSE(shown(u8"download-sample-result"));
+    CHECK_FALSE(shown(u8"download-sample-close"));
+    CHECK_FALSE(shown(u8"download-sample-retry"));
+    CHECK_FALSE(shown(u8"download-sample-open"));
     gui::Button* go = FindId<gui::Button>(*dialog, u8"download-sample-go");
     REQUIRE(go != nullptr);
     CHECK(go->IsEnabled());

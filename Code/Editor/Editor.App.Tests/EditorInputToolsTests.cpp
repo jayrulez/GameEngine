@@ -199,8 +199,18 @@ TEST_CASE("editor input tools: a drop hands existing files to the window's drop,
     (void)CreateDirectories(PathParent(file.AsView()));
     constexpr StringView kBytes = u8"not really a png";
     REQUIRE(WriteFile(file.AsView(), Span<const byte>(reinterpret_cast<const byte*>(kBytes.Data()), kBytes.Size())).IsOk());
+    // The arguments as JSON, each path written by the JSON writer: a Windows path's backslashes
+    // must be escaped.
+    const auto paths = [](StringView path)
+    {
+        json::JsonValue list = json::JsonValue::MakeArray();
+        list.Add(json::JsonValue::MakeString(String(path)));
+        json::JsonValue args = json::JsonValue::MakeObject();
+        args.Set(String(u8"paths"), Move(list));
+        return args.ToString();
+    };
 
-    const Answer dropped = Call(bed.server, u8"editor_drop", Format(u8"{{\"paths\":[\"{}\"]}}", file).AsView());
+    const Answer dropped = Call(bed.server, u8"editor_drop", paths(file.AsView()).AsView());
     REQUIRE(dropped.ok);
     CHECK(dropped.pumps == 1u); // answered on the frame after, as the other acts are
     REQUIRE(bed.dropped.Size() == 1u);
@@ -211,11 +221,11 @@ TEST_CASE("editor input tools: a drop hands existing files to the window's drop,
     // window that takes no drops (no project open).
     CHECK_FALSE(Call(bed.server, u8"editor_drop", u8"{\"paths\":[]}").ok);
     CHECK_FALSE(Call(bed.server, u8"editor_drop", u8"{\"paths\":[\"crate.png\"]}").ok);
-    const Answer missing = Call(bed.server, u8"editor_drop", Format(u8"{{\"paths\":[\"{}\"]}}", PathJoin(PathParent(file.AsView()), u8"gone.png")).AsView());
+    const Answer missing = Call(bed.server, u8"editor_drop", paths(PathJoin(PathParent(file.AsView()), u8"gone.png").AsView()).AsView());
     CHECK_FALSE(missing.ok);
     CHECK(missing.error.AsView().ContainsIgnoreCase(u8"no file at"));
     bed.takesDrops = false;
-    const Answer closed = Call(bed.server, u8"editor_drop", Format(u8"{{\"paths\":[\"{}\"]}}", file).AsView());
+    const Answer closed = Call(bed.server, u8"editor_drop", paths(file.AsView()).AsView());
     CHECK_FALSE(closed.ok);
     CHECK(closed.error.AsView().ContainsIgnoreCase(u8"no project is open"));
     CHECK(bed.dropped.Size() == 1u);

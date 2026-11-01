@@ -573,3 +573,58 @@ TEST_CASE("editor.settings: the preview resolutions seed once and round-trip")
     REQUIRE(loaded.Find<GamePageSettings>() != nullptr);
     CHECK(loaded.Find<GamePageSettings>()->resolutionKey == StringView(u8"preset:Handheld"));
 }
+
+TEST_CASE("project-registry: New Project's check names where it goes, and refuses what cannot be made")
+{
+    using Level = NewProjectCheckLevel;
+    const String root = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_new_project_check");
+    (void)RemoveDirectoryRecursive(root.AsView());
+    REQUIRE(CreateDirectories(PathJoin(root.AsView(), u8"Taken").AsView()));
+    REQUIRE(WriteFile(PathJoin(root.AsView(), u8"Taken/notes.txt").AsView(), Span<const byte>()).IsOk());
+    REQUIRE(CreateDirectories(PathJoin(root.AsView(), u8"Empty").AsView()));
+    REQUIRE(EditorProject::Create(DefaultAllocator(), PathJoin(root.AsView(), u8"Made").AsView(), u8"Made").IsOk());
+    // `in` is under the scratch root (empty: the root itself), which shows as ~.
+    const auto check = [&root](StringView name, StringView in, bool ownFolder)
+    {
+        const String location = in.IsEmpty() ? root : PathJoin(root.AsView(), in);
+        return ProjectManagerController::CheckNewProject(name, location.AsView(), ownFolder, root.AsView());
+    };
+
+    // Green: a new folder of its name in a folder that exists.
+    NewProjectCheck c = ProjectManagerController::CheckNewProject(u8"Harbour", root.AsView(), true, root.AsView());
+    CHECK(c.level == Level::Ok);
+    CHECK(c.target == PathJoin(root.AsView(), u8"Harbour"));
+    CHECK(c.message.AsView() == u8"Creates ~/Harbour, and opens it.");
+    // Without its own folder, an empty folder takes the project.
+    c = check(u8"Harbour", u8"Empty", false);
+    CHECK(c.level == Level::Ok);
+    CHECK(c.target == PathJoin(root.AsView(), u8"Empty"));
+    CHECK(c.message.AsView() == u8"Creates Harbour in ~/Empty, and opens it.");
+
+    // Red: what cannot be made, and Create waits.
+    CHECK(ProjectManagerController::CheckNewProject(u8"  ", root.AsView(), true, {}).message.AsView() == u8"Give the project a name.");
+    c = ProjectManagerController::CheckNewProject(u8"A/B", root.AsView(), true, {});
+    CHECK(c.level == Level::Error);
+    CHECK(c.message.AsView() == u8"A name cannot hold / \\ : * ? \" < > or |.");
+    CHECK(ProjectManagerController::CheckNewProject(u8"Why?", root.AsView(), true, {}).level == Level::Error);
+    CHECK(ProjectManagerController::CheckNewProject(u8"Harbour", u8" ", true, {}).message.AsView() == u8"Choose the folder it is made in.");
+    c = check(u8"Taken", u8"", true);
+    CHECK(c.level == Level::Error);
+    CHECK(c.message.AsView() == u8"~/Taken already exists and has files in it. Choose another name or folder.");
+    CHECK(check(u8"Harbour", u8"Taken", false).message.AsView() ==
+          u8"~/Taken already has files in it. A project needs an empty folder: turn on the folder option, or choose an empty one.");
+    CHECK(check(u8"Made", u8"", true).message.AsView() == u8"~/Made is a project already: Open Folder opens it.");
+    CHECK(check(u8"Harbour", u8"Taken/notes.txt", true).message.AsView() == u8"~/Taken/notes.txt is a file, not a folder.");
+
+    // Amber: it goes ahead, but says what it will do.
+    c = check(u8"Harbour", u8"Later/Games", true);
+    CHECK(c.level == Level::Warning);
+    CHECK(c.message.AsView() == u8"~/Later/Games does not exist yet; it will be made, then Harbour inside it.");
+    CHECK(check(u8"Harbour", u8"Later", false).message.AsView() == u8"~/Later does not exist yet; it will be made, and the project made in it.");
+    c = check(u8" Harbour ", u8"", true);
+    CHECK(c.level == Level::Warning);
+    CHECK(c.name.AsView() == u8"Harbour");
+    CHECK(c.message.AsView() == u8"The name starts or ends with a space; the folder will be ~/Harbour.");
+    CHECK_FALSE(DirectoryExists(PathJoin(root.AsView(), u8"Later").AsView())); // checking makes nothing
+    (void)RemoveDirectoryRecursive(root.AsView());
+}

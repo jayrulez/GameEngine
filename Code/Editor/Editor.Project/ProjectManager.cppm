@@ -33,9 +33,83 @@ export namespace editor
         PromptNewerEngine, // saved by a newer engine: warn strongly before opening
     };
 
+    // How New Project's check line reads: green, amber (it goes ahead), or red (Create waits).
+    enum class NewProjectCheckLevel
+    {
+        Ok,
+        Warning,
+        Error,
+    };
+    // New Project's check, kept current as the fields change: where the project goes, and what to
+    // say about it.
+    struct NewProjectCheck
+    {
+        NewProjectCheckLevel level = NewProjectCheckLevel::Error;
+        String message;
+        String target; // the project's folder (empty when there is none yet)
+        String name;   // the project's name, its spaces at either end trimmed
+    };
+
     class ProjectManagerController
     {
     public:
+        /// New Project's check for a project named `name` made in `location`, in a folder of its
+        /// name there when `ownFolder` is set, else in `location` itself (Specs/project-manager.md).
+        /// Red, Create waiting: no name, a name holding / \ : * ? " < > |, no location, a location
+        /// that is a file, a target that is a project already or holds files. Amber: the location
+        /// does not exist yet (it is made), the name starts or ends with a space. Else green.
+        /// Folders in the message show under `home` as ~.
+        [[nodiscard]] static NewProjectCheck CheckNewProject(StringView name, StringView location, bool ownFolder, StringView home)
+        {
+            NewProjectCheck check;
+            const StringView trimmed = TrimSpaces(name);
+            check.name = String(trimmed);
+            const auto fail = [&check](String message)
+            {
+                check.level = NewProjectCheckLevel::Error;
+                check.message = Move(message);
+                return check;
+            };
+            if (trimmed.IsEmpty())
+                return fail(String(u8"Give the project a name."));
+            for (const utf8char c : trimmed)
+                for (const utf8char bad : StringView(u8"/\\:*?\"<>|"))
+                    if (c == bad)
+                        return fail(String(u8"A name cannot hold / \\ : * ? \" < > or |."));
+            const StringView where = TrimSpaces(location);
+            if (where.IsEmpty())
+                return fail(String(u8"Choose the folder it is made in."));
+            const String shownWhere = ShortenHomePath(where, home);
+            if (!DirectoryExists(where) && FileExists(where))
+                return fail(Format(u8"{} is a file, not a folder.", shownWhere));
+            check.target = ownFolder ? PathJoin(where, trimmed) : String(where);
+            const String shownTarget = ShortenHomePath(check.target.AsView(), home);
+            if (FileExists(PathJoin(check.target.AsView(), u8"Project.xml").AsView()))
+                return fail(Format(u8"{} is a project already: Open Folder opens it.", shownTarget));
+            if (!DirectoryExists(check.target.AsView()) && FileExists(check.target.AsView()))
+                return fail(Format(u8"{} is a file, not a folder.", shownTarget));
+            if (HoldsAnything(check.target.AsView()))
+                return fail(ownFolder ? Format(u8"{} already exists and has files in it. Choose another name or folder.", shownTarget)
+                                      : Format(u8"{} already has files in it. A project needs an empty folder: turn on the folder "
+                                               u8"option, or choose an empty one.",
+                                               shownTarget));
+            check.level = NewProjectCheckLevel::Warning;
+            if (trimmed.Size() != name.Size())
+            {
+                check.message = Format(u8"The name starts or ends with a space; the {} will be {}.", ownFolder ? u8"folder" : u8"name", ownFolder ? shownTarget : check.name);
+                return check;
+            }
+            if (!DirectoryExists(where))
+            {
+                check.message = ownFolder ? Format(u8"{} does not exist yet; it will be made, then {} inside it.", shownWhere, trimmed)
+                                          : Format(u8"{} does not exist yet; it will be made, and the project made in it.", shownWhere);
+                return check;
+            }
+            check.level = NewProjectCheckLevel::Ok;
+            check.message = ownFolder ? Format(u8"Creates {}, and opens it.", shownTarget) : Format(u8"Creates {} in {}, and opens it.", trimmed, shownTarget);
+            return check;
+        }
+
         explicit ProjectManagerController(settings::Settings& store) : m_store(&store) {}
 
         /// Whether opening through `gate`, once the user agrees, stamps the project with this
@@ -182,6 +256,23 @@ export namespace editor
         }
 
     private:
+        [[nodiscard]] static StringView TrimSpaces(StringView text)
+        {
+            usize start = 0, end = text.Size();
+            while (start < end && text[start] == u8' ')
+                ++start;
+            while (end > start && text[end - 1] == u8' ')
+                --end;
+            return text.SubStr(start, end - start);
+        }
+        // Whether a folder holds any file or folder (false when it does not exist).
+        [[nodiscard]] static bool HoldsAnything(StringView directory)
+        {
+            bool any = false;
+            (void)ListDirectory(directory, [](void* found, StringView, bool) { *static_cast<bool*>(found) = true; }, &any);
+            return any;
+        }
+
         // Refreshes an entry's name and version from its manifest, keeping its place and time.
         void TouchSnapshot(StringView directory, const engine::project::ProjectSettings& probed)
         {

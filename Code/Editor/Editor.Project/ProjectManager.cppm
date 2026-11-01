@@ -40,6 +40,12 @@ export namespace editor
         Warning,
         Error,
     };
+    // What the folder is for: a new project made there, or a sample downloaded into it.
+    enum class NewProjectAction
+    {
+        Create,
+        Download,
+    };
     // New Project's check, kept current as the fields change: where the project goes, and what to
     // say about it.
     struct NewProjectCheck
@@ -58,8 +64,10 @@ export namespace editor
         /// Red, Create waiting: no name, a name holding / \ : * ? " < > |, no location, a location
         /// that is a file, a target that is a project already or holds files. Amber: the location
         /// does not exist yet (it is made), the name starts or ends with a space. Else green.
-        /// Folders in the message show under `home` as ~.
-        [[nodiscard]] static NewProjectCheck CheckNewProject(StringView name, StringView location, bool ownFolder, StringView home)
+        /// Folders in the message show under `home` as ~. A sample's download dialog asks the same
+        /// with `action` Download, and the green line says so.
+        [[nodiscard]] static NewProjectCheck CheckNewProject(StringView name, StringView location, bool ownFolder, StringView home,
+                                                             NewProjectAction action = NewProjectAction::Create)
         {
             NewProjectCheck check;
             const StringView trimmed = TrimSpaces(name);
@@ -106,7 +114,10 @@ export namespace editor
                 return check;
             }
             check.level = NewProjectCheckLevel::Ok;
-            check.message = ownFolder ? Format(u8"Creates {}, and opens it.", shownTarget) : Format(u8"Creates {} in {}, and opens it.", trimmed, shownTarget);
+            if (action == NewProjectAction::Download)
+                check.message = ownFolder ? Format(u8"Downloads into {}.", shownTarget) : Format(u8"Downloads {} into {}.", trimmed, shownTarget);
+            else
+                check.message = ownFolder ? Format(u8"Creates {}, and opens it.", shownTarget) : Format(u8"Creates {} in {}, and opens it.", trimmed, shownTarget);
             return check;
         }
 

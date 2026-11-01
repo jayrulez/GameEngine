@@ -600,6 +600,13 @@ TEST_CASE("project-registry: New Project's check names where it goes, and refuse
     CHECK(c.level == Level::Ok);
     CHECK(c.target == PathJoin(root.AsView(), u8"Empty"));
     CHECK(c.message.AsView() == u8"Creates Harbour in ~/Empty, and opens it.");
+    // A sample's download says what it does instead.
+    c = ProjectManagerController::CheckNewProject(u8"Snowline", root.AsView(), true, root.AsView(), NewProjectAction::Download);
+    CHECK(c.level == Level::Ok);
+    CHECK(c.message.AsView() == u8"Downloads into ~/Snowline.");
+    CHECK(check(u8"Snowline", u8"Empty", false).level == Level::Ok);
+    CHECK(ProjectManagerController::CheckNewProject(u8"Snowline", PathJoin(root.AsView(), u8"Empty").AsView(), false, root.AsView(), NewProjectAction::Download)
+              .message.AsView() == u8"Downloads Snowline into ~/Empty.");
 
     // Red: what cannot be made, and Create waits.
     CHECK(ProjectManagerController::CheckNewProject(u8"  ", root.AsView(), true, {}).message.AsView() == u8"Give the project a name.");

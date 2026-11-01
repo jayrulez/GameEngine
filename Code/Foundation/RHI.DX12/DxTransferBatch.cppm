@@ -9,7 +9,6 @@ module;
 #include "DxIncludes.h"
 
 #include <cstring>
-#include <vector>
 
 export module foundation.rhi.dx12:transfer_batch;
 
@@ -115,10 +114,10 @@ export namespace foundation::rhi::dx12
             std::memcpy(mapped, data.Data(), data.Size());
             staging->Unmap(0, nullptr);
 
-            m_stagingBuffers.push_back(std::move(staging));
+            m_stagingBuffers.PushBack(Move(staging));
 
             // Record copy command.
-            m_cmdList->CopyBufferRegion(dxDst->handle(), dstOffset, m_stagingBuffers.back().Get(),
+            m_cmdList->CopyBufferRegion(dxDst->handle(), dstOffset, m_stagingBuffers.Back().Get(),
                                         0, stagingSize);
         }
 
@@ -177,7 +176,7 @@ export namespace foundation::rhi::dx12
             }
 
             staging->Unmap(0, nullptr);
-            m_stagingBuffers.push_back(std::move(staging));
+            m_stagingBuffers.PushBack(Move(staging));
 
             // Transition the texture to copy dest through the shared helper rather than an
             // ALL_SUBRESOURCES barrier built from currentState(): that is only valid while the
@@ -189,7 +188,7 @@ export namespace foundation::rhi::dx12
             u32 subresource = mipLevel + arrayLayer * dxTex->desc.mipLevelCount;
 
             D3D12_TEXTURE_COPY_LOCATION srcLoc{};
-            srcLoc.pResource = m_stagingBuffers.back().Get();
+            srcLoc.pResource = m_stagingBuffers.Back().Get();
             srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
             srcLoc.PlacedFootprint.Offset = 0;
             srcLoc.PlacedFootprint.Footprint.Format = toDxgiFormat(dxTex->desc.format);
@@ -279,7 +278,7 @@ export namespace foundation::rhi::dx12
             }
         }
 
-        void releaseStagingBuffers() { m_stagingBuffers.clear(); }
+        void releaseStagingBuffers() { m_stagingBuffers.Clear(); }
 
         ID3D12Device* m_device = nullptr;
         ID3D12CommandQueue* m_queue = nullptr;
@@ -288,7 +287,7 @@ export namespace foundation::rhi::dx12
         bool m_isRecording = false;
 
         // ComPtr's operator overloads are incompatible with Array's placement-new.
-        std::vector<ComPtr<ID3D12Resource>> m_stagingBuffers;
+        Array<ComPtr<ID3D12Resource>> m_stagingBuffers;
 
         ComPtr<ID3D12Fence> m_fence;
         u64 m_fenceValue = 0;

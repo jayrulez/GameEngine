@@ -12,7 +12,6 @@ module;
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 // VkApplicationInfo identity strings; CMake bakes these from the project name on the RHI.Vulkan
@@ -165,7 +164,7 @@ export namespace foundation::rhi::vk
             SurfacePlatform effective = platform;
             if (effective == SurfacePlatform::Unknown)
             {
-                effective = (m_hasWayland && std::getenv("WAYLAND_DISPLAY"))
+                effective = (m_hasWayland && GetEnvironmentVariable(u8"WAYLAND_DISPLAY").HasValue())
                                 ? SurfacePlatform::Wayland
                                 : SurfacePlatform::X11;
             }

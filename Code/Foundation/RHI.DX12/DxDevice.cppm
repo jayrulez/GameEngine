@@ -14,8 +14,6 @@ module;
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <mutex>
-#include <unordered_map>
 
 export module foundation.rhi.dx12:device;
 
@@ -959,7 +957,7 @@ export namespace foundation::rhi::dx12
             // Blit pipeline.
             for (auto& [fmt, pso] : m_blitPsoCache)
                 pso.Reset();
-            m_blitPsoCache.clear();
+            m_blitPsoCache.Clear();
             m_blitVsBlob.Reset();
             m_blitPsBlob.Reset();
             m_blitRootSignature.Reset();
@@ -1063,11 +1061,10 @@ export namespace foundation::rhi::dx12
             if (!m_blitRootSignature)
                 return nullptr;
 
-            std::lock_guard lock(m_blitMutex);
+            ScopedLock lock(m_blitMutex);
 
-            auto it = m_blitPsoCache.find(format);
-            if (it != m_blitPsoCache.end())
-                return it->second.Get();
+            if (ComPtr<ID3D12PipelineState>* cached = m_blitPsoCache.Find(format))
+                return cached->Get();
 
             D3D12_GRAPHICS_PIPELINE_STATE_DESC psd{};
             psd.pRootSignature = m_blitRootSignature.Get();
@@ -1092,7 +1089,7 @@ export namespace foundation::rhi::dx12
             if (SUCCEEDED(m_device->CreateGraphicsPipelineState(&psd, IID_PPV_ARGS(&newPso))))
             {
                 auto* raw = newPso.Get();
-                m_blitPsoCache[format] = std::move(newPso);
+                m_blitPsoCache.InsertOrAssign(format, Move(newPso));
                 return raw;
             }
             return nullptr;
@@ -1326,8 +1323,8 @@ export namespace foundation::rhi::dx12
         D3D12_SHADER_BYTECODE m_blitPsBytecode{};
         ComPtr<ID3DBlob> m_blitVsBlob;
         ComPtr<ID3DBlob> m_blitPsBlob;
-        std::unordered_map<DXGI_FORMAT, ComPtr<ID3D12PipelineState>> m_blitPsoCache;
-        std::mutex m_blitMutex;
+        HashMap<DXGI_FORMAT, ComPtr<ID3D12PipelineState>> m_blitPsoCache{m_allocator};
+        Mutex m_blitMutex;
 
         // Extension flags.
         bool m_meshEnabled = false;

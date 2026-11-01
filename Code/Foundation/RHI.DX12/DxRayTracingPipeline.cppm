@@ -9,8 +9,7 @@ module;
 
 #include "DxIncludes.h"
 
-#include <string>
-#include <vector>
+#include <string> // std::wstring: the LPCWSTR export names D3D12 takes
 
 export module foundation.rhi.dx12:ray_tracing_pipeline;
 
@@ -51,7 +50,7 @@ export namespace foundation::rhi::dx12
             // Export names are UTF-8 StringView; DX12 wants LPCWSTR, so widen them through
             // WidenExportName, the same conversion getShaderIdentifier uses, so a registered
             // name and a looked-up name can never disagree.
-            std::vector<std::wstring> entryWide;
+            Array<std::wstring> entryWide;
             Array<D3D12_EXPORT_DESC> exports;
 
             for (usize i = 0; i < desc.stages.Size(); ++i)
@@ -61,11 +60,11 @@ export namespace foundation::rhi::dx12
                 if (!dxMod)
                     continue;
 
-                entryWide.push_back(WidenExportName(stage.entryPoint));
+                entryWide.PushBack(WidenExportName(stage.entryPoint));
             }
 
-            exports.Resize(entryWide.size());
-            for (usize i = 0; i < entryWide.size(); ++i)
+            exports.Resize(entryWide.Size());
+            for (usize i = 0; i < entryWide.Size(); ++i)
             {
                 exports[i] = {};
                 exports[i].Name = entryWide[i].c_str();
@@ -114,7 +113,10 @@ export namespace foundation::rhi::dx12
 
             // --- Hit groups ---
             Array<D3D12_HIT_GROUP_DESC> hitGroups;
-            std::vector<std::wstring> hitGroupNamesWide;
+            Array<std::wstring> hitGroupNamesWide;
+            // Reserved up front: each hit group keeps a pointer into its name, so the names must
+            // not move while the hit groups are built.
+            hitGroupNamesWide.Reserve(numHitGroups);
 
             for (usize i = 0; i < desc.groups.Size(); ++i)
             {
@@ -125,23 +127,23 @@ export namespace foundation::rhi::dx12
 
                 // Format "HitGroupN" where N is the group index.
                 std::wstring hgName = L"HitGroup" + std::to_wstring(i);
-                hitGroupNamesWide.push_back(hgName);
+                hitGroupNamesWide.PushBack(hgName);
 
                 D3D12_HIT_GROUP_DESC hg{};
-                hg.HitGroupExport = hitGroupNamesWide.back().c_str();
+                hg.HitGroupExport = hitGroupNamesWide.Back().c_str();
                 hg.Type = (group.type == RayTracingShaderGroup::Type::TrianglesHitGroup)
                               ? D3D12_HIT_GROUP_TYPE_TRIANGLES
                               : D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE;
 
                 if (group.closestHitShaderIndex != ~0u &&
-                    group.closestHitShaderIndex < entryWide.size())
+                    group.closestHitShaderIndex < entryWide.Size())
                     hg.ClosestHitShaderImport = entryWide[group.closestHitShaderIndex].c_str();
 
-                if (group.anyHitShaderIndex != ~0u && group.anyHitShaderIndex < entryWide.size())
+                if (group.anyHitShaderIndex != ~0u && group.anyHitShaderIndex < entryWide.Size())
                     hg.AnyHitShaderImport = entryWide[group.anyHitShaderIndex].c_str();
 
                 if (group.intersectionShaderIndex != ~0u &&
-                    group.intersectionShaderIndex < entryWide.size())
+                    group.intersectionShaderIndex < entryWide.Size())
                     hg.IntersectionShaderImport = entryWide[group.intersectionShaderIndex].c_str();
 
                 hitGroups.PushBack(hg);
@@ -167,17 +169,17 @@ export namespace foundation::rhi::dx12
                         group.generalShaderIndex < desc.stages.Size())
                     {
                         auto ep = desc.stages[group.generalShaderIndex].entryPoint;
-                        m_groupExportNames.push_back(WidenExportName(ep));
+                        m_groupExportNames.PushBack(WidenExportName(ep));
                     }
                     else
                     {
-                        m_groupExportNames.emplace_back();
+                        m_groupExportNames.EmplaceBack();
                     }
                 }
                 else
                 {
                     // Hit groups use "HitGroupN" where N is the group index.
-                    m_groupExportNames.push_back(L"HitGroup" + std::to_wstring(i));
+                    m_groupExportNames.PushBack(L"HitGroup" + std::to_wstring(i));
                 }
             }
 
@@ -261,14 +263,14 @@ export namespace foundation::rhi::dx12
         [[nodiscard]] DxPipelineLayoutImpl* pipelineLayout() const { return m_layout; }
         [[nodiscard]] Span<const std::wstring> groupExportNames() const
         {
-            return {m_groupExportNames.data(), m_groupExportNames.size()};
+            return {m_groupExportNames.Data(), m_groupExportNames.Size()};
         }
 
     private:
         ComPtr<ID3D12StateObject> m_stateObject;
         ComPtr<ID3D12StateObjectProperties> m_properties;
         DxPipelineLayoutImpl* m_layout = nullptr;
-        std::vector<std::wstring> m_groupExportNames;
+        Array<std::wstring> m_groupExportNames;
     };
 
 } // namespace foundation::rhi::dx12

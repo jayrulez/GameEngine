@@ -30,6 +30,7 @@ set(_tpn_components
     "SheenBidi|https://github.com/Tehreer/SheenBidi|Apache-2.0|sheenbidi/LICENSE"
     "meshoptimizer|https://github.com/zeux/meshoptimizer|MIT|meshoptimizer/LICENSE.md"
     "Recast & Detour|https://github.com/recastnavigation/recastnavigation|Zlib|recastnavigation/License.txt"
+    "zlib|https://zlib.net|Zlib|zlib/LICENSE"
     "Mbed TLS|https://github.com/Mbed-TLS/mbedtls|Apache-2.0 (chosen of Apache-2.0 OR GPL-2.0-or-later)|mbedtls/LICENSE"
     "Dear ImGui|https://github.com/ocornut/imgui|MIT|imgui/LICENSE.txt"
     "astc-encoder|https://github.com/ARM-software/astc-encoder|Apache-2.0|astcenc/LICENSE.txt"

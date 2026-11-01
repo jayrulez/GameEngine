@@ -449,6 +449,22 @@ target_compile_features(luau PRIVATE cxx_std_17)
 set_target_properties(luau PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif() # OPTION_ENABLE_LUAU
 
+# zlib 1.3.2 - deflate and inflate, vendored BY COPY (github.com/madler/zlib, zlib licence; see
+# zlib/README.vendored.md). The library's sources only (no gzip file functions). Z_PREFIX names its
+# symbols z_*, for itself and its users, so no other zlib in the process is confused with it. Built
+# for Emscripten too. Does not link policy (vendored code builds without our -Werror).
+add_library(zlib STATIC
+    zlib/adler32.c zlib/compress.c zlib/crc32.c zlib/deflate.c zlib/infback.c zlib/inffast.c
+    zlib/inflate.c zlib/inftrees.c zlib/trees.c zlib/uncompr.c zlib/zutil.c)
+add_library(ThirdParty::Zlib ALIAS zlib)
+target_include_directories(zlib SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/zlib)
+target_compile_definitions(zlib PUBLIC Z_PREFIX)
+if(MSVC)
+    target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_DEPRECATE)
+endif()
+set_target_properties(zlib PROPERTIES POSITION_INDEPENDENT_CODE ON
+                                      OUTPUT_NAME thirdparty_zlib)
+
 # recastnavigation v1.6.0 - navmesh bake (Recast) + runtime navmesh/query (Detour) + agent
 # crowd/avoidance (DetourCrowd), vendored BY COPY (github.com/recastnavigation/recastnavigation
 # tag v1.6.0, zlib; see recastnavigation/README.vendored.md) like Jolt. Compiled from source as

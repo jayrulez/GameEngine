@@ -509,14 +509,23 @@ namespace editor
                 stage.UpdateTransforms();
                 FrameFromBounds(WorldSceneBounds(stage), outFraming);
                 EditorCamera camera;
-                if (SceneViewState::RestoreCamera(SavedView(id), camera))
+                if (!SceneViewState::RestoreCamera(SavedView(id), camera))
                 {
-                    outFraming.hasView = true;
-                    outFraming.eye = camera.DrawEye();
-                    outFraming.view = Float4x4::LookAtRH(outFraming.eye, outFraming.eye + camera.Forward(), camera.Up());
-                    outFraming.projection = camera.Projection(1.0f); // the thumbnail is square
-                    outFraming.farZ = camera.DrawFar();
+                    // Never viewed: the whole scene in perspective, from 30 degrees above the ground
+                    // and turned a little, far enough back to hold its bounds: a shot of the place
+                    // more than a plan of it.
+                    camera.yaw = 0.6f;
+                    camera.pitch = -0.52f;
+                    const f32 distance = outFraming.radius / Sin(0.5f * camera.fovY);
+                    camera.position = outFraming.center - camera.Forward() * distance;
+                    camera.nearZ = Max(0.1f, 0.5f * (distance - outFraming.radius));
+                    camera.farZ = distance + 2.0f * outFraming.radius;
                 }
+                outFraming.hasView = true;
+                outFraming.eye = camera.DrawEye();
+                outFraming.view = Float4x4::LookAtRH(outFraming.eye, outFraming.eye + camera.Forward(), camera.Up());
+                outFraming.projection = camera.Projection(1.0f); // the thumbnail is square
+                outFraming.farZ = camera.DrawFar();
                 return ThumbnailStageStep::Ready;
             }
 

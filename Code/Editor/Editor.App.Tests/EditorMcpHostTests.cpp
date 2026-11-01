@@ -6,8 +6,6 @@
 // the report of finished calls.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <cstdlib>
-#include <filesystem>
 
 import foundation.core;
 import foundation.net;
@@ -97,9 +95,8 @@ namespace
 TEST_CASE("editor-mcp-host: serves the engine surface over the live project on loopback, "
           "writes the token file, refuses a wrong token, and reports its finished calls")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_host_project", ec);
-    std::filesystem::remove_all("mcp_host_userdata", ec);
+    (void)RemoveDirectoryRecursive(u8"mcp_host_project");
+    (void)RemoveDirectoryRecursive(u8"mcp_host_userdata");
     REQUIRE(EditorProject::Create(DefaultAllocator(), u8"mcp_host_project", u8"Hosted").IsOk());
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), u8"mcp_host_project");
     REQUIRE(project);
@@ -221,14 +218,13 @@ TEST_CASE("editor-mcp-host: serves the engine surface over the live project on l
 
     host.Stop();
     CHECK_FALSE(host.IsRunning());
-    std::filesystem::remove_all("mcp_host_project", ec);
-    std::filesystem::remove_all("mcp_host_userdata", ec);
+    (void)RemoveDirectoryRecursive(u8"mcp_host_project");
+    (void)RemoveDirectoryRecursive(u8"mcp_host_userdata");
 }
 
 TEST_CASE("editor-mcp-host: an empty token never serves")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_host_project2", ec);
+    (void)RemoveDirectoryRecursive(u8"mcp_host_project2");
     REQUIRE(EditorProject::Create(DefaultAllocator(), u8"mcp_host_project2", u8"Hosted").IsOk());
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), u8"mcp_host_project2");
     REQUIRE(project);
@@ -250,56 +246,13 @@ TEST_CASE("editor-mcp-host: an empty token never serves")
     }
     // The session outlives the host; what the host wired on it went with the host.
     CHECK_FALSE(static_cast<bool>(session.onAssetWritten));
-    std::filesystem::remove_all("mcp_host_project2", ec);
-}
-
-namespace
-{
-    // Points the user-data folder (where the host writes its token file) at the test's scratch
-    // while it lives, so a test never touches the real one.
-    struct ScratchUserData
-    {
-        const char* name;
-        std::string before;
-        bool had = false;
-        explicit ScratchUserData(const char* folder)
-#if defined(_WIN32)
-            : name("LOCALAPPDATA")
-#else
-            : name("XDG_DATA_HOME")
-#endif
-        {
-            if (const char* v = std::getenv(name))
-            {
-                before = v;
-                had = true;
-            }
-            const std::string path = std::filesystem::absolute(folder).string();
-#if defined(_WIN32)
-            _putenv_s(name, path.c_str());
-#else
-            setenv(name, path.c_str(), 1);
-#endif
-        }
-        ~ScratchUserData()
-        {
-#if defined(_WIN32)
-            _putenv_s(name, had ? before.c_str() : "");
-#else
-            if (had)
-                setenv(name, before.c_str(), 1);
-            else
-                unsetenv(name);
-#endif
-        }
-    };
+    (void)RemoveDirectoryRecursive(u8"mcp_host_project2");
 }
 
 TEST_CASE("editor-mcp-host: with no project the host serves the manager; the engine's tools refuse, host_info says so")
 {
-    std::error_code ec;
-    std::filesystem::remove_all("mcp_manager_userdata", ec);
-    ScratchUserData userData("mcp_manager_userdata");
+    const String userData = PathJoin(GetCurrentDirectory().AsView(), u8"mcp_manager_userdata");
+    (void)RemoveDirectoryRecursive(userData.AsView());
     RegisterEditorSettingsTypes();
     EditorLogBuffer logBuffer{DefaultAllocator()};
     pipeline::BuilderRegistry builders{DefaultAllocator()};
@@ -316,6 +269,7 @@ TEST_CASE("editor-mcp-host: with no project the host serves the manager; the eng
         services.log = &logBuffer;
         services.forceEnabled = forced; // --mcp
         services.screen = []() { return StringView(u8"projectManager"); };
+        services.userDataDirectory = userData; // the token file goes here, never to the real one
         return services;
     };
     {
@@ -376,6 +330,7 @@ TEST_CASE("editor-mcp-host: with no project the host serves the manager; the eng
     CHECK_FALSE(refused(got.pages)); // nothing open: an empty list
     CHECK_FALSE(refused(got.log));
 
+    CHECK(FileExists(PathJoin(userData.AsView(), u8"mcp-token").AsView()));
     service.Stop();
-    std::filesystem::remove_all("mcp_manager_userdata", ec);
+    (void)RemoveDirectoryRecursive(userData.AsView());
 }

@@ -76,6 +76,8 @@ export namespace editor::app
             Function<foundation::gui::SceneRoot*()> guiRoot;
             /// What a file dropped on the main window does (editor_drop); false with `error` when it cannot.
             Function<bool(Span<const String> paths, String& error)> dropFiles;
+            /// Where the token file and the profiler's captures go (empty: the user-data folder).
+            String userDataDirectory;
             /// What the window shows, for host_info's `screen`: "projectManager" or "editor" (empty:
             /// it follows whether a project is open).
             Function<StringView()> screen;
@@ -187,7 +189,7 @@ export namespace editor::app
             profiler.profiler = &foundation::profiler::Profiler::Get();
             profiler.recorder = &foundation::profiler::CaptureRecorder::Get();
             profiler.recorder->SetApplication(u8"Editor"); // names its captures and fills their header
-            profiler.folder = []() { return PathJoin(GetUserDataDirectory().AsView(), u8"profiles"); };
+            profiler.folder = [self]() { return PathJoin(self->UserData().AsView(), u8"profiles"); };
             RegisterProfilerTools(m_host->Server(), Move(profiler));
             if (m_services.addTools)
                 m_services.addTools(m_host->Server());
@@ -195,7 +197,7 @@ export namespace editor::app
             EditorMcpHostConfig config;
             config.port = static_cast<u16>(m_services.port != 0 ? m_services.port : settings.port);
             config.token = settings.token;
-            config.tokenFileDirectory = GetUserDataDirectory();
+            config.tokenFileDirectory = UserData();
             if (!m_host->Start(config))
             {
                 LOG_WARNING(u8"Editor",
@@ -230,6 +232,11 @@ export namespace editor::app
         [[nodiscard]] EditorMcpHost* Host() const noexcept { return m_host.Get(); }
 
     private:
+        [[nodiscard]] String UserData() const
+        {
+            return m_services.userDataDirectory.IsEmpty() ? GetUserDataDirectory() : m_services.userDataDirectory;
+        }
+
         IAllocator& m_allocator;
         Services m_services;
         editor::mcp::ProjectSession m_session;

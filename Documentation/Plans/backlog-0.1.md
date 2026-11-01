@@ -8,6 +8,14 @@
 
 ## Editor
 
+- **Terrain and vegetation tools: fixes and a regression check** (user 2026-11-01):
+  - Sculpting (and maybe the vegetation tool) still acts when the pointer is over UI: a press or
+    drag over a panel or the tool's own controls goes through to the viewport.
+  - The paint tool's layers UI looks poor and needs a design pass.
+  - Check the vegetation tool the same way.
+  - Compare against the old editor's painting (on the `vg` branch, before the editor moved to the
+    new GUI) for regressions in behaviour, brushes and controls.
+
 - **Project-wide defaults for scene settings, per domain** (user 2026-10-09, to think about): a
   scene's render settings come from the scene itself (its own values, or a profile asset it
   names, as Lamplight's levels share theirs), else from hard-coded defaults; other domains are

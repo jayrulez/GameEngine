@@ -214,6 +214,16 @@ TEST_CASE("system: PathAbsolute keeps an absolute path and puts a relative one u
     CHECK(made == PathJoin(cwd.AsView(), u8"scratch_sys_abs/leaf.txt"));
 }
 
+TEST_CASE("system: GetHomeDirectory names the user's home, which exists")
+{
+    const String home = GetHomeDirectory();
+#if !PLATFORM_WEB
+    REQUIRE_FALSE(home.IsEmpty());
+    CHECK(PathIsAbsolute(home.AsView()));
+    CHECK(DirectoryExists(home.AsView()));
+#endif
+}
+
 TEST_CASE("system: GetTempDirectory names a folder that exists")
 {
     const String temp = GetTempDirectory();

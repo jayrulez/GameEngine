@@ -362,6 +362,16 @@ export namespace foundation::core
         return PathJoin(StringView(reinterpret_cast<const utf8char*>(buffer), length), appName);
     }
 
+    // The user's home folder ($HOME, else %USERPROFILE%); empty when neither is set, as in a browser.
+    [[nodiscard]] inline String GetHomeDirectory()
+    {
+        if (Optional<String> home = GetEnvironmentVariable(u8"HOME"); home.HasValue() && !home.Value().IsEmpty())
+            return Move(home.Value());
+        if (Optional<String> profile = GetEnvironmentVariable(u8"USERPROFILE"); profile.HasValue())
+            return Move(profile.Value());
+        return String();
+    }
+
     // The system's folder for temporary files ($TMPDIR or /tmp, %TEMP% or %TMP%); empty when it
     // cannot be resolved.
     [[nodiscard]] inline String GetTempDirectory()

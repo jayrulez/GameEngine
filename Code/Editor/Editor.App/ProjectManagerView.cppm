@@ -1233,7 +1233,7 @@ export namespace editor::app
             if (auto* section = Find<gui::UIWidget>(u8"manager-missing"))
                 section->SetDisplayed(!missing.IsEmpty());
             if (auto* missingCount = Find<gui::Label>(u8"manager-missing-count"))
-                missingCount->SetText(Format(u8"{} project{}, their folders are not where they were", missing.Size(), missing.Size() == 1 ? u8"" : u8"s").AsView());
+                missingCount->SetText(Format(u8"{} · not found at the last known location", missing.Size()).AsView());
             if (auto* keys = Find<gui::UIWidget>(u8"manager-keys"))
                 keys->SetDisplayed(!m_samples && !welcome);
 

@@ -56,6 +56,22 @@ namespace
         return nullptr;
     }
 
+    // The editor's sheet as its window builds it (EditorWindow::SheetFor, at the default
+    // density), its @import of the tokens loaded from Data/ like the window's: without them every
+    // var() declaration (borders, colours, spacing) would be dropped.
+    struct EditorSheet
+    {
+        editor::EditorResources resources{DefaultAllocator(), PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView()};
+        gui::StyleManager styles;
+        EditorSheet()
+        {
+            app::EditorLook look;
+            look.density = String(u8"default");
+            styles.SetResourceProvider(&resources);
+            styles.SetStyleSheet(gui::CSSParser::Parse(app::EditorWindow::SheetFor(resources, look, nullptr).AsView(), StringView(u8"Editor/editor.css")));
+        }
+    };
+
     struct Launcher
     {
         String root = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_launcher");
@@ -436,19 +452,10 @@ namespace
     void WheelOverCards(Launcher& l)
     {
         // The editor's sheet, as the window has it, so the grid wraps and scrolls as it does there.
-        String sheet;
-        for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
-        {
-            Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
-            REQUIRE(bytes.HasValue());
-            sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
-            sheet += u8"\n";
-        }
-        gui::StyleManager styles;
-        styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+        EditorSheet sheet;
         l.view->SetGridView(true);
         l.Drain();
-        styles.ApplyTree(*l.scene);
+        sheet.styles.ApplyTree(*l.scene);
         (void)l.scene->UpdateLayout();
         gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
         REQUIRE(list != nullptr);
@@ -488,22 +495,13 @@ TEST_CASE("launcher: the wheel over the grid's cards scrolls notch after notch, 
     WheelOverCards(l);
 }
 
-TEST_CASE("launcher: under the editor's sheet a card's picture fills its button evenly, inside the card")
+TEST_CASE("launcher: under the editor's sheet a card's picture fills it edge to edge inside its border, at 16:9")
 {
     Launcher l;
-    String sheet;
-    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
-    {
-        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
-        REQUIRE(bytes.HasValue());
-        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
-        sheet += u8"\n";
-    }
-    gui::StyleManager styles;
-    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    EditorSheet sheet;
     l.view->SetGridView(true);
     l.Drain();
-    styles.ApplyTree(*l.scene);
+    sheet.styles.ApplyTree(*l.scene);
     (void)l.scene->UpdateLayout();
     gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
     REQUIRE(list != nullptr);
@@ -524,24 +522,17 @@ TEST_CASE("launcher: under the editor's sheet a card's picture fills its button 
     CHECK(left == doctest::Approx(top));
     CHECK(right == doctest::Approx(bottom));
     CHECK(left == doctest::Approx(right));
-    CHECK(b.x >= c.x); // inside the card
-    CHECK(b.x + b.width <= c.x + c.width + 0.5f);
+    // Inside the card's 1px border (var(--border), so the tokens reached the sheet), edge to edge.
+    CHECK(b.x == doctest::Approx(c.x + 1.0f));
+    CHECK(b.x + b.width == doctest::Approx(c.x + c.width - 1.0f));
+    CHECK(p.width / p.height == doctest::Approx(16.0f / 9.0f).epsilon(0.01)); // whatever its column's width
 }
 
 TEST_CASE("launcher: under the editor's sheet a row stretches across the window, less the page's margins")
 {
     Launcher l;
-    String sheet;
-    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
-    {
-        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
-        REQUIRE(bytes.HasValue());
-        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
-        sheet += u8"\n";
-    }
-    gui::StyleManager styles;
-    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
-    styles.ApplyTree(*l.scene);
+    EditorSheet sheet;
+    sheet.styles.ApplyTree(*l.scene);
     (void)l.scene->UpdateLayout();
     gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
     REQUIRE(list != nullptr);

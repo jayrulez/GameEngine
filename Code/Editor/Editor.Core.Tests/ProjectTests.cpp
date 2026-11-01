@@ -682,3 +682,26 @@ TEST_CASE("project: the player's manifest is the dist's, else the project's")
     (void)FileDelete(PathJoin(dir, u8"player.xml"));
     (void)RemoveDirectory(dir);
 }
+
+TEST_CASE("project settings: the window in a few words, and the settings that sum a project up")
+{
+    engine::project::ProjectSettings settings;
+    CHECK(settings.WindowSummary() == StringView(u8"1280 × 720, windowed"));
+    settings.windowWidth = 1920;
+    settings.windowHeight = 1080;
+    settings.windowMode = engine::project::WindowMode::Fullscreen;
+    CHECK(settings.WindowSummary() == StringView(u8"1920 × 1080, fullscreen"));
+    settings.windowMode = engine::project::WindowMode::Borderless;
+    CHECK(settings.WindowSummary() == StringView(u8"borderless, the display's size")); // the display's size, not the setting's
+
+    // The summary's settings, by their short labels, in reflection order.
+    Array<String> summary;
+    for (const PropertyInfo& property : Properties(engine::project::ProjectSettings::StaticType()))
+        if (const String* label = engine::project::SettingAttribute(property, engine::project::kSettingSummaryAttribute))
+            summary.PushBack(*label);
+    REQUIRE(summary.Size() == 4u);
+    CHECK(summary[0] == StringView(u8"Default scene"));
+    CHECK(summary[1] == StringView(u8"Startup script"));
+    CHECK(summary[2] == StringView(u8"Input map"));
+    CHECK(summary[3] == StringView(u8"UI font"));
+}

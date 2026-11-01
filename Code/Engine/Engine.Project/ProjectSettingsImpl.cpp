@@ -49,18 +49,22 @@ namespace engine::project
         // The scene the player and play-in-editor open.
         builder.Property<&ProjectSettings::defaultSceneId>("defaultSceneId");
         asset(u8"Default scene", u8"SceneDocument", u8"(none)", u8"Startup");
+        builder.PropAttribute(kSettingSummaryAttribute, String(u8"Default scene"));
         // The cooked ScriptClass the player (and the Game tab) binds at startup.
         builder.Property<&ProjectSettings::startupScriptId>("startupScriptId");
         asset(u8"Startup script", u8"ScriptClassAsset", u8"(none)", u8"Startup");
+        builder.PropAttribute(kSettingSummaryAttribute, String(u8"Startup script"));
         // The cooked map the player (and the Game tab) binds at startup.
         builder.Property<&ProjectSettings::defaultInputMapId>("defaultInputMapId");
         asset(u8"Default input map", u8"InputMapAsset", u8"(none)", u8"Startup");
+        builder.PropAttribute(kSettingSummaryAttribute, String(u8"Input map"));
         // The cooked mixer applied at startup; nil means the built-in neutral four-bus layout.
         builder.Property<&ProjectSettings::defaultBusLayoutId>("defaultBusLayoutId");
         asset(u8"Default bus layout", u8"AudioBusLayoutAsset", u8"(built-in)", u8"Audio");
         // The cooked font the game UI falls back to when a document names none.
         builder.Property<&ProjectSettings::defaultUiFontId>("defaultUiFontId");
         asset(u8"Default UI font", u8"FontAsset", u8"(built-in)", u8"UI");
+        builder.PropAttribute(kSettingSummaryAttribute, String(u8"UI font"));
         // Scene-pass MSAA samples (the render subsystem's levels: 1 is off, 2, 4).
         builder.Property<&ProjectSettings::renderMsaaSamples>("renderMsaaSamples")
             .PropAttribute(kSettingLabelAttribute, String(u8"MSAA"))

@@ -86,6 +86,9 @@ export namespace engine::project
     inline constexpr StringView kSettingDefaultCategory = u8"General";
     inline constexpr const char* kSettingAssetTypeAttribute = "assetType";
     inline constexpr const char* kSettingEmptyTextAttribute = "emptyText";
+    // A setting the project's page sums the project up with carries `summary`, the short label it
+    // shows there ("Input map" for the default input map).
+    inline constexpr const char* kSettingSummaryAttribute = "summary";
 
     /// How the player's window takes the screen.
     enum class WindowMode : u8
@@ -150,6 +153,15 @@ export namespace engine::project
         // presented turned on a window of the other shape (a landscape game on a phone held
         // upright).
         ScreenOrientation orientation = ScreenOrientation::Any;
+
+        /// The player's window in a few words: "1280 × 720, windowed", "1280 × 720, fullscreen",
+        /// or "borderless, the display's size".
+        [[nodiscard]] String WindowSummary() const
+        {
+            if (windowMode == WindowMode::Borderless)
+                return String(u8"borderless, the display's size");
+            return Format(u8"{} × {}, {}", windowWidth, windowHeight, windowMode == WindowMode::Fullscreen ? u8"fullscreen" : u8"windowed");
+        }
 
         /// Whether the game draws at a fixed resolution rather than at its output's size.
         [[nodiscard]] bool HasRenderResolution() const noexcept { return renderWidth > 0 && renderHeight > 0; }

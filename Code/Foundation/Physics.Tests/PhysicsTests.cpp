@@ -8,11 +8,8 @@
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
-#include <atomic>
 #include <cmath>
 #include <cstdio>
-#include <thread>
-#include <vector>
 
 import foundation.core;
 import foundation.physics;
@@ -1187,12 +1184,12 @@ TEST_CASE("physics: triangle meshes cook in parallel with no world keeping Jolt 
         {2.0f, 0.0f, -2.0f},
     };
     const u32 indices[] = {0, 1, 3, 1, 2, 3};
-    std::atomic<int> cooked{0};
-    std::atomic<bool> go{false};
-    std::vector<std::thread> threads;
+    Atomic<int> cooked{0};
+    Atomic<bool> go{false};
+    Array<Thread> threads;
     for (int t = 0; t < 8; ++t)
     {
-        threads.emplace_back(
+        threads.PushBack(Thread(
             [&]()
             {
                 while (!go.load()) // all at once: the start-up is where they collide
@@ -1208,12 +1205,12 @@ TEST_CASE("physics: triangle meshes cook in parallel with no world keeping Jolt 
                         cooked.fetch_add(1);
                     }
                 }
-            });
+            }));
     }
     go.store(true);
-    for (std::thread& thread : threads)
+    for (Thread& thread : threads)
     {
-        thread.join();
+        thread.Join();
     }
     CHECK(cooked.load() == 8 * 25);
 }

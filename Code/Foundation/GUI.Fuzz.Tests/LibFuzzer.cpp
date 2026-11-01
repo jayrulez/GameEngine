@@ -5,12 +5,7 @@
 // table, 5 input on the Controls page), for long runs with -fsanitize=fuzzer,address
 // (OPTION_GUI_LIBFUZZER). Seed it with the sandbox's files: `GUI.Fuzz.Css Data/Samples/UI/sandbox`.
 #include "Core/Prelude.h"
-#include <algorithm>
 #include <cstdint>
-#include <cstdio>
-#include <filesystem>
-#include <string>
-#include <vector>
 
 import foundation.core;
 import foundation.vfs;
@@ -25,7 +20,7 @@ import foundation.gui.testing;
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size)
 {
-    const std::string bytes(reinterpret_cast<const char*>(data), size);
+    const foundation::core::StringView bytes(reinterpret_cast<const foundation::core::utf8char*>(data), size);
 #if GUI_FUZZ_TARGET == 1
     guifuzz::FuzzCss(bytes);
 #elif GUI_FUZZ_TARGET == 2
@@ -35,10 +30,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 #elif GUI_FUZZ_TARGET == 4
     guifuzz::FuzzStringTable(bytes);
 #else
-    static const std::vector<std::string> pages = guifuzz::SandboxSeeds(".xml");
-    static const std::vector<std::string> sheets = guifuzz::SandboxSeeds(".css");
-    if (!pages.empty())
-        guifuzz::FuzzInput(pages[size % pages.size()], sheets.empty() ? std::string() : sheets[size % sheets.size()], bytes);
+    static const foundation::core::Array<foundation::core::String> pages = guifuzz::SandboxSeeds(u8".xml");
+    static const foundation::core::Array<foundation::core::String> sheets = guifuzz::SandboxSeeds(u8".css");
+    if (!pages.IsEmpty())
+        guifuzz::FuzzInput(pages[size % pages.Size()].AsView(),
+                           sheets.IsEmpty() ? foundation::core::StringView() : sheets[size % sheets.Size()].AsView(), bytes);
 #endif
     return 0;
 }

@@ -9,11 +9,6 @@
 
 #pragma once
 
-#include <algorithm>
-#include <filesystem>
-#include <string>
-#include <vector>
-
 namespace guifuzz
 {
     namespace core = foundation::core;
@@ -41,39 +36,53 @@ namespace guifuzz
 
     /// Mutates `text` a few times: a byte flipped, a span cut or doubled, a piece of syntax or a
     /// stray byte put in, the end cut off. `tokens` is the target's syntax.
-    inline std::string Mutate(std::string text, Random& random, const char* const* tokens, usize tokenCount)
+    inline core::String Mutate(core::String text, Random& random, const char* const* tokens, usize tokenCount)
     {
+        const auto token = [](const char* piece) { return core::StringView(reinterpret_cast<const core::utf8char*>(piece)); };
         const u32 edits = 1 + random.Below(6);
         for (u32 e = 0; e < edits; ++e)
         {
-            const usize size = text.size();
+            const usize size = text.Size();
             const usize at = size == 0 ? 0 : random.Below(static_cast<u32>(size));
             switch (random.Below(7))
             {
             case 0: // flip a byte
                 if (size > 0)
-                    text[at] = static_cast<char>(text[at] ^ static_cast<char>(1u << random.Below(8)));
+                    text[at] = static_cast<core::utf8char>(text[at] ^ static_cast<core::utf8char>(1u << random.Below(8)));
                 break;
             case 1: // cut a span
                 if (size > 0)
-                    text.erase(at, 1 + random.Below(static_cast<u32>(std::min<usize>(size - at, 64))));
+                    text.Remove(at, 1 + random.Below(static_cast<u32>(core::Min<usize>(size - at, 64))));
                 break;
             case 2: // double a span
                 if (size > 0)
-                    text.insert(at, text.substr(at, 1 + random.Below(static_cast<u32>(std::min<usize>(size - at, 64)))));
+                {
+                    const core::String span(text.AsView().SubStr(at, 1 + random.Below(static_cast<u32>(core::Min<usize>(size - at, 64)))));
+                    text.Insert(at, span.AsView());
+                }
                 break;
             case 3: // a piece of syntax
-                text.insert(at, tokens[random.Below(static_cast<u32>(tokenCount))]);
+                text.Insert(at, token(tokens[random.Below(static_cast<u32>(tokenCount))]));
                 break;
             case 4: // a byte of anything, a broken UTF-8 lead among them
-                text.insert(at, 1, static_cast<char>(random.Below(256)));
+            {
+                const core::utf8char stray = static_cast<core::utf8char>(random.Below(256));
+                text.Insert(at, core::StringView(&stray, 1));
                 break;
+            }
             case 5: // the end cut off
-                text.resize(at);
+                text.Remove(at, size - at);
                 break;
             default: // a run nested deep
-                text.insert(at, std::string(1 + random.Below(200), tokens[random.Below(static_cast<u32>(tokenCount))][0]));
+            {
+                const u32 length = 1 + random.Below(200);
+                const core::utf8char lead = static_cast<core::utf8char>(tokens[random.Below(static_cast<u32>(tokenCount))][0]);
+                core::String run;
+                for (u32 n = 0; n < length; ++n)
+                    run.PushBack(lead);
+                text.Insert(at, run.AsView());
                 break;
+            }
             }
         }
         return text;
@@ -103,53 +112,56 @@ namespace guifuzz
     };
 
     /// The file's bytes, or nothing (read through the engine's file system, as everything else is).
-    inline std::string ReadBytes(const std::filesystem::path& path)
+    inline core::String ReadBytes(core::StringView path)
     {
-        const std::u8string name = path.u8string();
-        const foundation::core::Result<foundation::core::Array<foundation::core::byte>> bytes =
-            foundation::core::ReadFile(foundation::core::StringView(name.data(), name.size()));
+        const core::Result<core::Array<core::byte>> bytes = core::ReadFile(path);
         if (!bytes.HasValue())
             return {};
-        return std::string(reinterpret_cast<const char*>(bytes.Value().Data()), bytes.Value().Size());
+        return core::String(core::StringView(reinterpret_cast<const core::utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+
+    /// Reads every file in `dir` (with `extension`, when one is given) into `seeds`.
+    inline void ReadFolder(core::StringView dir, core::StringView extension, core::Array<core::String>& seeds)
+    {
+        struct Collect
+        {
+            core::StringView dir;
+            core::StringView extension;
+            core::Array<core::String>* seeds;
+        };
+        Collect collect{dir, extension, &seeds};
+        (void)core::ListDirectory(
+            dir,
+            [](void* ctx, core::StringView name, bool isDirectory)
+            {
+                auto* c = static_cast<Collect*>(ctx);
+                if (!isDirectory && (c->extension.IsEmpty() || core::PathExtension(name) == c->extension))
+                    c->seeds->PushBack(ReadBytes(core::PathJoin(c->dir, name).AsView()));
+            },
+            &collect);
     }
 
     /// Returns the sandbox's pages with this extension (`.css`, `.xml`), including its main sheet:
     /// real input that uses every feature the GUI has at least once.
-    inline std::vector<std::string> SandboxSeeds(const char* extension)
+    inline core::Array<core::String> SandboxSeeds(core::StringView extension)
     {
-        std::vector<std::string> seeds;
+        core::Array<core::String> seeds;
         const core::String root = foundation::vfs::FindDataRoot();
-        const std::filesystem::path base =
-            std::filesystem::path(std::string(reinterpret_cast<const char*>(root.CStr()))) / "Samples/UI/sandbox";
-        std::error_code ec;
-        const std::filesystem::path dirs[2] = {base, base / "pages"};
-        for (const std::filesystem::path& dir : dirs)
-        {
-            for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
-                if (entry.is_regular_file() && entry.path().extension() == extension)
-                    seeds.push_back(ReadBytes(entry.path()));
-        }
+        const core::String base = core::PathJoin(root.AsView(), u8"Samples/UI/sandbox");
+        ReadFolder(base.AsView(), extension, seeds);
+        ReadFolder(core::PathJoin(base.AsView(), u8"pages").AsView(), extension, seeds);
         return seeds;
     }
 
     /// Returns the inputs a fuzzer found once, kept so they run every time:
     /// Data/Tests/GUI/Fuzz/<kind>/*.
-    inline std::vector<std::string> FoundSeeds(const char* kind)
+    inline core::Array<core::String> FoundSeeds(core::StringView kind)
     {
-        std::vector<std::string> seeds;
+        core::Array<core::String> seeds;
         const core::String root = foundation::vfs::FindDataRoot();
-        const std::filesystem::path dir =
-            std::filesystem::path(std::string(reinterpret_cast<const char*>(root.CStr()))) / "Tests/GUI/Fuzz" / kind;
-        std::error_code ec;
-        for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
-            if (entry.is_regular_file())
-                seeds.push_back(ReadBytes(entry.path()));
+        const core::String dir = core::PathJoin(core::PathJoin(root.AsView(), u8"Tests/GUI/Fuzz").AsView(), kind);
+        ReadFolder(dir.AsView(), core::StringView{}, seeds);
         return seeds;
-    }
-
-    inline core::StringView View(const std::string& text)
-    {
-        return core::StringView(reinterpret_cast<const core::utf8char*>(text.data()), text.size());
     }
 
     // === The targets ===
@@ -160,7 +172,7 @@ namespace guifuzz
         u8"<CheckBox/><ListBox/><ScrollView><Label text=\"in\"/></ScrollView></Panel>";
 
     /// Parses a sheet, then applies it to kCssTree.
-    inline void FuzzCss(const std::string& text)
+    inline void FuzzCss(core::StringView text)
     {
         gui::RegisterGuiElements();
         auto root = core::MakeRef<gui::SceneRoot>(core::DefaultAllocator(), core::MakeRef<gui::GUIContext>(core::DefaultAllocator()));
@@ -169,20 +181,20 @@ namespace guifuzz
         gui::MarkupLoader loader(elements, core::DefaultAllocator());
         if (core::RefPtr<gui::Node> tree = loader.LoadFromString(core::StringView(kCssTree)))
             root->AddChild(tree.Get());
-        gui::StyleManager styles(gui::CSSParser::Parse(View(text)));
+        gui::StyleManager styles(gui::CSSParser::Parse(text));
         styles.ApplyTree(*root.Get());
         root->UpdateLayout();
     }
 
     /// Loads markup into a root, then styles, lays out and draws it.
-    inline void FuzzMarkup(const std::string& text)
+    inline void FuzzMarkup(core::StringView text)
     {
         gui::RegisterGuiElements();
         auto root = core::MakeRef<gui::SceneRoot>(core::DefaultAllocator(), core::MakeRef<gui::GUIContext>(core::DefaultAllocator()));
         root->SetSize(core::Float2{320.0f, 240.0f});
         static const gui::ElementSet elements = gui::ElementSet::All();
         gui::MarkupLoader loader(elements, core::DefaultAllocator());
-        core::RefPtr<gui::Node> tree = loader.LoadFromString(View(text));
+        core::RefPtr<gui::Node> tree = loader.LoadFromString(text);
         if (!tree)
             return;
         root->AddChild(tree.Get());
@@ -196,34 +208,35 @@ namespace guifuzz
 
     /// Binds lines of `keys|command|context` into a keymap, then matches keystrokes against it.
     /// Returns how many lines bound.
-    inline usize FuzzKeymap(const std::string& text)
+    inline usize FuzzKeymap(core::StringView text)
     {
+        constexpr usize kNotFound = core::StringView::kNotFound;
         gui::Keymap keymap;
         usize bound = 0;
         usize start = 0;
-        while (start <= text.size())
+        while (start <= text.Size())
         {
-            const usize end = std::min(text.find('\n', start), text.size());
-            const std::string line = text.substr(start, end - start);
-            const usize a = line.find('|');
-            const usize b = a == std::string::npos ? std::string::npos : line.find('|', a + 1);
-            const std::string keys = line.substr(0, a);
-            const std::string command = a == std::string::npos ? "c" : line.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1);
-            const std::string context = b == std::string::npos ? "" : line.substr(b + 1);
-            if (keymap.Bind(View(keys), View(command), View(context)))
+            const usize end = core::Min(text.Find(u8'\n', start), text.Size());
+            const core::StringView line = text.SubStr(start, end - start);
+            const usize a = line.Find(u8'|');
+            const usize b = a == kNotFound ? kNotFound : line.Find(u8'|', a + 1);
+            const core::StringView keys = a == kNotFound ? line : line.SubStr(0, a);
+            const core::StringView command = a == kNotFound ? core::StringView(u8"c") : line.SubStr(a + 1, (b == kNotFound ? line.Size() : b) - a - 1);
+            const core::StringView context = b == kNotFound ? core::StringView() : line.SubStr(b + 1, line.Size() - b - 1);
+            if (keymap.Bind(keys, command, context))
                 ++bound;
-            (void)gui::ParseKeystroke(View(keys));
+            (void)gui::ParseKeystroke(keys);
             start = end + 1;
         }
         return bound;
     }
 
     /// Reads a string table from XML, then asks it for its texts.
-    inline void FuzzStringTable(const std::string& text)
+    inline void FuzzStringTable(core::StringView text)
     {
         foundation::i18n::RegisterStringTableType();
         foundation::xml::XmlDocument document(core::DefaultAllocator());
-        if (document.Parse(View(text)) != foundation::xml::XmlResult::Ok)
+        if (document.Parse(text) != foundation::xml::XmlResult::Ok)
             return;
         foundation::xml::XmlSerializer reader(document);
         foundation::i18n::StringTable table;
@@ -237,23 +250,23 @@ namespace guifuzz
 
     /// Runs a sandbox page under a stream of input the bytes decide: pointer, wheel, keys, text and
     /// composition (broken UTF-8 included), touch, pad, file drops, and frames between them.
-    inline void FuzzInput(const std::string& markup, const std::string& sheet, const std::string& bytes)
+    inline void FuzzInput(core::StringView markup, core::StringView sheet, core::StringView bytes)
     {
         gui::RegisterGuiElements();
         auto root = core::MakeRef<gui::SceneRoot>(core::DefaultAllocator(), core::MakeRef<gui::GUIContext>(core::DefaultAllocator()));
         root->SetSize(core::Float2{640.0f, 480.0f});
         static const gui::ElementSet elements = gui::ElementSet::All();
         gui::MarkupLoader loader(elements, core::DefaultAllocator());
-        core::RefPtr<gui::Node> tree = loader.LoadFromString(View(markup));
+        core::RefPtr<gui::Node> tree = loader.LoadFromString(markup);
         if (tree)
             root->AddChild(tree.Get());
-        gui::StyleManager styles(gui::CSSParser::Parse(View(sheet)));
+        gui::StyleManager styles(gui::CSSParser::Parse(sheet));
         foundation::gui::testing::Tester tester(*root.Get(), &styles);
         gui::EventDispatcher& input = *root->GetEventDispatcher();
         usize at = 0;
-        const auto next = [&]() -> u32 { return at < bytes.size() ? static_cast<u32>(static_cast<unsigned char>(bytes[at++])) : 0u; };
+        const auto next = [&]() -> u32 { return at < bytes.Size() ? static_cast<u32>(bytes[at++]) : 0u; };
         const auto point = [&]() { return core::Float2{static_cast<f32>(next()) * 2.6f - 10.0f, static_cast<f32>(next()) * 2.0f - 10.0f}; };
-        while (at < bytes.size())
+        while (at < bytes.Size())
         {
             switch (next() % 14)
             {
@@ -265,18 +278,18 @@ namespace guifuzz
             case 5: (void)input.InjectKeyUp(next() % 80u, next() & 15u); break;
             case 6:
             {
-                std::string text;
+                core::String text;
                 for (u32 n = next() % 6; n > 0; --n)
-                    text.push_back(static_cast<char>(next()));
-                (void)input.InjectText(View(text));
+                    text.PushBack(static_cast<core::utf8char>(next()));
+                (void)input.InjectText(text.AsView());
                 break;
             }
             case 7:
             {
-                std::string text;
+                core::String text;
                 for (u32 n = next() % 6; n > 0; --n)
-                    text.push_back(static_cast<char>(next()));
-                (void)input.InjectComposition(View(text), static_cast<core::i32>(next() % 8) - 2);
+                    text.PushBack(static_cast<core::utf8char>(next()));
+                (void)input.InjectComposition(text.AsView(), static_cast<core::i32>(next() % 8) - 2);
                 break;
             }
             case 8: (void)input.InjectTouchDown(next() % 3u, point()); break;

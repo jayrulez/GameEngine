@@ -7,8 +7,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
-#include <filesystem>
-#include <fstream>
 
 import foundation.core;
 import foundation.rhi;
@@ -43,6 +41,11 @@ namespace
             return nullptr;
         }
         return c;
+    }
+
+    void WriteText(StringView path, StringView text)
+    {
+        (void)WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
     }
 }
 
@@ -244,16 +247,13 @@ TEST_CASE("shader system: dev mode canonicalizes corpus requests like the cooked
     }
 
     // A tiny corpus: one shader declaring Skinned, one with no directive (single-variant).
-    const std::filesystem::path root = "shader_canon_corpus";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root);
-    {
-        std::ofstream a(root / "declared.vs.hlsl", std::ios::binary);
-        a << "// variants: SKINNED\n"
-          << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
-        std::ofstream b(root / "plain.vs.hlsl", std::ios::binary);
-        b << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
-    }
+    const StringView root = u8"shader_canon_corpus";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(root);
+    WriteText(PathJoin(root, u8"declared.vs.hlsl").AsView(),
+              u8"// variants: SKINNED\n"
+              u8"float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n");
+    WriteText(PathJoin(root, u8"plain.vs.hlsl").AsView(), u8"float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n");
 
     rhi::null::NullDevice device{DefaultAllocator()};
     {
@@ -299,9 +299,9 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     rhi::null::NullDevice device{DefaultAllocator()};
 
     // A scratch data root in the production shape: Engine/Shaders/<sources> and its shaders.dpak.
-    const std::filesystem::path root = "host_data_root";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "Engine" / "Shaders");
+    const StringView root = u8"host_data_root";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(PathJoin(root, u8"Engine/Shaders").AsView());
     {
         CookedShaderPack pack;
         const byte blob[] = {byte{1}};
@@ -311,14 +311,8 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         REQUIRE(out.IsValid());
         REQUIRE(pack.Write(out).IsOk());
     }
-    {
-        std::ofstream f(root / "Engine" / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
-        f << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
-    }
-    {
-        std::ofstream f(root / "Engine" / "Shaders" / "hosted_common.hlsli", std::ios::binary);
-        f << "float HostedZero() { return 0.0; }\n";
-    }
+    WriteText(PathJoin(root, u8"Engine/Shaders/hosted.vs.hlsl").AsView(), u8"float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n");
+    WriteText(PathJoin(root, u8"Engine/Shaders/hosted_common.hlsli").AsView(), u8"float HostedZero() { return 0.0; }\n");
     vfs::NativeFileSystem dataFs(u8"host_data_root", DefaultAllocator());
     CHECK(kShaderPackPath == u8"Engine/Shaders/shaders.dpak"); // the layout every writer targets
 
@@ -336,9 +330,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     {
         // A distribution marks itself (Engine/Shaders/.pack-first): Automatic then starts from the pack
         // although the sources and DXC are there; the sources stay for whoever cooks from them.
-        {
-            std::ofstream marker(root / "Engine" / "Shaders" / ".pack-first", std::ios::binary);
-        }
+        WriteText(PathJoin(root, u8"Engine/Shaders/.pack-first").AsView(), StringView{});
         ShaderSystemHost host{DefaultAllocator()};
         REQUIRE(host.Initialize(device, dataFs));
         CHECK(host.UsingPack());
@@ -351,7 +343,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
                                       u8"{ return float4(HostedZero(), 0, 0, 1); }\n",
                                       u8"main");
         CHECK(host.GetVariant(u8"custom", ShaderStage::Vertex, ShaderFlags::None) != nullptr);
-        std::filesystem::remove(root / "Engine" / "Shaders" / ".pack-first");
+        (void)FileDelete(PathJoin(root, u8"Engine/Shaders/.pack-first").AsView());
     }
     {
         // Explicit opt-in: ForcePack loads Engine/Shaders/shaders.dpak from the data root, and
@@ -364,7 +356,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     {
         // ForceDev ignores the pack even when the source folder is missing (registered-only
         // mode): a data root with no Engine/Shaders/ at all.
-        std::filesystem::create_directories("host_data_root_empty");
+        (void)CreateDirectories(u8"host_data_root_empty");
         vfs::NativeFileSystem emptyFs(u8"host_data_root_empty", DefaultAllocator());
         ShaderSystemHost host{DefaultAllocator()};
         REQUIRE(host.Initialize(device, emptyFs, ShaderPackPolicy::ForceDev));
@@ -390,9 +382,9 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
     // the cooked pack and nothing else, no .hlsl sources. With DXC present (the editor dist ships
     // it) the folder's existence must not read as "sources present", or the shipped editor would
     // run in dev mode over an empty corpus.
-    const std::filesystem::path root = "host_dist_root";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "Engine" / "Shaders");
+    const StringView root = u8"host_dist_root";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(PathJoin(root, u8"Engine/Shaders").AsView());
     {
         CookedShaderPack pack;
         const byte blob[] = {byte{1}};
@@ -413,10 +405,8 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
     // only through DXC.
     bool haveCompiler = false;
     {
-        std::filesystem::create_directories("host_dist_probe/Shaders");
-        std::ofstream f("host_dist_probe/Shaders/probe.vs.hlsl", std::ios::binary);
-        f << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
-        f.close();
+        (void)CreateDirectories(u8"host_dist_probe/Shaders");
+        WriteText(u8"host_dist_probe/Shaders/probe.vs.hlsl", u8"float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n");
         vfs::NativeFileSystem probeFs(u8"host_dist_probe", DefaultAllocator());
         ShaderSystemHost host{DefaultAllocator()};
         haveCompiler = host.Initialize(device, probeFs);
@@ -424,9 +414,7 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
     {
         // A stage file beside the pack is a corpus again: dev-first (with a compiler), else the
         // pack still serves.
-        std::ofstream f(root / "Engine" / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
-        f << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
-        f.close();
+        WriteText(PathJoin(root, u8"Engine/Shaders/hosted.vs.hlsl").AsView(), u8"float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n");
         ShaderSystemHost host{DefaultAllocator()};
         REQUIRE(host.Initialize(device, dataFs));
         CHECK(host.UsingPack() == !haveCompiler);
@@ -606,19 +594,16 @@ TEST_CASE("shader system: effects are served by name and by flag from the pack")
 
 TEST_CASE("shader system: in dev, effects are parsed from the provider's includes")
 {
-    const std::filesystem::path root = "shader_effect_corpus";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "surface");
-    {
-        std::ofstream stage(root / "sway.vs.hlsl", std::ios::binary);
-        stage << "// variants: WIND\n#include \"surface/wind_fx.hlsli\"\n"
-              << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
-        // An include in a subfolder, as the corpus's surface templates are.
-        std::ofstream include(root / "surface" / "wind_fx.hlsli", std::ios::binary);
-        include << "effect Wind : WIND\n{\n    float Strength = 0 (gate);\n}\n";
-        std::ofstream plain(root / "plain.hlsli", std::ios::binary);
-        plain << "float Plain() { return 1; }\n";
-    }
+    const StringView root = u8"shader_effect_corpus";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(PathJoin(root, u8"surface").AsView());
+    WriteText(PathJoin(root, u8"sway.vs.hlsl").AsView(),
+              u8"// variants: WIND\n#include \"surface/wind_fx.hlsli\"\n"
+              u8"float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n");
+    // An include in a subfolder, as the corpus's surface templates are.
+    WriteText(PathJoin(root, u8"surface/wind_fx.hlsli").AsView(),
+              u8"effect Wind : WIND\n{\n    float Strength = 0 (gate);\n}\n");
+    WriteText(PathJoin(root, u8"plain.hlsli").AsView(), u8"float Plain() { return 1; }\n");
 
     rhi::null::NullDevice device{DefaultAllocator()};
     {
@@ -639,7 +624,7 @@ TEST_CASE("shader system: in dev, effects are parsed from the provider's include
         CHECK(ss.EffectForFlag(ShaderFlags::Wind) == wind);
         CHECK(ss.Effects().Size() == 1u);
     }
-    std::filesystem::remove_all(root);
+    (void)RemoveDirectoryRecursive(root);
 }
 
 // What a shader's stage declares, asked by the material factory for the effects a material on it

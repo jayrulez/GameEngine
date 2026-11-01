@@ -7,7 +7,6 @@
 // Posts from another thread wait for the host's frame, and each shown toast is announced.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <thread>
 import foundation.core;
 import foundation.fonts;
 import foundation.gui;
@@ -302,24 +301,24 @@ TEST_CASE("toast: a widget for its content in the card, or bare; actions run and
 TEST_CASE("toast: posted from another thread, it waits for the host's frame, its widget made on the GUI's thread")
 {
     Bed bed;
-    const std::thread::id gui = std::this_thread::get_id();
-    std::thread::id madeOn{};
+    const core::u64 gui = core::Thread::CurrentId();
+    core::u64 madeOn = 0;
     ToastId id = 0;
-    std::thread worker([&]()
+    core::Thread worker([&]()
     {
         ToastRequest request;
         request.Severity = ToastSeverity::Warning;
         request.Announcement = core::String(u8"Cook finished with warnings");
         id = bed.host->PostFromAnyThread(core::Move(request), [&madeOn]()
         {
-            madeOn = std::this_thread::get_id();
+            madeOn = core::Thread::CurrentId();
             return core::RefPtr<UIWidget>(core::MakeRef<Label>(core::DefaultAllocator()));
         });
     });
-    worker.join();
+    worker.Join();
     CHECK(id != 0);
     CHECK_FALSE(bed.host->IsShown(id));
-    CHECK(madeOn == std::thread::id{});
+    CHECK(madeOn == 0);
     bed.Frame();
     ToastCard* card = bed.host->GetCard(id);
     REQUIRE(card != nullptr);

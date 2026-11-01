@@ -5,7 +5,6 @@
 // here; the editor exercises the XML factory). Also covers defaults, change notification, and the
 // core UserDataDir / GetEnvironmentVariable helpers the store's storage location builds on.
 #include <doctest/doctest.h>
-#include <string>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
@@ -356,14 +355,15 @@ TEST_CASE("settings: a save value of a kind this build does not know is skipped,
     store.Section<settings::SaveValues>().SetInt(u8"z.after", 3);
     MemoryStream written;
     REQUIRE(store.Save(written, xml::XmlSerializerFactory()).IsOk());
-    std::string text(reinterpret_cast<const char*>(written.Bytes().Data()), written.Bytes().Size());
+    String text(StringView(reinterpret_cast<const utf8char*>(written.Bytes().Data()), written.Bytes().Size()));
     // A newer build's kind in place of the text one, with a value this build cannot read as text.
-    const usize kind = text.find(">text<");
-    REQUIRE(kind != std::string::npos);
-    text.replace(kind, 6, ">sound<");
+    const usize kind = text.AsView().Find(u8">text<");
+    REQUIRE(kind != StringView::kNotFound);
+    text.Remove(kind, 6);
+    text.Insert(kind, u8">sound<");
 
     MemoryStream edited;
-    (void)edited.Write(text.data(), text.size());
+    (void)edited.Write(text.Data(), text.Size());
     REQUIRE(edited.Seek(0, SeekOrigin::Begin) == 0);
     settings::Settings read(foundation::core::DefaultAllocator());
     REQUIRE(read.Load(edited, xml::XmlSerializerFactory()).IsOk());
@@ -389,13 +389,13 @@ TEST_CASE("settings: save values round-trip as a section (XML), kinds written by
     store.Section<settings::SaveValues>().SetFloat(u8"best.time", 1.5f);
     MemoryStream stream;
     REQUIRE(store.Save(stream, xml::XmlSerializerFactory()).IsOk());
-    const std::string text(reinterpret_cast<const char*>(stream.Bytes().Data()), stream.Bytes().Size());
-    CHECK(text.find(">float<") != std::string::npos);
+    const StringView text(reinterpret_cast<const utf8char*>(stream.Bytes().Data()), stream.Bytes().Size());
+    CHECK(text.Contains(u8">float<"));
     const f32 ghost[] = {2.0f};
     store.Section<settings::SaveValues>().SetFloats(u8"ghost", Span<const f32>(ghost, 1));
     MemoryStream again;
     REQUIRE(store.Save(again, xml::XmlSerializerFactory()).IsOk());
-    const std::string listed(reinterpret_cast<const char*>(again.Bytes().Data()), again.Bytes().Size());
-    CHECK(listed.find(">floats<") != std::string::npos);
-    CHECK(text.find("best.time") != std::string::npos);
+    const StringView listed(reinterpret_cast<const utf8char*>(again.Bytes().Data()), again.Bytes().Size());
+    CHECK(listed.Contains(u8">floats<"));
+    CHECK(text.Contains(u8"best.time"));
 }

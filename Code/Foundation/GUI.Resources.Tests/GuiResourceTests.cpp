@@ -5,7 +5,6 @@
 // their text intact, and the factory list the engine composition registers.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <filesystem>
 
 import foundation.core;
 import foundation.vfs;
@@ -25,8 +24,7 @@ namespace
 
     void RemoveAll(StringView dir)
     {
-        std::error_code ec;
-        std::filesystem::remove_all(std::filesystem::path(reinterpret_cast<const char*>(String(dir).CStr())), ec);
+        (void)RemoveDirectoryRecursive(dir);
     }
 }
 

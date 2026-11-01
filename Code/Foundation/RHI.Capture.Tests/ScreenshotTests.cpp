@@ -6,8 +6,7 @@
 // records the backbuffer, completed, written as a PNG and read back through the image loader, so
 // the tests pin that the file exists and holds the right pixels.
 #include <doctest/doctest.h>
-#include <cstring>
-#include <filesystem>
+#include <initializer_list> // Parse's argument lists
 #include "Core/Prelude.h"
 
 import foundation.core;
@@ -137,7 +136,7 @@ TEST_CASE("screenshot: rows unpack from the aligned pitch, and BGRA swizzles to 
     {
         b = 0xEE;
     }
-    std::memcpy(halfRow, halves, sizeof(halves));
+    MemCopy(halfRow, halves, sizeof(halves));
     u8 fromHalf[2 * 4];
     ScreenshotCapture::UnpackRows(halfRow, pitch, 2, 1, rhi::TextureFormat::RGBA16Float,
                                   Span<u8>{fromHalf, sizeof fromHalf});
@@ -206,8 +205,7 @@ namespace
 
         String path;
         AppendFormat(path, u8"screenshot_probe_{}.png", StringView(reinterpret_cast<const utf8char*>(name)));
-        std::error_code ec;
-        std::filesystem::remove(reinterpret_cast<const char*>(path.Data()), ec);
+        (void)FileDelete(path.AsView());
 
         ScreenshotCapture capture;
         CHECK_FALSE(capture.Record(device, *encoder, texture, format, w, h, state)); // not armed: nothing
@@ -253,7 +251,7 @@ namespace
         device.DestroyCommandPool(pool);
         device.DestroyTextureView(view);
         device.DestroyTexture(texture);
-        std::filesystem::remove(reinterpret_cast<const char*>(path.Data()), ec);
+        (void)FileDelete(path.AsView());
     }
 }
 

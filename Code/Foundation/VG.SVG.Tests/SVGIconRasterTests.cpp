@@ -7,7 +7,6 @@
 // symmetric, and its edges are anti-aliased (partial coverage), not stepped.
 
 #include <doctest/doctest.h>
-#include <string>
 #include "Core/Prelude.h"
 
 import foundation.core;
@@ -53,18 +52,19 @@ namespace
         return alpha;
     }
 
-    std::string Picture(const Array<f32>& alpha, i32 size)
+    String Picture(const Array<f32>& alpha, i32 size)
     {
-        std::string out;
+        String out;
         for (i32 y = 0; y < size; ++y)
         {
             for (i32 x = 0; x < size; ++x)
             {
-                char cell[6];
-                std::snprintf(cell, sizeof(cell), "%4d", static_cast<int>(alpha[static_cast<usize>(y * size + x)] * 100.0f + 0.5f));
-                out += cell;
+                const String cell = Format(u8"{}", static_cast<int>(alpha[static_cast<usize>(y * size + x)] * 100.0f + 0.5f));
+                for (usize pad = cell.Size(); pad < 4; ++pad)
+                    out.Append(u8' ');
+                out.Append(cell.AsView());
             }
-            out += '\n';
+            out.Append(u8'\n');
         }
         return out;
     }
@@ -83,12 +83,14 @@ TEST_CASE("svg icon raster: symmetric stroked icons are symmetric and anti-alias
     {
         Result<svg::SVGDocument> parsed = svg::SVGLoader::Load(icon);
         REQUIRE(parsed.HasValue());
-        for (const i32 size : {16, 14})
+        const i32 sizes[] = {16, 14};
+        for (const i32 size : sizes)
         {
             vg::VGContext context;
             svg::SVGRenderer::Render(context, parsed.Value(), Rectangle{0.0f, 0.0f, static_cast<f32>(size), static_cast<f32>(size)});
             const Array<f32> alpha = Rasterize(context.GetBatch(), size);
-            MESSAGE("size " << size << "\n" << Picture(alpha, size));
+            const String picture = Picture(alpha, size);
+            MESSAGE("size " << size << "\n" << reinterpret_cast<const char*>(picture.CStr()));
             f32 worstMirror = 0.0f;
             usize partial = 0;
             for (i32 y = 0; y < size; ++y)

@@ -10,8 +10,6 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
-#include <filesystem>
-#include <fstream>
 
 import foundation.core;
 import foundation.rhi;
@@ -34,11 +32,12 @@ namespace
     constexpr const char* kTrivialVS =
         "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0, 0, 0, 1); }\n";
 
-    void WriteFile(const std::filesystem::path& path, const char* text)
+    void WriteText(StringView folder, StringView name, const char* text)
     {
-        std::ofstream out(path, std::ios::binary | std::ios::trunc);
-        REQUIRE(out.is_open());
-        out << text;
+        const StringView bytes(reinterpret_cast<const char8_t*>(text));
+        REQUIRE(WriteFile(PathJoin(folder, name).AsView(),
+                          Span<const byte>(reinterpret_cast<const byte*>(bytes.Data()), bytes.Size()))
+                    .IsOk());
     }
 
     Compiler* MakeCompiler()
@@ -66,14 +65,14 @@ namespace
 
 TEST_CASE("file provider: manifest scan, stem/stage mapping, lazy fetch")
 {
-    const std::filesystem::path root = "shader_provider_scan";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root);
-    WriteFile(root / "tonemap.ps.hlsl", kRedPS);
-    WriteFile(root / "tonemap.vs.hlsl", kTrivialVS);
-    WriteFile(root / "cluster.cs.hlsl", kRedPS);
-    WriteFile(root / "shared.hlsli", "// helper only\n");
-    WriteFile(root / "readme.txt", "not a shader\n");
+    const StringView root = u8"shader_provider_scan";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(root);
+    WriteText(root, u8"tonemap.ps.hlsl", kRedPS);
+    WriteText(root, u8"tonemap.vs.hlsl", kTrivialVS);
+    WriteText(root, u8"cluster.cs.hlsl", kRedPS);
+    WriteText(root, u8"shared.hlsli", "// helper only\n");
+    WriteText(root, u8"readme.txt", "not a shader\n");
 
     vfs::NativeFileSystem fs(u8"shader_provider_scan", DefaultAllocator());
     FileShaderSourceProvider provider{DefaultAllocator()};
@@ -112,13 +111,13 @@ TEST_CASE("file provider: manifest scan, stem/stage mapping, lazy fetch")
 TEST_CASE("file provider: a Shaders subfolder - mount-relative paths and folder-first includes")
 {
     // The production shape: the data root is the mount, the shaders live in Shaders/ under it.
-    const std::filesystem::path root = "shader_provider_data";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "Shaders" / "nested");
-    WriteFile(root / "Shaders" / "tonemap.ps.hlsl", kRedPS);
-    WriteFile(root / "Shaders" / "common.hlsli", "// common\n");
-    WriteFile(root / "Shaders" / "nested" / "inner.hlsli", "// inner\n");
-    WriteFile(root / "stray.hlsli", "// outside the shader folder\n");
+    const StringView root = u8"shader_provider_data";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(PathJoin(root, u8"Shaders/nested").AsView());
+    WriteText(root, u8"Shaders/tonemap.ps.hlsl", kRedPS);
+    WriteText(root, u8"Shaders/common.hlsli", "// common\n");
+    WriteText(root, u8"Shaders/nested/inner.hlsli", "// inner\n");
+    WriteText(root, u8"stray.hlsli", "// outside the shader folder\n");
 
     vfs::NativeFileSystem fs(u8"shader_provider_data", DefaultAllocator());
     FileShaderSourceProvider provider{DefaultAllocator()};
@@ -156,11 +155,11 @@ TEST_CASE("shader system: pulls source from the provider; includes resolve; "
         return;
     }
 
-    const std::filesystem::path root = "shader_provider_sys";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root);
-    WriteFile(root / "prov_common.hlsli", "float4 Tint() { return float4(0, 0, 1, 1); }\n");
-    WriteFile(root / "prov.ps.hlsl",
+    const StringView root = u8"shader_provider_sys";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(root);
+    WriteText(root, u8"prov_common.hlsli", "float4 Tint() { return float4(0, 0, 1, 1); }\n");
+    WriteText(root, u8"prov.ps.hlsl",
               "#include \"prov_common.hlsli\"\nfloat4 main() : SV_Target { return Tint(); }\n");
 
     rhi::null::NullDevice device{DefaultAllocator()};
@@ -195,12 +194,12 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
         return;
     }
 
-    const std::filesystem::path root = "shader_provider_reload";
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root);
-    WriteFile(root / "hot.ps.hlsl", kRedPS);
-    WriteFile(root / "cold.ps.hlsl", kRedPS);
-    WriteFile(root / "reload_common.hlsli", "// v1\n");
+    const StringView root = u8"shader_provider_reload";
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(root);
+    WriteText(root, u8"hot.ps.hlsl", kRedPS);
+    WriteText(root, u8"cold.ps.hlsl", kRedPS);
+    WriteText(root, u8"reload_common.hlsli", "// v1\n");
 
     rhi::null::NullDevice device{DefaultAllocator()};
     {
@@ -228,7 +227,7 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
 
         // Edit the shader body: exactly that shader reloads, its version bumps, and the
         // next GetVariant compiles the new source.
-        WriteFile(root / "hot.ps.hlsl", kGreenPS);
+        WriteText(root, u8"hot.ps.hlsl", kGreenPS);
         CHECK(SpinReloads(ss) == 1);
         CHECK(ss.Version(u8"hot") == 1);
         CHECK(ss.Version(u8"cold") == 0);
@@ -239,7 +238,7 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
         CHECK(fetched.AsView() == StringView(reinterpret_cast<const char8_t*>(kGreenPS)));
 
         // Edit a .hlsli: includers are unknown, so every served shader reloads.
-        WriteFile(root / "reload_common.hlsli",
+        WriteText(root, u8"reload_common.hlsli",
                   "// v2 - bigger than before\n#define COMMON_RED 1\n");
         CHECK(SpinReloads(ss) == 2);
         CHECK(ss.Version(u8"hot") == 2);
@@ -255,15 +254,13 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
 // application's data mount (an absolute discovered data root).
 TEST_CASE("file provider: reload detection with an absolute root and a subfolder")
 {
-    const std::filesystem::path root = std::filesystem::absolute("shader_provider_abs");
-    std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "Shaders");
-    WriteFile(root / "Shaders" / "hot.ps.hlsl", kRedPS);
+    const String rootPath = PathJoin(GetCurrentDirectory().AsView(), u8"shader_provider_abs");
+    const StringView root = rootPath.AsView();
+    (void)RemoveDirectoryRecursive(root);
+    (void)CreateDirectories(PathJoin(root, u8"Shaders").AsView());
+    WriteText(root, u8"Shaders/hot.ps.hlsl", kRedPS);
 
-    const std::string rootStr = root.string();
-    vfs::NativeFileSystem fs(
-        StringView(reinterpret_cast<const char8_t*>(rootStr.c_str()), rootStr.size()),
-        DefaultAllocator());
+    vfs::NativeFileSystem fs(root, DefaultAllocator());
     FileShaderSourceProvider provider{DefaultAllocator()};
     REQUIRE(provider.Initialize(fs, u8"Shaders").IsOk());
 
@@ -274,7 +271,7 @@ TEST_CASE("file provider: reload detection with an absolute root and a subfolder
     }
     CHECK(changed.Size() == 0);
 
-    WriteFile(root / "Shaders" / "hot.ps.hlsl", kGreenPS);
+    WriteText(root, u8"Shaders/hot.ps.hlsl", kGreenPS);
     for (u32 i = 0; i < FileShaderSourceProvider::PollEveryNCalls * 2 + 1; ++i)
     {
         (void)provider.PollChanges(changed);

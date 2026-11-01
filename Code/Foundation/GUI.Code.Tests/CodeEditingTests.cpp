@@ -10,9 +10,6 @@
 // document is searched. The keys are VS Code's.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <fstream>
-#include <sstream>
-#include <string>
 import foundation.core;
 import foundation.fonts;
 import foundation.xml;
@@ -72,14 +69,13 @@ namespace
 
     bool LoadSharedLanguage(const char* id, CodeLanguage& out)
     {
-        std::ifstream file(std::string(GUI_CODE_LANGUAGES) + "/" + id + ".xml", std::ios::binary);
-        if (!file)
+        const core::String path = core::Format(u8"{}/{}.xml", core::StringView(reinterpret_cast<const char8_t*>(GUI_CODE_LANGUAGES)),
+                                               core::StringView(reinterpret_cast<const char8_t*>(id)));
+        const core::Result<core::Array<core::byte>> bytes = core::ReadFile(path.AsView());
+        if (!bytes.HasValue())
             return false;
-        std::stringstream text;
-        text << file.rdbuf();
-        const std::string bytes = text.str();
         xml::XmlDocument doc(core::DefaultAllocator());
-        if (doc.Parse(core::StringView(reinterpret_cast<const char8_t*>(bytes.data()), bytes.size())) != xml::XmlResult::Ok)
+        if (doc.Parse(core::StringView(reinterpret_cast<const char8_t*>(bytes.Value().Data()), bytes.Value().Size())) != xml::XmlResult::Ok)
             return false;
         xml::XmlSerializer reader(doc);
         Serialize(reader, out);

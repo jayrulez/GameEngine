@@ -14,9 +14,7 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
-#include <algorithm> // std::min, std::max: libstdc++ leaks these in, the MSVC STL does not
-#include <cmath>
-#include <cstring>
+#include <cmath> // std::isfinite
 
 import foundation.core;
 import foundation.navigation;
@@ -102,7 +100,7 @@ namespace
         {
             return false;
         }
-        return a.Size() == 0 || std::memcmp(a.Data(), b.Data(), a.Size()) == 0;
+        return a.Size() == 0 || MemCompare(a.Data(), b.Data(), a.Size()) == 0;
     }
 
     bool Finite(Float3 v)
@@ -113,7 +111,7 @@ namespace
     f32 DistXZ(Float3 a, Float3 b)
     {
         const f32 dx = a.x - b.x, dz = a.z - b.z;
-        return std::sqrt(dx * dx + dz * dz);
+        return Sqrt(dx * dx + dz * dz);
     }
 }
 
@@ -181,7 +179,7 @@ TEST_CASE("navigation: query paths around an obstacle and reports the unreachabl
     f32 maxAbsZ = 0.0f;
     for (const Float3& c : path.corners)
     {
-        maxAbsZ = std::max(maxAbsZ, std::abs(c.z));
+        maxAbsZ = Max(maxAbsZ, Abs(c.z));
     }
     CHECK(maxAbsZ > 1.5f); // routed clear of the box (half-extent 2, straight line is z=0)
 
@@ -319,7 +317,7 @@ TEST_CASE("navigation: two agents cross head-on, both arrive, no hard overlap")
         const Float3 pb = crowd.AgentPosition(b);
         REQUIRE(Finite(pa));
         REQUIRE(Finite(pb));
-        minSeparation = std::min(minSeparation, DistXZ(pa, pb));
+        minSeparation = Min(minSeparation, DistXZ(pa, pb));
     }
 
     const Float3 finalA = crowd.AgentPosition(a);
@@ -346,7 +344,7 @@ TEST_CASE("tiled bake: a large ground splits into tiles, paths span them, and it
     REQUIRE(NavigationMeshBuilder::BuildTiled(vspan, ispan, params, blobA).IsOk());
     REQUIRE(NavigationMeshBuilder::BuildTiled(vspan, ispan, params, blobB).IsOk());
     REQUIRE(blobA.Size() == blobB.Size()); // determinism holds for the tiled path too
-    CHECK(std::memcmp(blobA.Data(), blobB.Data(), blobA.Size()) == 0);
+    CHECK(MemCompare(blobA.Data(), blobB.Data(), blobA.Size()) == 0);
 
     NavigationMesh mesh(DefaultAllocator());
     REQUIRE(mesh.Load(Span<const byte>{blobA.Data(), blobA.Size()}).IsOk());
@@ -362,8 +360,8 @@ TEST_CASE("tiled bake: a large ground splits into tiles, paths span them, and it
     CHECK(path.complete);
     REQUIRE(path.corners.Size() >= 2u);
     const Float3 last = path.corners[path.corners.Size() - 1];
-    CHECK(std::abs(last.x - 27.0f) < 1.0f);
-    CHECK(std::abs(last.z - 27.0f) < 1.0f);
+    CHECK(Abs(last.x - 27.0f) < 1.0f);
+    CHECK(Abs(last.z - 27.0f) < 1.0f);
 
     // A crowd agent walks the span too (the runtime consumers see one seamless mesh).
     NavigationCrowd crowd(DefaultAllocator(), mesh, 4, 0.6f);
@@ -413,7 +411,7 @@ TEST_CASE("tiled bake: BuildTileAt regenerates a tile byte-identical to the full
     };
     const byte* cursor = blob.Data() + sizeof(BlobHeaderMirror);
     TiledInfoMirror info;
-    std::memcpy(&info, cursor, sizeof(info));
+    MemCopy(&info, cursor, sizeof(info));
     cursor += sizeof(info);
     REQUIRE(info.countX == 4);
     REQUIRE(info.countY == 4);
@@ -423,7 +421,7 @@ TEST_CASE("tiled bake: BuildTileAt regenerates a tile byte-identical to the full
     for (u32 i = 0; i < info.tileCount; ++i)
     {
         TileRecordMirror record;
-        std::memcpy(&record, cursor, sizeof(record));
+        MemCopy(&record, cursor, sizeof(record));
         cursor += sizeof(record);
         if (record.tx == 1 && record.ty == 2)
         {
@@ -431,7 +429,7 @@ TEST_CASE("tiled bake: BuildTileAt regenerates a tile byte-identical to the full
             REQUIRE(NavigationMeshBuilder::BuildTileAt(vspan, ispan, params, 1, 2, regenerated)
                         .IsOk());
             REQUIRE(regenerated.Size() == static_cast<usize>(record.dataSize));
-            CHECK(std::memcmp(regenerated.Data(), cursor, record.dataSize) == 0);
+            CHECK(MemCompare(regenerated.Data(), cursor, record.dataSize) == 0);
             found = true;
             break;
         }
@@ -497,7 +495,7 @@ TEST_CASE("tiled bake: stage capture yields contours + walkable span samples in-
     }
     for (const Float3& p : stages.walkableSamples)
     {
-        CHECK(std::abs(p.y) < 1.0f); // span tops hug the y=0 ground
+        CHECK(Abs(p.y) < 1.0f); // span tops hug the y=0 ground
     }
 
     // Capture is an observer: the blob is byte-identical with and without it.
@@ -507,7 +505,7 @@ TEST_CASE("tiled bake: stage capture yields contours + walkable span samples in-
                                               params, plain)
                 .IsOk());
     REQUIRE(plain.Size() == blob.Size());
-    CHECK(std::memcmp(plain.Data(), blob.Data(), plain.Size()) == 0);
+    CHECK(MemCompare(plain.Data(), blob.Data(), plain.Size()) == 0);
 }
 
 TEST_CASE("tiled bake: parallel and serial produce byte-identical blobs (the toggle is latency-only)")
@@ -534,7 +532,7 @@ TEST_CASE("tiled bake: parallel and serial produce byte-identical blobs (the tog
                                               &parallelStages)
                 .IsOk());
     REQUIRE(serial.Size() == parallel.Size());
-    CHECK(std::memcmp(serial.Data(), parallel.Data(), serial.Size()) == 0);
+    CHECK(MemCompare(serial.Data(), parallel.Data(), serial.Size()) == 0);
     // Stage capture concatenates row-major either way.
     REQUIRE(serialStages.contourLines.Size() == parallelStages.contourLines.Size());
     REQUIRE(serialStages.walkableSamples.Size() == parallelStages.walkableSamples.Size());
@@ -580,12 +578,12 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
     const Span<const u32> ei{editedIndices.Data(), editedIndices.Size()};
     Array<byte> patched = original;
     const auto tileOf = [&](f32 v, f32 origin) {
-        return static_cast<i32>(std::floor((v - origin) / grid.tileWorldSize));
+        return static_cast<i32>(Floor((v - origin) / grid.tileWorldSize));
     };
-    const i32 tx0 = std::max(0, tileOf(2.0f - apron, grid.origin.x));
-    const i32 tx1 = std::min(grid.countX - 1, tileOf(6.0f + apron, grid.origin.x));
-    const i32 ty0 = std::max(0, tileOf(2.0f - apron, grid.origin.z));
-    const i32 ty1 = std::min(grid.countY - 1, tileOf(6.0f + apron, grid.origin.z));
+    const i32 tx0 = Max(0, tileOf(2.0f - apron, grid.origin.x));
+    const i32 tx1 = Min(grid.countX - 1, tileOf(6.0f + apron, grid.origin.x));
+    const i32 ty0 = Max(0, tileOf(2.0f - apron, grid.origin.z));
+    const i32 ty1 = Min(grid.countY - 1, tileOf(6.0f + apron, grid.origin.z));
     usize rebuilt = 0;
     for (i32 ty = ty0; ty <= ty1; ++ty)
     {
@@ -607,7 +605,7 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
     Array<byte> full;
     REQUIRE(NavigationMeshBuilder::BuildTiled(ev, ei, params, full).IsOk());
     REQUIRE(patched.Size() == full.Size());
-    CHECK(std::memcmp(patched.Data(), full.Data(), patched.Size()) == 0);
+    CHECK(MemCompare(patched.Data(), full.Data(), patched.Size()) == 0);
 
     // Live swap: a mesh loaded from the original blob takes the rebuilt tiles via
     // ReplaceTile and the path now detours around the new obstacle.
@@ -621,7 +619,7 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
         f32 maxAbsZBefore = 0.0f;
         for (const Float3& c : before.corners)
         {
-            maxAbsZBefore = std::max(maxAbsZBefore, std::abs(c.z - 4.0f));
+            maxAbsZBefore = Max(maxAbsZBefore, Abs(c.z - 4.0f));
         }
         CHECK(maxAbsZBefore < 1.0f); // straight through where the box will be
     }
@@ -644,7 +642,7 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
         f32 detour = 0.0f;
         for (const Float3& c : after.corners)
         {
-            detour = std::max(detour, std::abs(c.z - 4.0f));
+            detour = Max(detour, Abs(c.z - 4.0f));
         }
         CHECK(detour > 1.5f); // routed around the freshly patched-in box
     }

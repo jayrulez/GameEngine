@@ -10,13 +10,11 @@
 
 #include <doctest/doctest.h>
 
-#include <cstdio>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <set>
-#include <sstream>
-#include <string>
+#include "Core/Prelude.h"
+
+import foundation.core;
+
+using namespace foundation::core;
 
 #ifndef RAPTOR_SOURCE_DIR
 #error "Core.Tests must define RAPTOR_SOURCE_DIR (see Core.Tests/CMakeLists.txt)"
@@ -24,106 +22,138 @@
 
 namespace
 {
-    namespace fs = std::filesystem;
-
-    bool IsSourceFile(const fs::path& p)
+    bool IsSourceFile(StringView path)
     {
-        const std::string ext = p.extension().string();
-        return ext == ".cppm" || ext == ".cpp" || ext == ".h";
+        const StringView ext = PathExtension(path);
+        return ext == u8".cppm" || ext == u8".cpp" || ext == u8".h";
     }
 
-    bool IsTestPath(const std::string& rel)
+    bool IsTestPath(StringView rel)
     {
-        return rel.find("Tests") != std::string::npos ||
-               rel.find("TestMain") != std::string::npos;
+        return rel.Contains(u8"Tests") || rel.Contains(u8"TestMain");
     }
 
-    bool FileContainsToken(const fs::path& p)
+    bool FileContainsToken(StringView path)
     {
-        std::ifstream in(p, std::ios::binary);
-        if (!in)
+        const Result<Array<byte>> bytes = ReadFile(path);
+        if (!bytes.HasValue())
         {
             return false;
         }
-        std::ostringstream buffer;
-        buffer << in.rdbuf();
-        return buffer.str().find("DefaultAllocator()") != std::string::npos;
+        return StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size())
+            .Contains(u8"DefaultAllocator()");
+    }
+
+    // Every file under `root`/`rel`, as paths relative to `root` with '/' separators.
+    void CollectFiles(StringView root, StringView rel, Array<String>& files) // NOLINT(misc-no-recursion)
+    {
+        struct Entry
+        {
+            String name;
+            bool isDirectory;
+        };
+        Array<Entry> entries;
+        (void)ListDirectory(
+            PathJoin(root, rel).AsView(),
+            [](void* ctx, StringView name, bool isDirectory)
+            {
+                static_cast<Array<Entry>*>(ctx)->PushBack(Entry{String(name), isDirectory});
+            },
+            &entries);
+        for (const Entry& entry : entries)
+        {
+            String child = PathJoin(rel, entry.name.AsView());
+            if (entry.isDirectory)
+            {
+                CollectFiles(root, child.AsView(), files);
+            }
+            else
+            {
+                files.PushBack(Move(child));
+            }
+        }
+    }
+
+    // The allowlist's entries: one repo-relative path per line, blank lines skipped.
+    bool ReadAllowlist(StringView path, HashSet<String>& allowed)
+    {
+        const Result<Array<byte>> bytes = ReadFile(path);
+        if (!bytes.HasValue())
+        {
+            return false;
+        }
+        const StringView text(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        usize start = 0;
+        while (start < text.Size())
+        {
+            usize end = start;
+            while (end < text.Size() && text[end] != u8'\n')
+            {
+                ++end;
+            }
+            StringView line = text.SubStr(start, end - start);
+            while (!line.IsEmpty() && line[line.Size() - 1] == u8'\r')
+            {
+                line = line.SubStr(0, line.Size() - 1);
+            }
+            if (!line.IsEmpty())
+            {
+                allowed.Insert(String(line));
+            }
+            start = end + 1;
+        }
+        return true;
     }
 }
 
 TEST_CASE("allocators: DefaultAllocator() stays confined to the pinned allowlist")
 {
-    const fs::path root = fs::path(RAPTOR_SOURCE_DIR);
-    const fs::path codeDir = root / "Code";
-    const fs::path allowlistPath =
-        root / "Code" / "Foundation" / "Core.Tests" / "allocator-allowlist.txt";
+    const StringView root(reinterpret_cast<const utf8char*>(RAPTOR_SOURCE_DIR));
+    const String codeDir = PathJoin(root, u8"Code");
+    const String allowlistPath = PathJoin(root, u8"Code/Foundation/Core.Tests/allocator-allowlist.txt");
 
-    std::error_code ec;
-    REQUIRE_MESSAGE(fs::exists(codeDir, ec), "Code/ not found under RAPTOR_SOURCE_DIR");
+    REQUIRE_MESSAGE(DirectoryExists(codeDir.AsView()), "Code/ not found under RAPTOR_SOURCE_DIR");
 
     // Load the pinned list (repo-relative paths, one per line).
-    std::set<std::string> allowed;
-    {
-        std::ifstream in(allowlistPath);
-        REQUIRE_MESSAGE(in.good(), "allocator-allowlist.txt missing");
-        std::string line;
-        while (std::getline(in, line))
-        {
-            while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
-            {
-                line.pop_back();
-            }
-            if (!line.empty())
-            {
-                allowed.insert(line);
-            }
-        }
-    }
+    HashSet<String> allowed;
+    REQUIRE_MESSAGE(ReadAllowlist(allowlistPath.AsView(), allowed), "allocator-allowlist.txt missing");
 
     // Fresh scan: every non-test source file referencing the ambient default.
-    std::set<std::string> current;
-    for (fs::recursive_directory_iterator it(codeDir, ec), end; it != end;
-         it.increment(ec))
+    Array<String> files;
+    CollectFiles(root, u8"Code", files);
+    HashSet<String> current;
+    for (const String& rel : files)
     {
-        if (ec)
-        {
-            break;
-        }
-        if (!it->is_regular_file(ec) || !IsSourceFile(it->path()))
+        if (!IsSourceFile(rel.AsView()) || IsTestPath(rel.AsView()))
         {
             continue;
         }
-        std::string rel = fs::relative(it->path(), root, ec).generic_string();
-        if (IsTestPath(rel))
+        if (FileContainsToken(PathJoin(root, rel.AsView()).AsView()))
         {
-            continue;
-        }
-        if (FileContainsToken(it->path()))
-        {
-            current.insert(rel);
+            current.Insert(rel);
         }
     }
-    REQUIRE_MESSAGE(!current.empty(),
+    REQUIRE_MESSAGE(!current.IsEmpty(),
                     "scan found nothing at all - RAPTOR_SOURCE_DIR is likely wrong");
 
     // New offenders: a file outside the allowlist references DefaultAllocator().
-    for (const std::string& file : current)
+    for (const String& file : current)
     {
-        if (allowed.find(file) == allowed.end())
+        if (!allowed.Contains(file))
         {
             FAIL_CHECK("NEW ambient-allocator reference (thread an owner's allocator, or "
                        "consciously add to allocator-allowlist.txt): "
-                       << file);
+                       << reinterpret_cast<const char*>(file.CStr()));
         }
     }
     // Stale entries: keep the list accurate as files get cleaned.
-    for (const std::string& file : allowed)
+    for (const String& file : allowed)
     {
-        if (current.find(file) == current.end())
+        if (!current.Contains(file))
         {
             FAIL_CHECK("STALE allowlist entry (file no longer references "
                        "DefaultAllocator() - remove it from allocator-allowlist.txt): "
-                       << file);
+                       << reinterpret_cast<const char*>(file.CStr()));
         }
     }
 }

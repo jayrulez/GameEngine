@@ -7,12 +7,6 @@
 // (default 40), so a long local run is one variable away.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
-#include <algorithm>
-#include <cstdio>
-#include <cstdlib>
-#include <filesystem>
-#include <string>
-#include <vector>
 
 import foundation.core;
 import foundation.vfs;
@@ -34,20 +28,20 @@ namespace
         namespace core = foundation::core;
         if (const core::Optional<core::String> value = core::GetEnvironmentVariable(u8"GUI_FUZZ_RUNS"); value.HasValue())
             if (const core::Optional<core::i64> runs = core::ParseInt(value.Value().AsView()); runs.HasValue())
-                return static_cast<usize>(std::max<core::i64>(1, runs.Value()));
+                return static_cast<usize>(core::Max<core::i64>(1, runs.Value()));
         return 40;
     }
 
     // Runs every seed, then Runs() mutations of each, through `target`. A mutation's seed is its
     // index, so a failure names what to replay.
     template <typename Target>
-    void Run(const std::vector<std::string>& seeds, const char* const* tokens, usize tokenCount, Target target)
+    void Run(const core::Array<core::String>& seeds, const char* const* tokens, usize tokenCount, Target target)
     {
-        REQUIRE_FALSE(seeds.empty());
-        for (const std::string& seed : seeds)
+        REQUIRE_FALSE(seeds.IsEmpty());
+        for (const core::String& seed : seeds)
             target(seed);
         const usize runs = Runs();
-        for (usize s = 0; s < seeds.size(); ++s)
+        for (usize s = 0; s < seeds.Size(); ++s)
         {
             for (usize r = 0; r < runs; ++r)
             {
@@ -61,38 +55,38 @@ namespace
     usize Count(const char* const (&)[N]) { return N; }
 
     // Bindings as a keymap writes them: each of the three lines binds.
-    const std::string kKeymapSeed = "ctrl-s|file.save|\nctrl-k ctrl-c|edit.comment|editing && !readonly\npad-south|ui.activate|menu";
+    constexpr core::StringView kKeymapSeed = u8"ctrl-s|file.save|\nctrl-k ctrl-c|edit.comment|editing && !readonly\npad-south|ui.activate|menu";
 }
 
 TEST_CASE("fuzz: the CSS parser and cascade take any sheet")
 {
-    std::vector<std::string> seeds = SandboxSeeds(".css");
-    for (std::string& found : FoundSeeds("css"))
-        seeds.push_back(std::move(found));
-    seeds.push_back("");
-    seeds.push_back("@media (min-width: 10px) { button { color: red } } @keyframes k { 0% { opacity: 0 } }");
-    seeds.push_back("a { b: c; } } } { { ; ;; : : var(--x, var(--y, var(--z)))");
-    Run(seeds, kCssTokens, Count(kCssTokens), [](const std::string& text) { FuzzCss(text); });
+    core::Array<core::String> seeds = SandboxSeeds(u8".css");
+    for (core::String& found : FoundSeeds(u8"css"))
+        seeds.PushBack(core::Move(found));
+    seeds.PushBack(core::String(u8""));
+    seeds.PushBack(core::String(u8"@media (min-width: 10px) { button { color: red } } @keyframes k { 0% { opacity: 0 } }"));
+    seeds.PushBack(core::String(u8"a { b: c; } } } { { ; ;; : : var(--x, var(--y, var(--z)))"));
+    Run(seeds, kCssTokens, Count(kCssTokens), [](const core::String& text) { FuzzCss(text.AsView()); });
 }
 
 TEST_CASE("fuzz: the markup loader takes any markup")
 {
-    std::vector<std::string> seeds = SandboxSeeds(".xml");
-    for (std::string& found : FoundSeeds("markup"))
-        seeds.push_back(std::move(found));
-    seeds.push_back("");
-    seeds.push_back("<Panel><Panel><Panel><Button text=\"{{a.b}}\" style=\"color: red\"/></Panel></Panel></Panel>");
-    seeds.push_back("<unknown attr=\"\"><label text=\"&#x110000;\"/></unknown>");
-    Run(seeds, kMarkupTokens, Count(kMarkupTokens), [](const std::string& text) { FuzzMarkup(text); });
+    core::Array<core::String> seeds = SandboxSeeds(u8".xml");
+    for (core::String& found : FoundSeeds(u8"markup"))
+        seeds.PushBack(core::Move(found));
+    seeds.PushBack(core::String(u8""));
+    seeds.PushBack(core::String(u8"<Panel><Panel><Panel><Button text=\"{{a.b}}\" style=\"color: red\"/></Panel></Panel></Panel>"));
+    seeds.PushBack(core::String(u8"<unknown attr=\"\"><label text=\"&#x110000;\"/></unknown>"));
+    Run(seeds, kMarkupTokens, Count(kMarkupTokens), [](const core::String& text) { FuzzMarkup(text.AsView()); });
 }
 
 TEST_CASE("fuzz: the keymap takes any bindings")
 {
-    std::vector<std::string> seeds = FoundSeeds("keymap");
-    seeds.push_back(kKeymapSeed);
-    seeds.push_back("Ctrl+S|file.save|\nCtrl+K Ctrl+C|edit.comment|editing && !readonly\nPad.South|ui.activate|menu");
-    seeds.push_back("|||\n+\nCtrl+\n(((((\n");
-    Run(seeds, kKeymapTokens, Count(kKeymapTokens), [](const std::string& text) { (void)FuzzKeymap(text); });
+    core::Array<core::String> seeds = FoundSeeds(u8"keymap");
+    seeds.PushBack(core::String(kKeymapSeed));
+    seeds.PushBack(core::String(u8"Ctrl+S|file.save|\nCtrl+K Ctrl+C|edit.comment|editing && !readonly\nPad.South|ui.activate|menu"));
+    seeds.PushBack(core::String(u8"|||\n+\nCtrl+\n(((((\n"));
+    Run(seeds, kKeymapTokens, Count(kKeymapTokens), [](const core::String& text) { (void)FuzzKeymap(text.AsView()); });
 }
 
 // The seeds must get past the parsers: a target fed only input they refuse fuzzes nothing behind them.
@@ -105,44 +99,43 @@ TEST_CASE("fuzz: the seeds are what the parsers take: the CSS target's tree and 
     REQUIRE(tree.Get() != nullptr);
     CHECK(tree->ChildCount() == 7u);
 
-    const std::vector<std::string> pages = SandboxSeeds(".xml");
-    REQUIRE_FALSE(pages.empty());
-    for (const std::string& page : pages)
-        CHECK(loader.LoadFromString(View(page)).Get() != nullptr);
+    const core::Array<core::String> pages = SandboxSeeds(u8".xml");
+    REQUIRE_FALSE(pages.IsEmpty());
+    for (const core::String& page : pages)
+        CHECK(loader.LoadFromString(page.AsView()).Get() != nullptr);
 
     CHECK(FuzzKeymap(kKeymapSeed) == 3u);
 }
 
 TEST_CASE("fuzz: the string table reader takes any XML")
 {
-    std::vector<std::string> seeds;
+    core::Array<core::String> seeds;
     const core::String root = foundation::vfs::FindDataRoot();
-    seeds.push_back(ReadBytes(std::filesystem::path(std::string(reinterpret_cast<const char*>(root.CStr()))) /
-                              "Samples/UI/sandbox/i18n/sandbox.strings.xml"));
-    REQUIRE_FALSE(seeds[0].empty());
-    for (std::string& found : FoundSeeds("strings"))
-        seeds.push_back(std::move(found)); // cells-not-one-a-locale.xml: an entry short of the locales' cells
-    seeds.push_back("<?xml version=\"1.0\"?><a><b/></a>");
-    Run(seeds, kXmlTokens, Count(kXmlTokens), [](const std::string& text) { FuzzStringTable(text); });
+    seeds.PushBack(ReadBytes(core::PathJoin(root.AsView(), u8"Samples/UI/sandbox/i18n/sandbox.strings.xml").AsView()));
+    REQUIRE_FALSE(seeds[0].IsEmpty());
+    for (core::String& found : FoundSeeds(u8"strings"))
+        seeds.PushBack(core::Move(found)); // cells-not-one-a-locale.xml: an entry short of the locales' cells
+    seeds.PushBack(core::String(u8"<?xml version=\"1.0\"?><a><b/></a>"));
+    Run(seeds, kXmlTokens, Count(kXmlTokens), [](const core::String& text) { FuzzStringTable(text.AsView()); });
 }
 
 TEST_CASE("fuzz: a page takes any stream of input")
 {
     // Each sandbox page with its own sheet, under random input streams.
-    const std::vector<std::string> pages = SandboxSeeds(".xml");
-    const std::vector<std::string> sheets = SandboxSeeds(".css");
-    REQUIRE_FALSE(pages.empty());
-    const usize runs = std::max<usize>(1, Runs() / 8);
-    for (usize p = 0; p < pages.size(); ++p)
+    const core::Array<core::String> pages = SandboxSeeds(u8".xml");
+    const core::Array<core::String> sheets = SandboxSeeds(u8".css");
+    REQUIRE_FALSE(pages.IsEmpty());
+    const usize runs = core::Max<usize>(1, Runs() / 8);
+    for (usize p = 0; p < pages.Size(); ++p)
     {
-        const std::string& sheet = sheets.empty() ? std::string() : sheets[p % sheets.size()];
+        const core::StringView sheet = sheets.IsEmpty() ? core::StringView() : sheets[p % sheets.Size()].AsView();
         for (usize r = 0; r < runs; ++r)
         {
             Random random(0x1a7e0000ull + p * 7919ull + r);
-            std::string stream;
+            core::String stream;
             for (u32 n = 0; n < 2000; ++n)
-                stream.push_back(static_cast<char>(random.Below(256)));
-            FuzzInput(pages[p], sheet, stream);
+                stream.PushBack(static_cast<core::utf8char>(random.Below(256)));
+            FuzzInput(pages[p].AsView(), sheet, stream.AsView());
         }
     }
 }

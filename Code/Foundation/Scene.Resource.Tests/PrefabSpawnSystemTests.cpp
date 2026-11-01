@@ -6,7 +6,6 @@
 // the refusals, and nesting: a runtime spawn resolves the prefabs its template nests through
 // the same database, so those children arrive too.
 #include <doctest/doctest.h>
-#include <filesystem>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
@@ -48,7 +47,7 @@ namespace
     // Nest (a root that nests a Turret instance under it), Bare (no scene stream).
     struct PrefabDatabase
     {
-        std::filesystem::path dir = "scratch_scene_prefabspawn";
+        StringView dir = u8"scratch_scene_prefabspawn";
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<content::ContentDatabase> db;
         Guid turret;
@@ -57,9 +56,8 @@ namespace
 
         PrefabDatabase()
         {
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
-            std::filesystem::create_directories(dir, ec);
+            (void)RemoveDirectoryRecursive(dir);
+            (void)CreateDirectories(dir);
             mount = MakeUnique<foundation::vfs::NativeFileSystem>(
                 DefaultAllocator(), u8"scratch_scene_prefabspawn", DefaultAllocator());
             db = MakeUnique<content::ContentDatabase>(DefaultAllocator(), DefaultAllocator(), *mount,
@@ -75,8 +73,7 @@ namespace
         {
             db.Reset();
             mount.Reset();
-            std::error_code ec;
-            std::filesystem::remove_all(dir, ec);
+            (void)RemoveDirectoryRecursive(dir);
         }
 
         Guid Store(StringView name, const MemoryStream& payload)

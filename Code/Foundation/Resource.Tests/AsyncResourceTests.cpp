@@ -11,9 +11,6 @@
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
-#include <atomic>
-#include <chrono>
-#include <thread>
 
 import foundation.core;
 import foundation.vfs;
@@ -60,8 +57,8 @@ namespace
         {
             for (int i = 0; i < kMaxSlots; ++i)
             {
-                gates[i].store(true, std::memory_order_relaxed);      // open by default
-                decoded[i].store(false, std::memory_order_relaxed);
+                gates[i].store(true, MemoryOrder::Relaxed); // open by default
+                decoded[i].store(false, MemoryOrder::Relaxed);
             }
         }
 
@@ -75,7 +72,7 @@ namespace
         [[nodiscard]] RefPtr<Object> Create(ResourceManager& /*manager*/,
                                             foundation::content::Instance& instance) override
         {
-            createCalls.fetch_add(1, std::memory_order_relaxed);
+            createCalls.fetch_add(1, MemoryOrder::Relaxed);
             RefPtr<ISerializable> source = instance.ReadObject();
             AsyncSource* src = Cast<AsyncSource>(source.Get());
             if (src == nullptr)
@@ -94,20 +91,20 @@ namespace
         // force-initialized on the main thread.
         [[nodiscard]] RefPtr<Object> DecodeStage(foundation::content::Instance& instance) override
         {
-            decodeCalls.fetch_add(1, std::memory_order_relaxed);
+            decodeCalls.fetch_add(1, MemoryOrder::Relaxed);
             const Guid id = instance.Id();
             int slot = 0;
             if (const int* found = indexOf.Find(id))
             {
                 slot = *found;
             }
-            while (!gates[slot].load(std::memory_order_acquire))
+            while (!gates[slot].load(MemoryOrder::Acquire))
             {
-                std::this_thread::yield();
+                Thread::YieldThread();
             }
             if (failDecode)
             {
-                decoded[slot].store(true, std::memory_order_release);
+                decoded[slot].store(true, MemoryOrder::Release);
                 return RefPtr<Object>{};
             }
             i32 value = 0;
@@ -118,7 +115,7 @@ namespace
             RefPtr<DecodedBlob> blob = MakeRef<DecodedBlob>(DefaultAllocator());
             blob->value = value;
             blob->id = id;
-            decoded[slot].store(true, std::memory_order_release);
+            decoded[slot].store(true, MemoryOrder::Release);
             return blob;
         }
 
@@ -126,11 +123,11 @@ namespace
         [[nodiscard]] RefPtr<Object> FinalizeStage(ResourceManager& /*manager*/,
                                                    RefPtr<Object> decodedObject) override
         {
-            finalizeCalls.fetch_add(1, std::memory_order_relaxed);
-            finalizeThread.store(Thread::CurrentId(), std::memory_order_relaxed);
+            finalizeCalls.fetch_add(1, MemoryOrder::Relaxed);
+            finalizeThread.store(Thread::CurrentId(), MemoryOrder::Relaxed);
             if (finalizeSleepMs > 0)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(finalizeSleepMs));
+                SleepMilliseconds(static_cast<u32>(finalizeSleepMs));
             }
             DecodedBlob* blob = Cast<DecodedBlob>(decodedObject.Get());
             if (blob == nullptr)
@@ -143,12 +140,12 @@ namespace
             return product;
         }
 
-        std::atomic<bool> gates[kMaxSlots];
-        std::atomic<bool> decoded[kMaxSlots];
-        std::atomic<int> decodeCalls{0};
-        std::atomic<int> finalizeCalls{0};
-        std::atomic<int> createCalls{0};
-        std::atomic<u64> finalizeThread{0};
+        Atomic<bool> gates[kMaxSlots];
+        Atomic<bool> decoded[kMaxSlots];
+        Atomic<int> decodeCalls{0};
+        Atomic<int> finalizeCalls{0};
+        Atomic<int> createCalls{0};
+        Atomic<u64> finalizeThread{0};
         bool supportsAsync = true;
         bool failDecode = false;
         int finalizeSleepMs = 0;
@@ -199,7 +196,7 @@ TEST_CASE("resource.async: BindAsync is pending until Pump finalizes it on the m
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    factory.gates[0].store(false, std::memory_order_relaxed); // hold the decode closed
+    factory.gates[0].store(false, MemoryOrder::Relaxed); // hold the decode closed
     JobSystem jobs(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db, &jobs);
     manager.AddFactory(&factory);
@@ -211,7 +208,7 @@ TEST_CASE("resource.async: BindAsync is pending until Pump finalizes it on the m
     CHECK(product.Handle()->State() == ResourceState::Pending);
     CHECK(manager.PendingCount() == 1u);
 
-    factory.gates[0].store(true, std::memory_order_release); // release the decode
+    factory.gates[0].store(true, MemoryOrder::Release); // release the decode
     manager.WaitAll();
 
     REQUIRE(product.Get() != nullptr);
@@ -231,7 +228,7 @@ TEST_CASE("resource.async: concurrent BindAsync of one id shares a single decode
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    factory.gates[0].store(false, std::memory_order_relaxed);
+    factory.gates[0].store(false, MemoryOrder::Relaxed);
     JobSystem jobs(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db, &jobs);
     manager.AddFactory(&factory);
@@ -242,7 +239,7 @@ TEST_CASE("resource.async: concurrent BindAsync of one id shares a single decode
     CHECK(a.Handle() == b.Handle());
     CHECK(manager.PendingCount() == 1u);
 
-    factory.gates[0].store(true, std::memory_order_release);
+    factory.gates[0].store(true, MemoryOrder::Release);
     manager.WaitAll();
 
     CHECK(factory.decodeCalls.load() == 1);
@@ -522,7 +519,7 @@ TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
     AsyncFactory factory;
     for (int i = 0; i < 3; ++i)
     {
-        factory.gates[i].store(false, std::memory_order_relaxed); // hold all three decodes
+        factory.gates[i].store(false, MemoryOrder::Relaxed); // hold all three decodes
     }
     // Three decodes are held closed and must run concurrently (each spins on its gate until the
     // main thread opens it), so the pool needs at least three workers. A default JobSystem sizes
@@ -546,7 +543,7 @@ TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
     for (int step = 0; step < 3; ++step)
     {
         const int slot = releaseSlots[step];
-        factory.gates[slot].store(true, std::memory_order_release);
+        factory.gates[slot].store(true, MemoryOrder::Release);
         // Only this slot's gate is open, so only its decode can reach the completion queue. Pump
         // until it is actually finalized: waiting on the decoded[] flag alone would race the
         // manager's post-decode push into the queue (the flag is set inside DecodeStage, before
@@ -555,7 +552,7 @@ TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
         while (factory.finalizeOrder.Size() < target)
         {
             manager.Pump(1.0e9);
-            std::this_thread::yield();
+            Thread::YieldThread();
         }
     }
 
@@ -623,7 +620,7 @@ TEST_CASE("resource.async: Ref::Bind routes through BindAsync under an AsyncBind
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    factory.gates[0].store(false, std::memory_order_relaxed); // hold the decode
+    factory.gates[0].store(false, MemoryOrder::Relaxed); // hold the decode
     JobSystem jobs(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db, &jobs);
     manager.AddFactory(&factory);
@@ -640,7 +637,7 @@ TEST_CASE("resource.async: Ref::Bind routes through BindAsync under an AsyncBind
     CHECK(manager.PendingCount() == 1u);       // routed to BindAsync: pending, not built yet
     CHECK(ref.Get() == nullptr);               // proxy is null while pending
 
-    factory.gates[0].store(true, std::memory_order_release);
+    factory.gates[0].store(true, MemoryOrder::Release);
     manager.WaitAll();
 
     CHECK(manager.PendingCount() == 0u);
@@ -663,7 +660,7 @@ TEST_CASE("resource.async: AsyncLoadBatch reports progress as loads finalize")
     AsyncFactory factory;
     for (int i = 0; i < 3; ++i)
     {
-        factory.gates[i].store(false, std::memory_order_relaxed); // hold all decodes
+        factory.gates[i].store(false, MemoryOrder::Relaxed); // hold all decodes
     }
     // Three concurrent gated decodes: pin the pool to three workers so it does not deadlock on a
     // low-core host (a default JobSystem is (cores - 1), i.e. 1 on a 2-core CI runner). See the
@@ -688,7 +685,7 @@ TEST_CASE("resource.async: AsyncLoadBatch reports progress as loads finalize")
 
     for (int i = 0; i < 3; ++i)
     {
-        factory.gates[i].store(true, std::memory_order_release);
+        factory.gates[i].store(true, MemoryOrder::Release);
     }
     batch.WaitComplete();
 
@@ -761,7 +758,7 @@ TEST_CASE("resource.async: a settling child RELOADS its dependents (the material
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    factory.gates[0].store(false, std::memory_order_relaxed); // child decode held closed
+    factory.gates[0].store(false, MemoryOrder::Relaxed); // child decode held closed
     JobSystem jobs(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db, &jobs);
     manager.AddFactory(&factory);
@@ -779,7 +776,7 @@ TEST_CASE("resource.async: a settling child RELOADS its dependents (the material
     REQUIRE(parent);
     CHECK(parent->childValue == -1); // child was pending: slot skipped, quietly
 
-    factory.gates[0].store(true, std::memory_order_release); // let the child decode finish
+    factory.gates[0].store(true, MemoryOrder::Release); // let the child decode finish
     manager.WaitAll();
 
     // The child's settle reloaded the parent through the recorded dependency edge: the same
@@ -798,8 +795,8 @@ TEST_CASE("resource.async: a settle-reload does NOT block-complete the dependent
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    factory.gates[0].store(false, std::memory_order_relaxed); // both children held closed
-    factory.gates[1].store(false, std::memory_order_relaxed);
+    factory.gates[0].store(false, MemoryOrder::Relaxed); // both children held closed
+    factory.gates[1].store(false, MemoryOrder::Relaxed);
     JobSystem jobs(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db, &jobs);
     manager.AddFactory(&factory);
@@ -823,15 +820,15 @@ TEST_CASE("resource.async: a settle-reload does NOT block-complete the dependent
     // The second child's decode opens only after a delay. If the first settle's reload of the
     // parent sync-bound it (waiting for the gate and finalizing inline), it would already be Ready
     // below; the settle-reload must leave it Pending instead.
-    std::thread opener([&factory]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        factory.gates[1].store(true, std::memory_order_release);
+    Thread opener([&factory]() {
+        SleepMilliseconds(1000);
+        factory.gates[1].store(true, MemoryOrder::Release);
     });
-    factory.gates[0].store(true, std::memory_order_release);
+    factory.gates[0].store(true, MemoryOrder::Release);
     for (int i = 0; i < 100000 && factory.finalizeCalls.load() < 1; ++i)
     {
         manager.Pump(1.0);
-        std::this_thread::yield();
+        Thread::YieldThread();
     }
     REQUIRE(parent);
     CHECK(parent->childValue == 7);        // reloaded through the edge
@@ -840,7 +837,7 @@ TEST_CASE("resource.async: a settle-reload does NOT block-complete the dependent
     CHECK(factory.finalizeCalls.load() == 1);
     CHECK_FALSE(manager.AsyncBindsEnabled()); // the reload restored the caller's mode
 
-    opener.join();
+    opener.Join();
     manager.WaitAll();
     REQUIRE(parent);
     CHECK(parent->childValue == 7);
@@ -869,7 +866,7 @@ TEST_CASE("resource.async: a sync Bind of a pending id finalizes THAT id only; t
     // Let every decode finish on the workers without pumping: three completed entries queued.
     while (!factory.decoded[0].load() || !factory.decoded[1].load() || !factory.decoded[2].load())
     {
-        std::this_thread::yield();
+        Thread::YieldThread();
     }
     CHECK(factory.finalizeCalls.load() == 0);
 

@@ -77,10 +77,7 @@ export namespace editor::app
             : m_allocator(allocator), m_services(Move(services)), m_content(Move(content)), m_pictures(allocator), m_probes(allocator),
               m_shown(allocator), m_rows(allocator), m_samplePictures(allocator), m_downloads(allocator), m_sampleCards(allocator)
         {
-            if (const Optional<String> home = GetEnvironmentVariable(u8"HOME"); home.HasValue() && !home.Value().IsEmpty())
-                m_home = home.Value();
-            else if (const Optional<String> profile = GetEnvironmentVariable(u8"USERPROFILE"); profile.HasValue())
-                m_home = profile.Value();
+            m_home = GetHomeDirectory();
             if (!m_content)
                 return;
             ProjectManagerView* self = this;

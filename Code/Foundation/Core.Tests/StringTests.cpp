@@ -26,6 +26,26 @@ TEST_CASE("string: StringView basics")
     static_assert(CStringLength(u8"abc") == 3u);
 }
 
+TEST_CASE("string: StringView Find, FindLast and Contains")
+{
+    const StringView v = u8"<a x=\"1\"/><b/>";
+    CHECK(v.Find(u8"/>") == 8u);
+    CHECK(v.Find(u8"/>", 9) == 12u);
+    CHECK(v.Find(u8"<c") == StringView::kNotFound);
+    CHECK(v.Find(u8"", 3) == 3u);                          // an empty needle is found where asked
+    CHECK(v.Find(u8"/>", 100) == StringView::kNotFound);   // past the end
+    CHECK(v.Find(u8'<') == 0u);
+    CHECK(v.Find(u8'<', 1) == 10u);
+    CHECK(v.Find(u8'z') == StringView::kNotFound);
+    CHECK(v.FindLast(u8'<') == 10u);
+    CHECK(v.FindLast(u8'<', 9) == 0u);                     // at or before
+    CHECK(v.FindLast(u8'<', 10) == 10u);
+    CHECK(v.FindLast(u8'z') == StringView::kNotFound);
+    CHECK(StringView().FindLast(u8'<') == StringView::kNotFound);
+    CHECK(v.Contains(u8"x=\"1\""));
+    CHECK_FALSE(v.Contains(u8"x=\"2\""));
+}
+
 TEST_CASE("string: construct, append, compare")
 {
     String s = u8"foo";

@@ -143,6 +143,58 @@ export namespace foundation::core
             return false;
         }
 
+        /// What Find returns when there is no match.
+        static constexpr usize kNotFound = static_cast<usize>(-1);
+        /// Where `needle` first occurs at or after `from`, exactly (no case folding); kNotFound
+        /// when it does not. An empty needle is found at `from` (when `from` is within the view).
+        [[nodiscard]] constexpr usize Find(BasicStringView needle, usize from = 0) const noexcept
+        {
+            if (from > m_size || needle.m_size > m_size - from)
+            {
+                return kNotFound;
+            }
+            for (usize start = from; start + needle.m_size <= m_size; ++start)
+            {
+                usize i = 0;
+                while (i < needle.m_size && m_data[start + i] == needle.m_data[i])
+                {
+                    ++i;
+                }
+                if (i == needle.m_size)
+                {
+                    return start;
+                }
+            }
+            return kNotFound;
+        }
+        /// Where `c` first occurs at or after `from`; kNotFound when it does not.
+        [[nodiscard]] constexpr usize Find(CharT c, usize from = 0) const noexcept
+        {
+            for (usize i = from; i < m_size; ++i)
+            {
+                if (m_data[i] == c)
+                {
+                    return i;
+                }
+            }
+            return kNotFound;
+        }
+        /// Where `c` last occurs at or before `at` (the whole view by default); kNotFound when it
+        /// does not.
+        [[nodiscard]] constexpr usize FindLast(CharT c, usize at = kNotFound) const noexcept
+        {
+            for (usize i = (at < m_size ? at + 1 : m_size); i > 0; --i)
+            {
+                if (m_data[i - 1] == c)
+                {
+                    return i - 1;
+                }
+            }
+            return kNotFound;
+        }
+        /// Whether `needle` occurs in this view, exactly.
+        [[nodiscard]] constexpr bool Contains(BasicStringView needle) const noexcept { return Find(needle) != kNotFound; }
+
         /// Byte-lexical order (code units, so UTF-8 orders by code point): negative when
         /// this sorts before `other`, zero when equal, positive after. A shorter prefix
         /// sorts first. The comparison a stable, locale-free listing sorts by.

@@ -19,6 +19,7 @@ import :span;
 import :string;
 import :system;
 import :io;
+import :path; // PathJoin (CopyDirectoryRecursive)
 
 export namespace foundation::core
 {
@@ -90,6 +91,44 @@ export namespace foundation::core
             return Status{ErrorCode::Internal};
         }
         return Status{};
+    }
+
+    // Copies the folder `from` and everything under it into `to` (made as needed), each file with
+    // FileCopyPreserving, so what is there already is overwritten and executables keep their +x
+    // bit. Composes the portable primitives, as RemoveDirectoryRecursive does. False at the first
+    // failure (what was copied before it stays), or when `from` is no folder.
+    inline bool CopyDirectoryRecursive(StringView from, StringView to) // NOLINT(misc-no-recursion)
+    {
+        if (!DirectoryExists(from) || !CreateDirectories(to))
+        {
+            return false;
+        }
+        struct Entry
+        {
+            String name;
+            bool isDirectory;
+        };
+        Array<Entry> entries;
+        if (!ListDirectory(
+                from,
+                [](void* ctx, StringView name, bool isDirectory)
+                { static_cast<Array<Entry>*>(ctx)->PushBack(Entry{String(name), isDirectory}); },
+                &entries))
+        {
+            return false;
+        }
+        for (const Entry& entry : entries)
+        {
+            const String source = PathJoin(from, entry.name.AsView());
+            const String target = PathJoin(to, entry.name.AsView());
+            const bool copied = entry.isDirectory ? CopyDirectoryRecursive(source.AsView(), target.AsView())
+                                                  : FileCopyPreserving(source.AsView(), target.AsView());
+            if (!copied)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Removes a directory and everything under it. `RemoveDirectory` is the raw backend

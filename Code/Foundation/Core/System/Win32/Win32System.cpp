@@ -94,6 +94,13 @@ namespace foundation::core::sys
 
     void PersistUserData() noexcept {} // files are durable once written
 
+    std::size_t GetTempDirectory(char* out, std::size_t outSize) noexcept
+    {
+        // The user's temp folder, as GetTempPath resolves it: %TEMP%, else %TMP%.
+        const std::size_t n = GetEnvironmentVariable("TEMP", out, outSize);
+        return n != 0 ? n : GetEnvironmentVariable("TMP", out, outSize);
+    }
+
     std::size_t GetUserDataDirectory(char* out, std::size_t outSize) noexcept
     {
         // Per-user, machine-local app data (roaming-free): %LOCALAPPDATA%.

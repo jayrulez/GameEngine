@@ -99,6 +99,13 @@ namespace foundation::core::sys
         return length;
     }
 
+    std::size_t GetTempDirectory(char* out, std::size_t outSize) noexcept
+    {
+        const char* tmp = std::getenv("TMPDIR");
+        const int n = std::snprintf(out, outSize, "%s", tmp != nullptr && tmp[0] != '\0' ? tmp : "/tmp");
+        return (n > 0) ? static_cast<std::size_t>(n) : 0;
+    }
+
     std::size_t GetUserDataDirectory(char* out, std::size_t outSize) noexcept
     {
         // XDG spec: $XDG_DATA_HOME, else ~/.local/share. snprintf returns the length it would write

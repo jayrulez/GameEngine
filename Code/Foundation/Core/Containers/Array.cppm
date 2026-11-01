@@ -327,21 +327,52 @@ export namespace foundation::core
             return m_data[index];
         }
 
-        // Stable in-place sort by `less(a, b)` (returns true if a should come before b). Insertion
-        // sort, fine for the small collections this is used on (focus lists, tracks, ...).
+        // Stable sort by `less(a, b)` (true when a goes before b), O(n log n): runs of kSortRun
+        // sorted in place by insertion, then merged pairwise through a buffer from this array's
+        // allocator. A collection no longer than one run (focus lists, tracks) sorts in place with
+        // no buffer at all. Equal elements keep their order.
         template <typename Compare>
         void Sort(Compare less)
         {
-            for (usize i = 1; i < m_size; ++i)
+            if (m_size <= kSortRun)
             {
-                T key = Move(m_data[i]);
-                usize j = i;
-                while (j > 0 && less(key, m_data[j - 1]))
+                InsertionSort(0, m_size, less);
+                return;
+            }
+            Array<T> merged(*m_allocator);
+            Sort(less, merged);
+        }
+
+        // The same sort, merging through `merged`, which the caller keeps between calls: a sort
+        // run every frame (particles back to front) then allocates only while the buffer grows.
+        // What `merged` holds on return is left over from the merge and means nothing.
+        template <typename Compare>
+        void Sort(Compare less, Array<T>& merged)
+        {
+            for (usize start = 0; start < m_size; start += kSortRun)
+                InsertionSort(start, (m_size - start < kSortRun) ? m_size : start + kSortRun, less);
+            if (m_size <= kSortRun)
+                return;
+            merged.Reserve(m_size);
+            for (usize width = kSortRun; width < m_size; width *= 2)
+            {
+                merged.Clear();
+                for (usize left = 0; left < m_size; left += 2 * width)
                 {
-                    m_data[j] = Move(m_data[j - 1]);
-                    --j;
+                    const usize mid = (m_size - left < width) ? m_size : left + width;
+                    const usize right = (m_size - left < 2 * width) ? m_size : left + 2 * width;
+                    usize i = left;
+                    usize j = mid;
+                    // The left run's element goes first unless the right's is strictly less: stable.
+                    while (i < mid && j < right)
+                        merged.PushBack(less(m_data[j], m_data[i]) ? Move(m_data[j++]) : Move(m_data[i++]));
+                    while (i < mid)
+                        merged.PushBack(Move(m_data[i++]));
+                    while (j < right)
+                        merged.PushBack(Move(m_data[j++]));
                 }
-                m_data[j] = Move(key);
+                for (usize k = 0; k < m_size; ++k)
+                    m_data[k] = Move(merged[k]);
             }
         }
 
@@ -358,6 +389,23 @@ export namespace foundation::core
         [[nodiscard]] const T* end() const noexcept { return m_data + m_size; }
 
     private:
+        static constexpr usize kSortRun = 32;
+        // Sorts [begin, end) in place by insertion: stable, and quick for a short run.
+        template <typename Compare>
+        void InsertionSort(usize begin, usize end, Compare& less)
+        {
+            for (usize i = begin + 1; i < end; ++i)
+            {
+                T key = Move(m_data[i]);
+                usize j = i;
+                while (j > begin && less(key, m_data[j - 1]))
+                {
+                    m_data[j] = Move(m_data[j - 1]);
+                    --j;
+                }
+                m_data[j] = Move(key);
+            }
+        }
         void EnsureCapacityForOne()
         {
             if (m_size == m_capacity)

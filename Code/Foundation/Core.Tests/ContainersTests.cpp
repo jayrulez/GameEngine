@@ -109,6 +109,69 @@ TEST_CASE("containers: Array insert")
     CHECK(a[3] == 4);
 }
 
+// Past one insertion run the sort merges: check order and stability at sizes around the run and
+// merge-width boundaries, with many equal keys.
+TEST_CASE("containers: Array sort orders and keeps equal keys in order at merge sizes")
+{
+    const usize sizes[] = {31, 32, 33, 64, 65, 100, 1000, 4097};
+    for (usize n : sizes)
+    {
+        Array<u32> values; // key * 10000 + its original position
+        u32 seed = 12345u;
+        for (usize i = 0; i < n; ++i)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            values.PushBack((seed >> 16) % 17u * 10000u + static_cast<u32>(i));
+        }
+        values.Sort([](u32 a, u32 b) { return a / 10000u < b / 10000u; }); // by key only
+        bool sortedAndStable = true;
+        for (usize i = 1; i < n; ++i)
+        {
+            const u32 prevKey = values[i - 1] / 10000u;
+            const u32 key = values[i] / 10000u;
+            if (prevKey > key || (prevKey == key && values[i - 1] % 10000u > values[i] % 10000u))
+                sortedAndStable = false;
+        }
+        CHECK(values.Size() == n);
+        CHECK(sortedAndStable);
+    }
+}
+
+TEST_CASE("containers: Array sort through a kept buffer allocates only while the buffer grows")
+{
+    TrackingAllocator tracking(DefaultAllocator());
+    Array<i32> values(tracking);
+    Array<i32> merged(tracking);
+    const auto fill = [&values](u32 seed)
+    {
+        values.Clear();
+        for (i32 i = 0; i < 500; ++i)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            values.PushBack(static_cast<i32>(seed >> 20));
+        }
+    };
+    const auto ordered = [&values]()
+    {
+        for (usize i = 1; i < values.Size(); ++i)
+            if (values[i] < values[i - 1])
+                return false;
+        return true;
+    };
+    fill(7u);
+    values.Sort([](i32 a, i32 b) { return a < b; }, merged);
+    CHECK(ordered());
+    const usize capacity = merged.Capacity();
+    CHECK(capacity >= values.Size());
+    // A second sort of the same size reuses the buffer: nothing is allocated.
+    fill(99u);
+    const u64 before = tracking.TotalAllocations();
+    values.Sort([](i32 a, i32 b) { return a < b; }, merged);
+    CHECK(ordered());
+    CHECK(tracking.TotalAllocations() == before);
+    CHECK(merged.Capacity() == capacity);
+}
+
 TEST_CASE("containers: Array sort")
 {
     Array<int> a;

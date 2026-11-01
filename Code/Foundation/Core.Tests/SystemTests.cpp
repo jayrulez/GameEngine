@@ -205,6 +205,52 @@ TEST_CASE("system: GetCurrentDirectory returns a non-empty absolute path")
     CHECK(PathIsAbsolute(cwd.AsView()));
 }
 
+TEST_CASE("system: PathAbsolute keeps an absolute path and puts a relative one under the working directory")
+{
+    const String cwd = GetCurrentDirectory();
+    CHECK(PathAbsolute(cwd.AsView()) == cwd);
+    const String made = PathAbsolute(u8"scratch_sys_abs/leaf.txt");
+    CHECK(PathIsAbsolute(made.AsView()));
+    CHECK(made == PathJoin(cwd.AsView(), u8"scratch_sys_abs/leaf.txt"));
+}
+
+TEST_CASE("system: GetTempDirectory names a folder that exists")
+{
+    const String temp = GetTempDirectory();
+    REQUIRE_FALSE(temp.IsEmpty());
+    CHECK(PathIsAbsolute(temp.AsView()));
+    CHECK(DirectoryExists(temp.AsView()));
+}
+
+TEST_CASE("system: CopyDirectoryRecursive copies a tree and overwrites what is there")
+{
+    const StringView from = u8"scratch_sys_copytree_from";
+    const StringView to = u8"scratch_sys_copytree_to";
+    (void)RemoveDirectoryRecursive(from);
+    (void)RemoveDirectoryRecursive(to);
+    const auto write = [](StringView path, StringView text)
+    { return WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())); };
+    REQUIRE(CreateDirectories(u8"scratch_sys_copytree_from/a/b"));
+    REQUIRE(CreateDirectories(u8"scratch_sys_copytree_from/empty"));
+    REQUIRE(write(u8"scratch_sys_copytree_from/top.txt", u8"top").IsOk());
+    REQUIRE(write(u8"scratch_sys_copytree_from/a/b/deep.txt", u8"deep").IsOk());
+    REQUIRE(CreateDirectories(to));
+    REQUIRE(write(u8"scratch_sys_copytree_to/top.txt", u8"stale and longer").IsOk());
+
+    CHECK(CopyDirectoryRecursive(from, to));
+    Result<Array<byte>> top = ReadFile(u8"scratch_sys_copytree_to/top.txt");
+    REQUIRE(top.HasValue());
+    CHECK(StringView(reinterpret_cast<const utf8char*>(top.Value().Data()), top.Value().Size()) == StringView(u8"top"));
+    Result<Array<byte>> deep = ReadFile(u8"scratch_sys_copytree_to/a/b/deep.txt");
+    REQUIRE(deep.HasValue());
+    CHECK(StringView(reinterpret_cast<const utf8char*>(deep.Value().Data()), deep.Value().Size()) == StringView(u8"deep"));
+    CHECK(DirectoryExists(u8"scratch_sys_copytree_to/empty")); // an empty folder is copied too
+
+    CHECK_FALSE(CopyDirectoryRecursive(u8"scratch_sys_copytree_missing", to)); // no source folder
+    (void)RemoveDirectoryRecursive(from);
+    (void)RemoveDirectoryRecursive(to);
+}
+
 TEST_CASE("system: CreateDirectories makes every missing segment")
 {
     const StringView root = u8"scratch_sys_mkdirs";

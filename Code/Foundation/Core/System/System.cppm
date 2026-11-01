@@ -362,6 +362,17 @@ export namespace foundation::core
         return PathJoin(StringView(reinterpret_cast<const utf8char*>(buffer), length), appName);
     }
 
+    // The system's folder for temporary files ($TMPDIR or /tmp, %TEMP% or %TMP%); empty when it
+    // cannot be resolved.
+    [[nodiscard]] inline String GetTempDirectory()
+    {
+        char buffer[1024];
+        const usize length = sys::GetTempDirectory(buffer, sizeof(buffer));
+        if (length == 0 || length >= sizeof(buffer))
+            return String();
+        return String(StringView(reinterpret_cast<const utf8char*>(buffer), length));
+    }
+
     // What is written under the user data directory is durable at once on a desktop. In a browser
     // it is in memory until pushed to the page's storage (IndexedDB, mounted over the directory by
     // the web player before the game starts): call this after writing a file there that must
@@ -431,6 +442,18 @@ export namespace foundation::core
         }
         const usize got = (length < sizeof(buffer)) ? length : sizeof(buffer) - 1;
         return String(StringView(reinterpret_cast<const utf8char*>(buffer), got));
+    }
+
+    // `path` made absolute: as it is when it already is, else under the working directory. Like
+    // std::filesystem::absolute, it does not resolve "." or "..", follow links or check that the
+    // path exists.
+    [[nodiscard]] inline String PathAbsolute(StringView path)
+    {
+        if (PathIsAbsolute(path))
+        {
+            return String(path);
+        }
+        return PathJoin(GetCurrentDirectory().AsView(), path);
     }
 
     // Directory containing the running executable (its parent), empty on failure. This is the

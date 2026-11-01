@@ -54,6 +54,9 @@ namespace foundation::core::sys
     // return contract as GetEnvironmentVariable; 0 when it cannot be resolved. The :system module
     // wrapper appends the application name.
     std::size_t GetUserDataDirectory(char* out, std::size_t outSize) noexcept;
+    // The system's folder for temporary files: $TMPDIR, else /tmp (Linux, the web), %TEMP%, else
+    // %TMP% (Windows). Same truncation / return contract as GetEnvironmentVariable.
+    std::size_t GetTempDirectory(char* out, std::size_t outSize) noexcept;
     // Make what was written under the user data directory durable where that takes a step of its
     // own (the web: push it to the browser's storage); a no-op where files already are.
     void PersistUserData() noexcept;

@@ -88,6 +88,8 @@ export namespace foundation::core
         }
 
         [[nodiscard]] static u64 CurrentId() noexcept { return sys::CurrentThreadId(); }
+        // Gives the rest of this thread's time slice to another ready thread (a spin wait's pause).
+        static void YieldThread() noexcept { sys::ThreadYield(); }
 
     private:
         template <typename Fn>

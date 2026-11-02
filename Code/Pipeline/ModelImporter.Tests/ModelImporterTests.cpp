@@ -2745,3 +2745,24 @@ TEST_CASE("model importer: a part's facts come from the importer's read of the f
     // Without the read there is nothing to say, rather than a second read of the file.
     CHECK(importer.DescribePart(MiFoxNested().AsView(), options.Get(), nullptr, *mesh).IsEmpty());
 }
+
+TEST_CASE("model cook: told to stop, it returns Cancelled and makes no model; untold, it cooks")
+{
+    ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(MiFoxNested().AsView(), DefaultAllocator());
+    auto* loaded = Cast<LoadedModel>(prepared.Get());
+    REQUIRE(loaded != nullptr);
+
+    (void)RemoveDirectoryRecursive(u8"scratch_modelimporter_cook_cancel");
+    vfs::NativeFileSystem mount(u8"scratch_modelimporter_cook_cancel", DefaultAllocator());
+    content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+    CancelSource cancel(DefaultAllocator());
+    cancel.Cancel();
+    Guid guid;
+    CHECK(pipeline::CookModel(loaded->model, db, u8"Fox", guid, cancel.Token()).Code() == ErrorCode::Cancelled);
+    CHECK(guid.IsNil()); // no manifest: nothing to bind
+
+    REQUIRE(pipeline::CookModel(loaded->model, db, u8"Fox", guid).IsOk());
+    CHECK_FALSE(guid.IsNil());
+    (void)RemoveDirectoryRecursive(u8"scratch_modelimporter_cook_cancel");
+}

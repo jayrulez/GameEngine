@@ -59,15 +59,18 @@ export namespace pipeline
     // Cook the model's textures into outDb. The model loaders decode every texture into raw
     // RGBA8 pixels (storeImageData) for external files, data URIs and embedded GLB buffer views
     // alike, so we cook directly from ModelTexture's pixel bytes: no file re-read, and embedded
-    // textures work. Returns one Guid per model texture (nil if it has no usable RGBA8 data).
+    // textures work. Returns one Guid per model texture (nil if it has no usable RGBA8 data); stops
+    // short once `cancel` is cancelled (the caller checks it).
     inline void CookTextures(const model::Model& model, content::Group* root,
-                             StringView namePrefix, Array<Guid>& outGuids)
+                             StringView namePrefix, Array<Guid>& outGuids, const CancelToken& cancel = {})
     {
         Array<bool> linear;
         ClassifyLinearTextures(model, linear);
         const Span<model::ModelTexture* const> textures = model.textures();
         for (usize i = 0; i < textures.Size(); ++i)
         {
+            if (cancel.IsCancelled())
+                return;
             const model::ModelTexture& t = *textures[i];
             const u8* data = t.getData();
             i32 size = t.getDataSize();
@@ -295,9 +298,14 @@ export namespace pipeline
     // Cook a model into outDb (textures, materials, skeleton, clips, meshes, manifest). `namePrefix`
     // namespaces the created instances. On success `outModelGuid` is the manifest
     // (ModelResource) Guid to Bind at runtime.
+    //
+    // It only reads `model`, so a worker may cook a model the main thread reads too (the import
+    // window's preview cooks the model the importer read). `cancel` is checked between textures,
+    // clips and meshes: once cancelled it returns ErrorCode::Cancelled, what it made so far left in
+    // outDb for its owner to discard.
     [[nodiscard]] inline Status CookModel(const model::Model& model,
                                           content::ContentDatabase& outDb, StringView namePrefix,
-                                          Guid& outModelGuid)
+                                          Guid& outModelGuid, const CancelToken& cancel = {})
     {
         content::Group* root = outDb.RootGroup();
         if (root == nullptr)
@@ -305,13 +313,28 @@ export namespace pipeline
             return Status{ErrorCode::Unknown};
         }
 
+        // The model-space box from the meshes' own (the loaders work each out), worked out here
+        // rather than written into the model, which another thread may be reading.
         ModelManifestSource manifest;
-        const_cast<model::Model&>(model).calculateBounds(); // ensure model-space AABB is populated
-        manifest.boundsMin = model.bounds().min;
-        manifest.boundsMax = model.bounds().max;
+        {
+            AABB box{};
+            bool any = false;
+            for (const model::ModelMesh* mesh : model.meshes())
+            {
+                if (mesh == nullptr)
+                    continue;
+                const AABB meshBox = mesh->bounds();
+                box = any ? AABB{Min(box.min, meshBox.min), Max(box.max, meshBox.max)} : meshBox;
+                any = true;
+            }
+            manifest.boundsMin = box.min;
+            manifest.boundsMax = box.max;
+        }
 
         Array<Guid> textureGuids;
-        CookTextures(model, root, namePrefix, textureGuids);
+        CookTextures(model, root, namePrefix, textureGuids, cancel);
+        if (cancel.IsCancelled())
+            return Status{ErrorCode::Cancelled};
         CookMaterials(outDb.Allocator(), model, root, namePrefix, textureGuids, manifest.materialGuids,
                       manifest.materialAlbedo);
 
@@ -348,6 +371,8 @@ export namespace pipeline
             const Span<model::ModelAnimation* const> animations = model.animations();
             for (usize a = 0; a < animations.Size(); ++a)
             {
+                if (cancel.IsCancelled())
+                    return Status{ErrorCode::Cancelled};
                 pipeline::AnimationClipAsset clipAsset;
                 AnimationClipSourceFromModel(
                     *animations[a], boneToJoint,
@@ -378,6 +403,8 @@ export namespace pipeline
         const Span<model::ModelMesh* const> meshes = model.meshes();
         for (usize i = 0; i < meshes.Size(); ++i)
         {
+            if (cancel.IsCancelled())
+                return Status{ErrorCode::Cancelled};
             const model::ModelMesh& m = *meshes[i];
             const bool skinned = IsSkinnedMesh(m) && hasSkin;
             const String name = root->UniqueInstanceName(

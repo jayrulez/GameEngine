@@ -443,6 +443,35 @@ export namespace foundation::materials
             m_effectGroups = Move(kept);
         }
 
+        /// A copy of this material, with its own uid: its shader, pipeline state, properties, values,
+        /// effect groups, textures and samplers. For a caller that draws a variant without touching
+        /// the shared material (the import preview drawing it without a texture the import leaves out).
+        [[nodiscard]] RefPtr<Material> Clone(IAllocator& allocator) const
+        {
+            RefPtr<Material> copy = MakeRef<Material>(allocator);
+            copy->samplerU = samplerU;
+            copy->samplerV = samplerV;
+            copy->name = name;
+            copy->shaderName = shaderName;
+            copy->depthShaderName = depthShaderName;
+            copy->pickShaderName = pickShaderName;
+            copy->shaderFlags = shaderFlags;
+            copy->pipeline = pipeline;
+            for (const MaterialPropertyDef& property : m_properties)
+                copy->AddProperty(property); // its own copy of the name
+            copy->AllocateDefaultUniformData();
+            copy->SetRawDefaultUniformData(DefaultUniformData());
+            for (const MaterialEffectGroup& group : m_effectGroups)
+                copy->SetEffectGroup(group.name, group.flag, group.gateIndex, group.uniformSize,
+                                     Span<const MaterialPropertyDef>{group.properties.Data(), group.properties.Size()},
+                                     Span<const u8>{group.defaults.Data(), group.defaults.Size()});
+            for (const auto& [index, texture] : m_defaultTextures)
+                copy->m_defaultTextures.InsertOrAssign(index, texture);
+            for (const auto& [index, sampler] : m_defaultSamplers)
+                copy->m_defaultSamplers.InsertOrAssign(index, sampler);
+            return copy;
+        }
+
         void ClearEffectGroups() { m_effectGroups.Clear(); }
 
     private:

@@ -516,3 +516,42 @@ TEST_CASE("material system: an effect group takes binding 1 of the material's se
     device.DestroyBuffer(windBuffer);
 }
 
+
+TEST_CASE("material clone: a copy with its own uid and everything else the same; changing the copy leaves the original")
+{
+    RefPtr<Material> mat = MaterialBuilder(u8"pbr")
+                               .Shader(u8"forward")
+                               .Flags(shaders::ShaderFlags::NormalMap)
+                               .Color(u8"baseColor", Float4{1, 0, 0, 1})
+                               .Float(u8"roughness", 0.5f)
+                               .Texture(u8"albedoMap")
+                               .Texture(u8"normalMap")
+                               .Build();
+    REQUIRE(mat);
+    auto* albedo = reinterpret_cast<rhi::TextureView*>(static_cast<usize>(0x1000)); // a stand-in, never used as one
+    mat->SetDefaultTexture(u8"albedoMap", albedo);
+    mat->samplerU = rhi::AddressMode::ClampToEdge;
+
+    RefPtr<Material> copy = mat->Clone(DefaultAllocator());
+    REQUIRE(copy);
+    CHECK(copy->uid != mat->uid);
+    CHECK(copy->shaderName == mat->shaderName);
+    CHECK(copy->shaderFlags == mat->shaderFlags);
+    CHECK(copy->samplerU == rhi::AddressMode::ClampToEdge);
+    CHECK(copy->PropertyCount() == mat->PropertyCount());
+    CHECK(copy->UniformDataSize() == mat->UniformDataSize());
+    CHECK(copy->GetPropertyIndex(u8"roughness") == mat->GetPropertyIndex(u8"roughness"));
+    const f32* base = reinterpret_cast<const f32*>(copy->DefaultUniformData().Data());
+    CHECK(base[0] == doctest::Approx(1.0f));
+    const isize albedoIndex = copy->GetPropertyIndex(u8"albedoMap");
+    REQUIRE(albedoIndex >= 0);
+    CHECK(copy->GetDefaultTexture(static_cast<usize>(albedoIndex)) == albedo);
+
+    // The copy drawn without its texture: the original keeps it.
+    copy->SetDefaultTexture(u8"albedoMap", nullptr);
+    copy->SetDefaultFloat(u8"roughness", 0.9f);
+    CHECK(copy->GetDefaultTexture(static_cast<usize>(albedoIndex)) == nullptr);
+    CHECK(mat->GetDefaultTexture(static_cast<usize>(mat->GetPropertyIndex(u8"albedoMap"))) == albedo);
+    const f32* rough = reinterpret_cast<const f32*>(mat->DefaultUniformData().Data() + mat->FindProperty(u8"roughness")->offset);
+    CHECK(*rough == doctest::Approx(0.5f));
+}

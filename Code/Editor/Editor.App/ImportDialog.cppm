@@ -241,6 +241,34 @@ export namespace editor::app
             Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
         }
 
+        /// Gives the other parts of part `e`'s kind in file `index` its own settings (the "Apply to all"
+        /// in a part's details); returns how many it gave them to.
+        usize SharePartSettings(usize index, usize e)
+        {
+            if (!m_session || index >= m_session->files.Size() || e >= m_session->files[index].plan.entries.Size())
+                return 0;
+            AssetImport::File& file = m_session->files[index];
+            const pipeline::ImportPlanEntry& from = file.plan.entries[e];
+            const pipeline::IFileImporter* importer = file.Importer();
+            if (!from.settings || importer == nullptr)
+                return 0;
+            usize given = 0;
+            for (usize i = 0; i < file.plan.entries.Size(); ++i)
+            {
+                pipeline::ImportPlanEntry& to = file.plan.entries[i];
+                if (i == e || to.kind != from.kind)
+                    continue;
+                if (!to.settings)
+                    to.settings = importer->PartSettings(file.path.AsView(), file.options.Get(), to, m_session->group, m_allocator);
+                if (to.settings && to.settings->GetType() == from.settings->GetType())
+                {
+                    CopyScalars(*from.settings, *to.settings);
+                    ++given;
+                }
+            }
+            return given;
+        }
+
         /// Shows file `index`'s preview and settings.
         void Select(usize index)
         {
@@ -603,6 +631,12 @@ export namespace editor::app
                                               const pipeline::IFileImporter* importer = described.Importer();
                                               if (importer == nullptr || !described.options)
                                                   return;
+                                              // Only each part's default (each part carries its own): shown on the parts.
+                                              if (importer->SettingIsPerPart(path))
+                                              {
+                                                  info.Visible = false;
+                                                  return;
+                                              }
                                               // A setting a kind row in the tree stands for is that row, not a second switch here.
                                               for (const pipeline::ImportResourceKind kind : kKinds)
                                                   if (!importer->KindSetting(kind).IsEmpty() && importer->KindSetting(kind) == path)
@@ -751,6 +785,23 @@ export namespace editor::app
             }
         }
 
+        // Copies `from`'s reflected settings of the kinds a setting is (a flag, a number, a choice)
+        // into `to`, an object of the same type.
+        static void CopyScalars(Object& from, Object& to)
+        {
+            const Instance source(&from, from.GetType());
+            const Instance target(&to, to.GetType());
+            for (const TypeInfo* type = from.GetType(); type != nullptr; type = type->base)
+                for (u32 i = 0; i < type->propertyCount; ++i)
+                {
+                    const PropertyInfo& property = type->properties[i];
+                    if (property.type == nullptr || (property.type != &TypeOf<bool>() && property.type != &TypeOf<f32>() && property.type != &TypeOf<i32>() &&
+                                                     !IsEnum(*property.type)))
+                        continue;
+                    MemCopy(property.address(target), property.address(source), property.type->size);
+                }
+        }
+
         // The importer's setting that leaves `kind` out of file's import, or null when it has none.
         [[nodiscard]] static bool* KindFlag(const AssetImport::File& file, pipeline::ImportResourceKind kind)
         {
@@ -801,16 +852,52 @@ export namespace editor::app
             if (importer == nullptr)
                 return;
             const Array<pipeline::ImportPartFact> facts = importer->DescribePart(file.path.AsView(), file.options.Get(), file.prepared.Get(), entry);
-            if (facts.IsEmpty())
-                return;
-            detail.AddChild(Text(u8"As the file has it", u8"import-part-kind").Get());
-            for (const pipeline::ImportPartFact& fact : facts)
+            if (!facts.IsEmpty())
             {
-                RefPtr<gui::Panel> row = Row(u8"import-part-fact");
-                row->AddChild(Text(fact.label.AsView(), u8"form-label").Get());
-                row->AddChild(Text(fact.value.AsView(), u8"import-part-fact-value").Get());
-                detail.AddChild(row.Get());
+                detail.AddChild(Text(u8"As the file has it", u8"import-part-kind").Get());
+                for (const pipeline::ImportPartFact& fact : facts)
+                {
+                    RefPtr<gui::Panel> row = Row(u8"import-part-fact");
+                    row->AddChild(Text(fact.label.AsView(), u8"form-label").Get());
+                    row->AddChild(Text(fact.value.AsView(), u8"import-part-fact-value").Get());
+                    detail.AddChild(row.Get());
+                }
             }
+            ShowPartSettings(detail, index, e);
+        }
+
+        // The part's own settings (a clip's root motion), as its importer makes them, in a grid; the
+        // plan keeps them for the import. With others of its kind in the file, a button gives them
+        // all the same.
+        void ShowPartSettings(gui::UIWidget& detail, usize index, usize e)
+        {
+            AssetImport::File& file = m_session->files[index];
+            pipeline::ImportPlanEntry& entry = file.plan.entries[e];
+            const pipeline::IFileImporter* importer = file.Importer();
+            if (!entry.settings && importer != nullptr)
+                entry.settings = importer->PartSettings(file.path.AsView(), file.options.Get(), entry, m_session->group, m_allocator);
+            if (!entry.settings)
+                return;
+            detail.AddChild(Text(u8"Its own settings", u8"import-part-kind").Get());
+            m_partSettings = MakeUnique<gui::ReflectedPropertySource>(m_allocator, m_allocator);
+            const Instance target(entry.settings.Get(), entry.settings->GetType());
+            m_partSettings->SetObjects(Span<const Instance>(&target, 1u));
+            RefPtr<gui::PropertyGrid> grid = MakeRef<gui::PropertyGrid>(m_allocator);
+            grid->AddClass(u8"import-settings");
+            grid->SetFitsRows(true);
+            grid->SetSource(m_partSettings.Get());
+            detail.AddChild(grid.Get());
+            usize others = 0;
+            for (usize i = 0; i < file.plan.entries.Size(); ++i)
+                others += i != e && file.plan.entries[i].kind == entry.kind ? 1u : 0u;
+            if (others == 0)
+                return;
+            ImportWindow* self = this;
+            RefPtr<gui::Button> share = MakeRef<gui::Button>(m_allocator);
+            share->SetText(Format(u8"Apply to all {} in this file", pipeline::ImportResourceKindLabel(entry.kind)).AsView());
+            share->SetTooltip(u8"Gives every part of this kind in the file these settings");
+            share->SetOnClick([self, index, e]() { (void)self->SharePartSettings(index, e); });
+            detail.AddChild(share.Get());
         }
 
         // Shows what the file's name clashes with (AssetImport::ClashOf): nothing when the name is
@@ -929,6 +1016,7 @@ export namespace editor::app
         Array<OpenKind> m_openKinds; // the kinds open in the tree, by file
         i64 m_part = -1;             // the selected part, an entry of the selected file's plan; -1: the file
         UniquePtr<gui::ReflectedPropertySource> m_settings; // the selected file's settings, which its grid shows
+        UniquePtr<gui::ReflectedPropertySource> m_partSettings; // the selected part's own settings
         RefPtr<gui::PropertyGrid> m_settingsGrid;
         UniquePtr<editor::IImportPreview> m_preview; // the selected file's, while its path and type stay
         String m_previewPath;

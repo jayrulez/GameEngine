@@ -157,12 +157,22 @@ namespace
         }
     };
 
-    // A shelf's options: whether its books (textures) come in, a setting that leaves a whole kind out.
+    // A shelf's options: whether its books (textures) come in, a setting that leaves a whole kind out,
+    // and the default each book's own Glossy starts from.
     class ShelfOptions final : public pipeline::ImportOptions
     {
         RTTI_OBJECT(ShelfOptions, pipeline::ImportOptions)
     public:
         bool books = true;
+        bool glossyDefault = false;
+    };
+
+    // A book's own settings in the import.
+    class BookSettings final : public Object
+    {
+        RTTI_OBJECT(BookSettings, Object)
+    public:
+        bool glossy = false;
     };
 
     // Takes ".shelf": a board (a mesh) and, while books is on, two books (textures).
@@ -176,6 +186,17 @@ namespace
         {
             return kind == pipeline::ImportResourceKind::Texture ? StringView(u8"books") : StringView{};
         }
+        [[nodiscard]] RefPtr<Object> PartSettings(StringView, const pipeline::ImportOptions* options, const pipeline::ImportPlanEntry& part, content::Group*,
+                                                  IAllocator& allocator) const override
+        {
+            if (part.kind != pipeline::ImportResourceKind::Texture)
+                return {};
+            RefPtr<BookSettings> book = MakeRef<BookSettings>(allocator);
+            const auto* shelf = Cast<ShelfOptions>(options);
+            book->glossy = shelf != nullptr && shelf->glossyDefault;
+            return book;
+        }
+        [[nodiscard]] bool SettingIsPerPart(StringView setting) const override { return setting == StringView(u8"glossyDefault"); }
         [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView, const pipeline::ImportOptions* options, Object*) override
         {
             pipeline::ImportPlan plan;
@@ -281,7 +302,12 @@ namespace
 RTTI_DEFINE_OBJECT(WindowThing, "rtti::tests::importwindow")
 REFLECT_MEMBERS(ShelfOptions, "rtti::tests::importwindow")
 {
-    builder.Property<&ShelfOptions::books>("books").PropAttribute("displayName", String(u8"Books"));
+    builder.Property<&ShelfOptions::books>("books").PropAttribute("displayName", String(u8"Books"))
+        .Property<&ShelfOptions::glossyDefault>("glossyDefault").PropAttribute("displayName", String(u8"Glossy by default"));
+}
+REFLECT_MEMBERS(BookSettings, "rtti::tests::importwindow")
+{
+    builder.Property<&BookSettings::glossy>("glossy").PropAttribute("displayName", String(u8"Glossy"));
 }
 REFLECT_MEMBERS(CrateOptions, "rtti::tests::importwindow")
 {
@@ -467,6 +493,36 @@ TEST_CASE("import window: a kind row is its importer's setting for the kind: unt
     CHECK(options->books);
     CHECK_FALSE(session->files[0].plan.entries[0].enabled);
     CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"0 of 1"));
+    bed.window->Close();
+}
+
+TEST_CASE("import window: a part's own settings in its details, given to every part of its kind by one button; a file setting that is only their default is not shown")
+{
+    Bed bed;
+    const String one[] = {String(u8"/somewhere/a.shelf")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(one, 1u));
+    CHECK_FALSE(Texts(*bed.window->Detail()).AsView().Contains(u8"Glossy by default")); // each book's own, shown on the books
+
+    bed.window->SelectPart(0, 1); // Atlas, a texture
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0));
+    CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 1u); // its own settings
+    CHECK(Texts(*bed.window->Detail()).AsView().Contains(u8"Its own settings"));
+    usize buttons = 0;
+    for (usize i = 0; i < bed.window->Detail()->ChildCount(); ++i)
+        if (auto* button = Cast<gui::Button>(bed.window->Detail()->GetChildAt(i)))
+            buttons += button->GetText() == StringView(u8"Apply to all Textures in this file") ? 1u : 0u;
+    CHECK(buttons == 1u);
+    auto* atlas = Cast<BookSettings>(session->files[0].plan.entries[1].settings.Get());
+    REQUIRE(atlas != nullptr); // made when shown, kept by the plan for the import
+    atlas->glossy = true;
+    CHECK(bed.window->SharePartSettings(0, 1) == 1u); // the other book
+    auto* index = Cast<BookSettings>(session->files[0].plan.entries[2].settings.Get());
+    REQUIRE(index != nullptr);
+    CHECK(index->glossy);
+
+    bed.window->SelectPart(0, 0); // the board, a mesh: none of its own
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0));
+    CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 0u);
     bed.window->Close();
 }
 

@@ -101,6 +101,10 @@ collision) shows them in the files pane as a tree under it, not as a list in the
   material on a sphere; a texture in the picture view; a clip playing on the model; the skeleton's
   bones over the model; a collision shape outlined. A part it cannot show leaves the file's view.
 - **Textures** inside a model stay as the model's import reads them (no per-texture settings).
+- **A kind's row is its importer's setting for the kind** (user 2026-11-02), where it has one
+  (`IFileImporter::KindSetting`: a model's textures, materials, and skeleton with clips): unticked,
+  the importer leaves them all out and the row stays, "Left out", to tick back; that setting is not
+  shown again among the settings. Each kind is its own: textures without materials, or the reverse.
 - **Generic.** Nothing in the window names a kind's meaning: the tree comes from the importer's
   plan, a part's facts from the importer (DescribePart), its preview from the file's preview.
 

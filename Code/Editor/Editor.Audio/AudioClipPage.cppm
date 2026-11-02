@@ -27,6 +27,7 @@ export import :sound_cue_page;
 export import :bus_layout_model;
 export import :bus_layout_page;
 export import :thumbnail_generator;
+export import :sound_file_preview;
 
 import foundation.core;
 import foundation.content;
@@ -116,7 +117,7 @@ export namespace editor
     };
 
     /// Registers the audio pages (called from the editor's assembly), each asking for its services
-    /// when it is made, and the audio clip thumbnail generator.
+    /// when it is made, the sound files' import preview, and the audio clip thumbnail generator.
     inline void RegisterAudioClipEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
@@ -125,6 +126,8 @@ export namespace editor
             editor::EditorRootAllocator().New<SoundCuePageFactory>(services), editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<AudioBusLayoutPageFactory>(services), editor::EditorRootAllocator()));
+        context.ImportPreviews().Register(UniquePtr<IImportPreviewFactory>(
+            editor::EditorRootAllocator().New<SoundFilePreviewFactory>(pipeline::AudioClipAsset::StaticType(), services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
             RegisterAudioThumbnailGenerator(*context.Thumbnails());
     }

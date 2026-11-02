@@ -7,8 +7,8 @@ target_link_libraries(Editor.Audio PUBLIC
     Editor::Core Editor::App Foundation::Policy)
 target_sources(Editor.Audio
     PRIVATE
-        AudioClipPageImpl.cpp SoundCuePageImpl.cpp BusLayoutPageImpl.cpp
+        AudioClipPageImpl.cpp SoundCuePageImpl.cpp BusLayoutPageImpl.cpp SoundFilePreviewImpl.cpp
     PUBLIC
         FILE_SET editor_audio_modules TYPE CXX_MODULES FILES
             AudioClipPage.cppm Audition.cppm WaveformView.cppm SoundCuePage.cppm BusLayoutModel.cppm BusLayoutPage.cppm
-            AudioClipThumbnailGenerator.cppm)
+            AudioClipThumbnailGenerator.cppm SoundFilePreview.cppm)

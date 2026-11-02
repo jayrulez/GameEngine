@@ -211,23 +211,28 @@ REFLECT_MEMBERS(CrateOptions, "rtti::tests::importwindow")
     builder.Property<&CrateOptions::hollow>("hollow").PropAttribute("displayName", String(u8"Hollow"));
 }
 
-TEST_CASE("import window: a file's plan by kind, each kept and named; Import open saying what it does; Import makes what is kept and closes")
+TEST_CASE("import window: a file's parts in a tree under it, by kind, each kept; a part selected shows its name to give it; Import makes what is kept and closes")
 {
     Bed bed;
     const String box[] = {String(u8"/somewhere/crate.box")};
     RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(box, 1u));
-    // The two kinds, closed: a box each, no names yet (there are no option toggles here).
-    gui::Node& detail = *bed.window->Detail();
-    CHECK(Count<gui::CheckBox>(detail) == 2u);
-    CHECK(Count<gui::TextField>(detail) == 0u);
+    // Under the file, its two kinds, closed: a box each beside the file's own.
+    gui::Node& files = *bed.window->Files();
+    CHECK(Count<gui::CheckBox>(files) == 3u);
     CHECK_FALSE(bed.window->IsKindOpen(pipeline::ImportResourceKind::Texture));
-    // Opened, each kind lists its items, each kept or dropped and named.
+    CHECK(Count<gui::TextField>(*bed.window->Detail()) == 0u); // the file's settings: no names there
+    // Opened, each kind lists its items, each with its box.
     bed.window->SetKindOpen(pipeline::ImportResourceKind::Mesh, true);
     bed.window->SetKindOpen(pipeline::ImportResourceKind::Texture, true);
-    CHECK(Count<gui::CheckBox>(*bed.window->Detail()) == 5u);
-    CHECK(Count<gui::TextField>(*bed.window->Detail()) == 3u);
-    // One file is listed too, under its importer's label, and the preview's facts name it.
-    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 1u);
+    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 6u);
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"2 of 2"));
+    // A part selected: what it is, its name to give it, its box.
+    bed.window->SelectPart(0, 1); // Wood
+    CHECK(bed.window->SelectedPart() == 1);
+    CHECK(Count<gui::TextField>(*bed.window->Detail()) == 1u);
+    CHECK(Texts(*bed.window->Detail()).AsView().Contains(u8"Texture"));
+    bed.window->Select(0);
+    CHECK(bed.window->SelectedPart() == -1);
     CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"Box · 1"));
     CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Box"));
     CHECK(bed.window->ImportButton()->GetText() == StringView(u8"Import"));

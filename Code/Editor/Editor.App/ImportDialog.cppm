@@ -165,17 +165,30 @@ export namespace editor::app
             Close();
             return true;
         }
-        /// Shows file `index`'s preview and settings, its kinds closed.
+        /// Shows file `index`'s preview and settings.
         void Select(usize index)
         {
             if (!m_session || index >= m_session->files.Size())
                 return;
             m_selected = index;
-            m_openKinds.Clear();
+            m_part = -1;
             ShowFiles();
             ShowPreview();
             ShowDetail();
         }
+        /// Shows part `entry` of file `index` (an entry of its plan): its preview and its details.
+        void SelectPart(usize index, usize entry)
+        {
+            if (!m_session || index >= m_session->files.Size() || entry >= m_session->files[index].plan.entries.Size())
+                return;
+            m_selected = index;
+            m_part = static_cast<i64>(entry);
+            ShowFiles();
+            ShowPreview();
+            ShowDetail();
+        }
+        /// The selected part's index in the selected file's plan; -1 when the file itself is selected.
+        [[nodiscard]] i64 SelectedPart() const noexcept { return m_part; }
         /// Gives file `index`'s settings to the session's other files of its importer (its "Apply to
         /// all ... in this import"); returns how many took them.
         usize ShareSettings(usize index)
@@ -192,12 +205,13 @@ export namespace editor::app
             }
             return shared;
         }
-        /// Opens or closes a kind of what the selected file would create (its items listed or not).
-        void SetKindOpen(pipeline::ImportResourceKind kind, bool open)
+        /// Opens or closes a kind of what file `index` would create, in the tree under it (its
+        /// items listed or not).
+        void SetKindOpen(usize index, pipeline::ImportResourceKind kind, bool open)
         {
             bool already = false;
             for (usize i = 0; i < m_openKinds.Size(); ++i)
-                if (m_openKinds[i] == kind)
+                if (m_openKinds[i].file == index && m_openKinds[i].kind == kind)
                 {
                     already = true;
                     if (!open)
@@ -205,16 +219,19 @@ export namespace editor::app
                     break;
                 }
             if (open && !already)
-                m_openKinds.PushBack(kind);
-            ShowDetail();
+                m_openKinds.PushBack(OpenKind{index, kind});
+            ShowFiles();
         }
-        [[nodiscard]] bool IsKindOpen(pipeline::ImportResourceKind kind) const
+        /// SetKindOpen for the selected file.
+        void SetKindOpen(pipeline::ImportResourceKind kind, bool open) { SetKindOpen(m_selected, kind, open); }
+        [[nodiscard]] bool IsKindOpen(usize index, pipeline::ImportResourceKind kind) const
         {
-            for (const pipeline::ImportResourceKind open : m_openKinds)
-                if (open == kind)
+            for (const OpenKind& open : m_openKinds)
+                if (open.file == index && open.kind == kind)
                     return true;
             return false;
         }
+        [[nodiscard]] bool IsKindOpen(pipeline::ImportResourceKind kind) const { return IsKindOpen(m_selected, kind); }
 
         // For tests: the session, the window, the selected file, the line, the Import button.
         [[nodiscard]] AssetImport::Session* Session() const noexcept { return m_session.Get(); }
@@ -306,7 +323,10 @@ export namespace editor::app
                 list->AddChild(Text(Format(u8"{} · {}", label, count).AsView(), u8"import-section").Get());
                 for (usize i = 0; i < m_session->files.Size(); ++i)
                     if (LabelOf(m_session->files[i]) == label.AsView())
+                    {
                         list->AddChild(FileRow(i).Get());
+                        AddPartRows(*list, i);
+                    }
             }
         }
 
@@ -317,7 +337,7 @@ export namespace editor::app
                 const AssetImport::File& file = m_session->files[i];
                 RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
                 row->AddClass(u8"import-file");
-                if (i == m_selected)
+                if (i == m_selected && m_part < 0)
                     row->AddClass(u8"selected");
                 RefPtr<gui::CheckBox> kept = MakeRef<gui::CheckBox>(m_allocator);
                 kept->SetChecked(file.kept);
@@ -435,6 +455,11 @@ export namespace editor::app
             AssetImport::File& file = m_session->files[m_selected];
             ImportWindow* self = this;
             const usize index = m_selected;
+            if (m_part >= 0 && static_cast<usize>(m_part) < file.plan.entries.Size())
+            {
+                ShowPart(*detail, index, static_cast<usize>(m_part));
+                return;
+            }
             detail->AddChild(Text(file.Name(), u8"import-title").Get());
             if (file.importers.Size() > 1)
             {
@@ -557,11 +582,32 @@ export namespace editor::app
                 detail->AddChild(Text(u8"It makes one asset, named after the file.", u8"form-help").Get());
                 return;
             }
-            // What it would create, by kind: a kind's box keeps or drops all of that kind.
-            static constexpr pipeline::ImportResourceKind kKinds[] = {
-                pipeline::ImportResourceKind::Mesh,          pipeline::ImportResourceKind::Material,  pipeline::ImportResourceKind::Texture,
-                pipeline::ImportResourceKind::Skeleton,      pipeline::ImportResourceKind::AnimationClip, pipeline::ImportResourceKind::Collision,
-                pipeline::ImportResourceKind::Asset};
+            if (HasTree(file))
+                detail->AddChild(Text(u8"What it makes is in the tree under it: open a kind, and select an item to see it.", u8"form-help").Get());
+        }
+
+        // The kinds a plan holds, in the order the tree shows them.
+        static constexpr pipeline::ImportResourceKind kKinds[] = {
+            pipeline::ImportResourceKind::Mesh,          pipeline::ImportResourceKind::Material,      pipeline::ImportResourceKind::Texture,
+            pipeline::ImportResourceKind::Skeleton,      pipeline::ImportResourceKind::AnimationClip, pipeline::ImportResourceKind::Collision,
+            pipeline::ImportResourceKind::Asset};
+
+        // Whether a file's plan makes a tree under it: more than the one asset a single-file
+        // importer makes.
+        [[nodiscard]] static bool HasTree(const AssetImport::File& file)
+        {
+            return file.plan.entries.Size() > 1 || (file.plan.entries.Size() == 1 && file.plan.entries[0].kind != pipeline::ImportResourceKind::Asset);
+        }
+
+        // The tree under file `index`: each kind it makes, its box keeping or dropping all of it
+        // (mixed while some are kept), its chevron and its count; an open kind lists its items,
+        // each with its box and its name, selected to show it.
+        void AddPartRows(gui::UIWidget& list, usize index)
+        {
+            const AssetImport::File& file = m_session->files[index];
+            if (file.state != AssetImport::File::State::Ready || !HasTree(file))
+                return;
+            ImportWindow* self = this;
             for (const pipeline::ImportResourceKind kind : kKinds)
             {
                 usize count = 0, kept = 0;
@@ -573,16 +619,8 @@ export namespace editor::app
                     }
                 if (count == 0)
                     continue;
-                // The kind: open or close it, keep or drop all of it, and how many are kept.
-                const bool open = IsKindOpen(kind);
+                const bool open = IsKindOpen(index, kind);
                 RefPtr<gui::Panel> head = Row(u8"import-kind");
-                RefPtr<gui::Button> toggle = MakeRef<gui::Button>(m_allocator);
-                toggle->AddClass(u8"import-kind-toggle");
-                toggle->AddClass(u8"with-icon");
-                toggle->SetIconSource(String(open ? u8"Editor/Icons/chevron-down.svg" : u8"Editor/Icons/chevron-right.svg"));
-                toggle->SetText(pipeline::ImportResourceKindLabel(kind));
-                toggle->SetTooltip(open ? StringView(u8"Hide them") : StringView(u8"Show them, each with its name"));
-                toggle->SetOnClick([self, kind, open]() { self->Later([self, kind, open]() { self->SetKindOpen(kind, !open); }); });
                 RefPtr<gui::CheckBox> all = MakeRef<gui::CheckBox>(m_allocator);
                 all->SetTooltip(u8"Keep or drop all of them");
                 all->SetChecked(kept == count);
@@ -594,14 +632,19 @@ export namespace editor::app
                                       for (pipeline::ImportPlanEntry& entry : self->m_session->files[index].plan.entries)
                                           if (entry.kind == kind)
                                               entry.enabled = on;
-                                      self->Later([self]() { self->ShowDetail(); });
+                                      self->Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
                                   });
+                RefPtr<gui::Button> toggle = MakeRef<gui::Button>(m_allocator);
+                toggle->AddClass(u8"import-kind-toggle");
+                toggle->AddClass(u8"with-icon");
+                toggle->SetIconSource(String(open ? u8"Editor/Icons/chevron-down.svg" : u8"Editor/Icons/chevron-right.svg"));
+                toggle->SetText(pipeline::ImportResourceKindLabel(kind));
+                toggle->SetTooltip(open ? StringView(u8"Hide them") : StringView(u8"Show them"));
+                toggle->SetOnClick([self, index, kind, open]() { self->Later([self, index, kind, open]() { self->SetKindOpen(index, kind, !open); }); });
                 head->AddChild(all.Get());
                 head->AddChild(toggle.Get());
-                RefPtr<gui::Spacer> gap = MakeRef<gui::Spacer>(m_allocator);
-                head->AddChild(gap.Get());
                 head->AddChild(Text(Format(u8"{} of {}", kept, count).AsView(), u8"import-kind-count").Get());
-                detail->AddChild(head.Get());
+                list.AddChild(head.Get());
                 if (!open)
                     continue;
                 for (usize e = 0; e < file.plan.entries.Size(); ++e)
@@ -609,32 +652,63 @@ export namespace editor::app
                     const pipeline::ImportPlanEntry& entry = file.plan.entries[e];
                     if (entry.kind != kind)
                         continue;
-                    RefPtr<gui::Panel> line = Row(u8"import-entry");
+                    RefPtr<gui::Panel> line = Row(u8"import-part");
+                    if (index == m_selected && m_part == static_cast<i64>(e))
+                        line->AddClass(u8"selected");
                     RefPtr<gui::CheckBox> on = MakeRef<gui::CheckBox>(m_allocator);
                     on->SetChecked(entry.enabled);
+                    on->SetTooltip(u8"Import it");
                     on->SetOnToggled([self, index, e](bool checked)
                                      {
                                          if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
                                              self->m_session->files[index].plan.entries[e].enabled = checked;
-                                         self->Later([self]() { self->ShowDetail(); });
+                                         self->Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
                                      });
-                    RefPtr<gui::TextField> name = MakeRef<gui::TextField>(m_allocator);
-                    name->SetText(entry.targetName.AsView());
-                    name->SetPlaceholder(entry.sourceName.AsView()); // when emptied, it keeps the importer's name
-                    name->SetOnTextChanging([self, index, e](StringView text)
-                                            {
-                                                if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
-                                                    self->m_session->files[index].plan.entries[e].targetName = String(text);
-                                                self->ShowWhy(); // a rename may free a name, or take one
-                                            });
-                    // When the name is committed (Enter, or leaving the field), the clash line shows
-                    // what the name clashes with now.
-                    (void)name->AddEventListener(gui::EventType::Changed, [self](const gui::Event&) { self->Later([self]() { self->ShowDetail(); }); });
+                    RefPtr<gui::Button> name = MakeRef<gui::Button>(m_allocator);
+                    name->AddClass(u8"import-part-name");
+                    name->SetText(entry.targetName.IsEmpty() ? entry.sourceName.AsView() : entry.targetName.AsView());
+                    name->SetOnClick([self, index, e]() { self->Later([self, index, e]() { self->SelectPart(index, e); }); });
                     line->AddChild(on.Get());
                     line->AddChild(name.Get());
-                    detail->AddChild(line.Get());
+                    list.AddChild(line.Get());
                 }
             }
+        }
+
+        // The selected part's details: what it is, its name to give it (with the file's own name
+        // when it differs), and its box.
+        void ShowPart(gui::UIWidget& detail, usize index, usize e)
+        {
+            ImportWindow* self = this;
+            const pipeline::ImportPlanEntry& entry = m_session->files[index].plan.entries[e];
+            detail.AddChild(Text(pipeline::ImportResourceKindName(entry.kind), u8"import-part-kind").Get());
+            RefPtr<gui::Panel> line = Row(u8"import-part-name-line");
+            line->AddChild(Text(u8"Name", u8"form-label").Get());
+            RefPtr<gui::TextField> name = MakeRef<gui::TextField>(m_allocator);
+            name->SetText(entry.targetName.AsView());
+            name->SetPlaceholder(entry.sourceName.AsView()); // when emptied, it keeps the importer's name
+            name->SetOnTextChanging([self, index, e](StringView text)
+                                    {
+                                        if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
+                                            self->m_session->files[index].plan.entries[e].targetName = String(text);
+                                        self->ShowWhy(); // a rename may free a name, or take one
+                                    });
+            // Committed (Enter, or leaving the field): the tree shows the new name.
+            (void)name->AddEventListener(gui::EventType::Changed, [self](const gui::Event&) { self->Later([self]() { self->ShowFiles(); }); });
+            line->AddChild(name.Get());
+            detail.AddChild(line.Get());
+            if (!entry.targetName.IsEmpty() && entry.targetName != entry.sourceName)
+                detail.AddChild(Text(Format(u8"In the file it is {}.", entry.sourceName).AsView(), u8"form-help").Get());
+            RefPtr<gui::CheckBox> on = MakeRef<gui::CheckBox>(m_allocator);
+            on->SetText(u8"Import it");
+            on->SetChecked(entry.enabled);
+            on->SetOnToggled([self, index, e](bool checked)
+                             {
+                                 if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
+                                     self->m_session->files[index].plan.entries[e].enabled = checked;
+                                 self->Later([self]() { self->ShowFiles(); self->ShowWhy(); });
+                             });
+            detail.AddChild(on.Get());
         }
 
         // Shows what the file's name clashes with (AssetImport::ClashOf): nothing when the name is
@@ -745,7 +819,13 @@ export namespace editor::app
         RefPtr<gui::Window> m_window;
         RefPtr<AssetImport::Session> m_session;
         usize m_selected = 0;
-        Array<pipeline::ImportResourceKind> m_openKinds; // the selected file's kinds shown item by item
+        struct OpenKind
+        {
+            usize file = 0;
+            pipeline::ImportResourceKind kind = pipeline::ImportResourceKind::Asset;
+        };
+        Array<OpenKind> m_openKinds; // the kinds open in the tree, by file
+        i64 m_part = -1;             // the selected part, an entry of the selected file's plan; -1: the file
         UniquePtr<gui::ReflectedPropertySource> m_settings; // the selected file's settings, which its grid shows
         RefPtr<gui::PropertyGrid> m_settingsGrid;
         UniquePtr<editor::IImportPreview> m_preview; // the selected file's, while its path and type stay

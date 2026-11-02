@@ -82,6 +82,22 @@ export namespace pipeline
         return u8"Resources";
     }
 
+    /// One resource of `kind`, as a heading over it says ("Material", "Animation clip").
+    [[nodiscard]] inline StringView ImportResourceKindName(ImportResourceKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case ImportResourceKind::Texture: return u8"Texture";
+        case ImportResourceKind::Material: return u8"Material";
+        case ImportResourceKind::Mesh: return u8"Mesh";
+        case ImportResourceKind::Skeleton: return u8"Skeleton";
+        case ImportResourceKind::AnimationClip: return u8"Animation clip";
+        case ImportResourceKind::Collision: return u8"Collision shape";
+        case ImportResourceKind::Asset: return u8"Asset";
+        }
+        return u8"Resource";
+    }
+
     // (SingleAssetPlan, the shared single-asset DescribeImport, is defined below the path
     // helpers it uses.)
 

@@ -66,9 +66,9 @@ namespace
         {
             return &AsyncProduct::StaticType();
         }
-        [[nodiscard]] const TypeInfo* CookedType() const override { return ProductType(); }
+        [[nodiscard]] const TypeInfo* CookedType() const override { return &AsyncSource::StaticType(); } // what it reads
 
-        // Synchronous fallback (un-migrated factory / no job system): reads the source directly.
+        // Synchronous fallback (un-migrated factory / no task pool): reads the source directly.
         [[nodiscard]] RefPtr<Object> Create(ResourceManager& /*manager*/,
                                             foundation::content::Instance& instance) override
         {
@@ -197,8 +197,8 @@ TEST_CASE("resource.async: BindAsync is pending until Pump finalizes it on the m
                                           u8".rasset");
     AsyncFactory factory;
     factory.gates[0].store(false, MemoryOrder::Relaxed); // hold the decode closed
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid id = MakeInstance(db, factory, u8"a", 7, 0);
 
@@ -229,8 +229,8 @@ TEST_CASE("resource.async: concurrent BindAsync of one id shares a single decode
                                           u8".rasset");
     AsyncFactory factory;
     factory.gates[0].store(false, MemoryOrder::Relaxed);
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid id = MakeInstance(db, factory, u8"a", 42, 0);
 
@@ -257,8 +257,8 @@ TEST_CASE("resource.async: a sync Bind of a pending id block-completes it to Rea
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory; // gate open: the sync upgrade waits on / drives the decode
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid id = MakeInstance(db, factory, u8"a", 99, 0);
 
@@ -283,8 +283,8 @@ TEST_CASE("resource.async: a failed decode settles the handle to Failed, no fina
                                           u8".rasset");
     AsyncFactory factory;
     factory.failDecode = true;
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid id = MakeInstance(db, factory, u8"a", 1, 0);
 
@@ -309,8 +309,8 @@ TEST_CASE("resource.async: BindAsync falls back to a synchronous Ready build whe
     {
         AsyncFactory factory;
         factory.supportsAsync = false;
-        JobSystem jobs(DefaultAllocator());
-        ResourceManager manager(DefaultAllocator(), db, &jobs);
+        TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+        ResourceManager manager(DefaultAllocator(), db, &tasks);
         manager.AddFactory(&factory);
         const Guid id = MakeInstance(db, factory, u8"a", 5, 0);
 
@@ -322,7 +322,7 @@ TEST_CASE("resource.async: BindAsync falls back to a synchronous Ready build whe
         CHECK(factory.decodeCalls.load() == 0);
     }
 
-    SUBCASE("no JobSystem")
+    SUBCASE("no task pool")
     {
         AsyncFactory factory; // supports async, but the manager has no pool
         ResourceManager manager(DefaultAllocator(), db);
@@ -347,8 +347,8 @@ TEST_CASE("resource.async: Pump respects its time budget and resumes on the next
                                           u8".rasset");
     AsyncFactory factory;
     factory.finalizeSleepMs = 5; // each finalize (>1ms budget), so at most one per Pump
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
 
     constexpr int kCount = 4;
@@ -409,8 +409,8 @@ TEST_CASE("resource.async: Pump reports a burst ONCE when the in-flight loads dr
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
 
     ResourceLogCapture capture;
@@ -522,11 +522,11 @@ TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
         factory.gates[i].store(false, MemoryOrder::Relaxed); // hold all three decodes
     }
     // Three decodes are held closed and must run concurrently (each spins on its gate until the
-    // main thread opens it), so the pool needs at least three workers. A default JobSystem sizes
-    // to (cores - 1), which is 1 on a 2-core CI runner: too few, and the decodes deadlock. Pin
-    // the worker count so the test does not depend on the host's core count.
-    JobSystem jobs(DefaultAllocator(), 3);
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    // main thread opens it), so the pool needs at least three workers. A default task pool sizes
+    // to the cores less two (at least one), too few on a small CI runner, and the decodes
+    // deadlock. Pin the worker count so the test does not depend on the host's core count.
+    TaskPool tasks(DefaultAllocator(), 3u);
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
 
     const Guid id0 = MakeInstance(db, factory, u8"a", 10, 0);
@@ -570,8 +570,8 @@ TEST_CASE("resource.async: OnReady fires once on the main thread when the load b
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid id = MakeInstance(db, factory, u8"a", 3, 0);
 
@@ -592,7 +592,7 @@ TEST_CASE("resource.async: OnReady fires once on the main thread when the load b
     CHECK(readyThread == Thread::CurrentId());
 }
 
-TEST_CASE("resource.async: destroying the manager with an in-flight decode drains cleanly")
+TEST_CASE("resource.async: destroying the manager drops a decode not yet started and waits for one running")
 {
     RegisterAsyncTypes();
     CleanDir(u8"scratch_async_db");
@@ -600,16 +600,20 @@ TEST_CASE("resource.async: destroying the manager with an in-flight decode drain
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    JobSystem jobs(DefaultAllocator());
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
     {
-        ResourceManager manager(DefaultAllocator(), db, &jobs);
+        ResourceManager manager(DefaultAllocator(), db, &tasks);
         manager.AddFactory(&factory);
         const Guid id = MakeInstance(db, factory, u8"a", 1, 0);
         (void)manager.BindAsync<AsyncProduct>(id);
-        // Leave it pending (never pumped): the destructor must wait out the decode so no job
-        // references the freed manager. ASAN/TSAN prove no use-after-free / data race here.
+        // Leave it pending (never pumped): the destructor drops the decode if it has not started
+        // and waits for it if it has, so no task references the freed manager. ASAN/TSAN prove no
+        // use-after-free / data race here.
     }
-    CHECK(factory.decodeCalls.load() == 1); // the decode ran to completion during teardown
+    CHECK(factory.decodeCalls.load() <= 1);   // dropped unrun, or run once and waited for
+    CHECK(tasks.InFlight() <= 1u);            // ended either way; only its hand-back is left
+    tasks.Finish();
+    CHECK(factory.finalizeCalls.load() == 0); // a manager that went never finalizes
 }
 
 TEST_CASE("resource.async: Ref::Bind routes through BindAsync under an AsyncBindScope")
@@ -621,8 +625,8 @@ TEST_CASE("resource.async: Ref::Bind routes through BindAsync under an AsyncBind
                                           u8".rasset");
     AsyncFactory factory;
     factory.gates[0].store(false, MemoryOrder::Relaxed); // hold the decode
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid id = MakeInstance(db, factory, u8"a", 5, 0);
 
@@ -663,10 +667,10 @@ TEST_CASE("resource.async: AsyncLoadBatch reports progress as loads finalize")
         factory.gates[i].store(false, MemoryOrder::Relaxed); // hold all decodes
     }
     // Three concurrent gated decodes: pin the pool to three workers so it does not deadlock on a
-    // low-core host (a default JobSystem is (cores - 1), i.e. 1 on a 2-core CI runner). See the
+    // low-core host (a default task pool is the cores less two, at least one). See the
     // FIFO-order test above for the same reasoning.
-    JobSystem jobs(DefaultAllocator(), 3);
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), 3u);
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
 
     const Guid a = MakeInstance(db, factory, u8"a", 1, 0);
@@ -759,8 +763,8 @@ TEST_CASE("resource.async: a settling child RELOADS its dependents (the material
                                           u8".rasset");
     AsyncFactory factory;
     factory.gates[0].store(false, MemoryOrder::Relaxed); // child decode held closed
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     ParentFactory parentFactory;
     parentFactory.childId = MakeInstance(db, factory, u8"child", 7, 0);
@@ -797,8 +801,8 @@ TEST_CASE("resource.async: a settle-reload does NOT block-complete the dependent
     AsyncFactory factory;
     factory.gates[0].store(false, MemoryOrder::Relaxed); // both children held closed
     factory.gates[1].store(false, MemoryOrder::Relaxed);
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     ParentFactory parentFactory;
     parentFactory.childId = MakeInstance(db, factory, u8"first", 7, 0);
@@ -854,8 +858,8 @@ TEST_CASE("resource.async: a sync Bind of a pending id finalizes THAT id only; t
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
     const Guid a = MakeInstance(db, factory, u8"a", 1, 0);
     const Guid b = MakeInstance(db, factory, u8"b", 2, 1);
@@ -890,3 +894,29 @@ TEST_CASE("resource.async: a sync Bind of a pending id finalizes THAT id only; t
     CHECK(manager.PendingCount() == 0u);
 }
 
+
+TEST_CASE("resource.async: BindAsyncAny binds an id as whatever its cooked form makes, asking the instance; nothing for an id no factory reads")
+{
+    RegisterAsyncTypes();
+    CleanDir(u8"scratch_async_db");
+    NativeFileSystem mount(u8"scratch_async_db", DefaultAllocator());
+    foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
+                                          u8".rasset");
+    AsyncFactory factory;
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
+    manager.AddFactory(&factory);
+    const Guid id = MakeInstance(db, factory, u8"a", 11, 0);
+
+    CHECK(manager.ProductTypeOf(id) == factory.ProductType());
+    RefPtr<ResourceHandle> handle = manager.BindAsyncAny(id);
+    REQUIRE(handle);
+    manager.WaitAll();
+    Proxy<AsyncProduct> product = manager.Bind<AsyncProduct>(id); // the same handle, ready
+    REQUIRE(product.Get() != nullptr);
+    CHECK(product->value == 11);
+    CHECK(factory.decodeCalls.load() == 1); // decoded on the pool, once
+
+    CHECK(manager.ProductTypeOf(Guid{}) == nullptr); // no instance by that id
+    CHECK_FALSE(manager.BindAsyncAny(Guid{}));
+}

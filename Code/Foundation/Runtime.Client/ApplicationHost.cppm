@@ -51,7 +51,10 @@ export namespace foundation::runtime
     public:
         // The allocator (required; the entry point decides) becomes the runtime
         // SubsystemManager's allocator authority for every subsystem this host runs.
-        explicit ApplicationHost(core::IAllocator& allocator) noexcept : m_subsystems(allocator) {}
+        explicit ApplicationHost(core::IAllocator& allocator) noexcept
+            : m_subsystems(allocator), m_tasks(allocator, core::TaskPool::DefaultWorkerCount())
+        {
+        }
         ~ApplicationHost() override = default;
 
         ApplicationHost(const ApplicationHost&) = delete;
@@ -152,6 +155,7 @@ export namespace foundation::runtime
                     m_app->OnFixedUpdate(*this, m_settings.fixedTimeStep);
                 }
 
+                m_tasks.Pump(); // long work's completions, before this frame's update reads them
                 m_subsystems.Update(scaledDelta);
                 m_app->OnUpdate(*this, deltaTime);
                 m_subsystems.PostUpdate(scaledDelta);
@@ -250,6 +254,7 @@ export namespace foundation::runtime
         }
 
         [[nodiscard]] SubsystemManager& Subsystems() noexcept override { return m_subsystems; }
+        [[nodiscard]] core::TaskPool& Tasks() noexcept override { return m_tasks; }
         [[nodiscard]] IShell* Shell() noexcept override { return m_shell; }
         [[nodiscard]] GraphicsDevice* Graphics() noexcept override { return m_graphics; }
 
@@ -349,6 +354,9 @@ export namespace foundation::runtime
         }
 
         SubsystemManager m_subsystems;
+        // Declared after the subsystems, so destroyed before them: its tasks end (cancelled, the
+        // running ones waited for) while what they decode for is still there.
+        core::TaskPool m_tasks;
         ApplicationSettings m_settings;
         IApplication* m_app = nullptr;                        // borrowed; owned by the entry point
         IShell* m_shell = nullptr;                            // borrowed; owned by the entry point

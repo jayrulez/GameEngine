@@ -44,6 +44,7 @@ export namespace foundation::runtime
         [[nodiscard]] SubsystemManager& Subsystems() noexcept override { return *m_subsystems; }
         [[nodiscard]] IShell* Shell() noexcept override { return m_outer->Shell(); }
         [[nodiscard]] GraphicsDevice* Graphics() noexcept override { return m_outer->Graphics(); }
+        [[nodiscard]] core::TaskPool& Tasks() noexcept override { return m_outer->Tasks(); }
 
         // The embedded app has no OS window; it renders into the embedder's viewport
         // texture (the Game tab). Attach-to-main-window code must tolerate null, just

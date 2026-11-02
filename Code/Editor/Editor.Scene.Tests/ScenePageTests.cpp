@@ -69,6 +69,11 @@ namespace
         runtime::SubsystemManager& Subsystems() noexcept override { return m_context; }
         foundation::shell::IShell* Shell() noexcept override { return nullptr; }
         foundation::graphics::GraphicsDevice* Graphics() noexcept override { return nullptr; }
+        foundation::core::TaskPool& Tasks() noexcept override
+        {
+            static foundation::core::TaskPool tasks(foundation::core::DefaultAllocator(), 0u); // runs what it is given when pumped
+            return tasks;
+        }
         foundation::graphics::RenderWindow* MainRenderWindow() noexcept override { return nullptr; }
         foundation::graphics::RenderWindow* OpenWindow(const foundation::shell::WindowSettings&, const foundation::graphics::RenderWindowDesc&) override
         {

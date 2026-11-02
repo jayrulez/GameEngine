@@ -321,11 +321,11 @@ export namespace editor::app
         }
 
         // Attaches the project's resources over its cooked database to the embedded runtime (which
-        // registers the engine's factories into it), decoding on the global job system when there is one.
+        // registers the engine's factories into it), decoding on the editor's task pool.
         void AttachResources()
         {
             m_resources = MakeUnique<foundation::resource::ResourceManager>(m_allocator, m_allocator, m_project->CookedDb(),
-                                                                             HasGlobalJobSystem() ? &GlobalJobs() : nullptr);
+                                                                             &m_services.context->Tasks());
             m_services.context->SetResources(m_resources.Get());
             if (m_services.embeddedApp != nullptr)
                 m_services.embeddedApp->AttachResourceManager(m_resources.Get(), *m_services.embeddedHost);

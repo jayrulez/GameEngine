@@ -65,6 +65,9 @@ export namespace foundation::runtime
         [[nodiscard]] virtual SubsystemManager& Subsystems() noexcept = 0;
         [[nodiscard]] virtual IShell* Shell() noexcept = 0;
         [[nodiscard]] virtual GraphicsDevice* Graphics() noexcept = 0;
+        // Long work off the frame (Specs/task-layer.md): resource decodes and whatever else must not
+        // hold the frame's workers. The host pumps it once a frame.
+        [[nodiscard]] virtual core::TaskPool& Tasks() noexcept = 0;
 
         // The main window's RenderWindow (windows[0]), created by the host before OnStartup. Null when
         // running headless (no shell/graphics). Apps attach their root UI or main viewport to it; it is

@@ -634,11 +634,10 @@ namespace engine::runtime
 
         if (m_borrowedResources == nullptr && m_contentDatabase != nullptr)
         {
-            // Share the global JobSystem so factories that support async loading can decode off the
-            // main thread; null when there is no pool, which means synchronous loads.
+            // The host's task pool, so factories that support async loading decode off the main
+            // thread without holding the frame's workers.
             m_ownedResources = core::MakeUnique<foundation::resource::ResourceManager>(
-                core::DefaultAllocator(), core::DefaultAllocator(), *m_contentDatabase,
-                core::HasGlobalJobSystem() ? &core::GlobalJobs() : nullptr);
+                core::DefaultAllocator(), core::DefaultAllocator(), *m_contentDatabase, &host.Tasks());
         }
         foundation::resource::ResourceManager* resources = Resources();
         PointSpawnersAtContent(); // the manager exists now; scenes composed earlier learn of it

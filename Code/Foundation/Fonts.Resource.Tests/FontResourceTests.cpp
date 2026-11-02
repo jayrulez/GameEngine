@@ -178,8 +178,8 @@ TEST_CASE("font.factory: async load matches the sync product")
     auto a = syncManager.Bind<Font>(id);
     REQUIRE(a);
 
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager asyncManager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager asyncManager(DefaultAllocator(), db, &tasks);
     asyncManager.AddFactory(&factory);
     auto b = asyncManager.BindAsync<Font>(id);
     asyncManager.WaitAll();
@@ -233,8 +233,8 @@ TEST_CASE("font.factory: many concurrent async decodes run without a race")
 
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
     FontFactory factory(DefaultAllocator());
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
 
     Array<Proxy<Font>> fonts;

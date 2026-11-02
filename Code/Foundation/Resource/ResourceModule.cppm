@@ -260,7 +260,7 @@ export namespace foundation::resource
         // --- Optional async two-stage path. By default SupportsAsync() is false and the manager
         //     builds synchronously via Create(). A factory opts in by overriding all three.
         //     DecodeStage is a pure function of the instance's (cheap, pak-backed) source bytes;
-        //     it runs on a JobSystem worker and must not touch the ResourceManager, the GPU, or
+        //     it runs on a TaskPool worker and must not touch the ResourceManager, the GPU, or
         //     global mutable state. FinalizeStage runs on the main thread and turns the decoded
         //     intermediate into the product (GPU upload, child manager.Bind()s, registry writes);
         //     a null return signals failure.
@@ -287,30 +287,35 @@ export namespace foundation::resource
     class ResourceManager
     {
     public:
-        // `jobs` is the shared JobSystem used for async decode (BindAsync). Null makes async
+        // `tasks` is the task pool async decodes run on (BindAsync), never the frame's job system, so
+        // a big load does not hold the workers the frame's fan-out needs. Null makes async
         // degrade to a synchronous Bind. The constructing thread is recorded as the main thread
         // (async finalize and Pump must run on it).
         // The allocator (required; the owner decides) backs resource handles and
         // pending async loads.
         ResourceManager(IAllocator& allocator, foundation::content::IContentDatabase& database,
-                        JobSystem* jobs = nullptr) noexcept
-            : m_allocator(&allocator), m_database(&database), m_jobs(jobs),
+                        TaskPool* tasks = nullptr) noexcept
+            : m_allocator(&allocator), m_database(&database), m_tasks(tasks),
               m_mainThreadId(Thread::CurrentId())
         {
         }
 
-        // Drain outstanding decode jobs so none references this manager after destruction. Wait
-        // participates in the pool, so a queued-but-unstarted decode still runs to completion; the
-        // results are discarded (never finalized), since FinalizeStage would touch factories and
-        // the GPU, which is unsafe during teardown.
+        // Ends outstanding decodes so none references this manager after destruction: one not yet
+        // started is dropped, one running is waited for. Their results are discarded (never
+        // finalized), since FinalizeStage would touch factories and the GPU, unsafe during teardown.
         ~ResourceManager()
         {
-            if (m_jobs != nullptr)
+            if (m_tasks != nullptr)
             {
                 for (auto& [id, record] : m_pending)
                 {
                     (void)id;
-                    m_jobs->Wait(record->counter);
+                    record->task->Cancel();
+                }
+                for (auto& [id, record] : m_pending)
+                {
+                    (void)id;
+                    m_tasks->Wait(*record->task);
                 }
             }
         }
@@ -467,9 +472,9 @@ export namespace foundation::resource
         }
 
         // Asynchronous bind: returns the same handle/Proxy immediately with State() == Pending
-        // (Get() null) and decodes on a JobSystem worker; Pump() finalizes it on the main thread
+        // (Get() null) and decodes on a task pool worker; Pump() finalizes it on the main thread
         // a frame or two later. Falls back to a synchronous, immediately-Ready build when there is
-        // no JobSystem, no instance or factory, or the factory does not support async
+        // no task pool, no instance or factory, or the factory does not support async
         // (SupportsAsync() == false). Concurrent BindAsync calls for the same id share one handle.
         [[nodiscard]] RefPtr<ResourceHandle> BindAsync(const TypeInfo& productType, const Guid& id)
         {
@@ -494,6 +499,37 @@ export namespace foundation::resource
             return handle;
         }
 
+        /// The product type a registered factory makes from `id`'s cooked form, the instance asked
+        /// rather than a list of types; null when no instance or no factory reads its form.
+        [[nodiscard]] const TypeInfo* ProductTypeOf(const Guid& id) const
+        {
+            const foundation::content::Instance* instance = m_database->GetInstance(id);
+            if (instance == nullptr)
+            {
+                return nullptr;
+            }
+            for (const auto& [productId, factory] : m_factories)
+            {
+                (void)productId;
+                const TypeInfo* cooked = factory->CookedType();
+                if (cooked != nullptr && cooked->name != nullptr && cooked->namespaceName != nullptr &&
+                    instance->TypeName() == StringView(reinterpret_cast<const utf8char*>(cooked->name)) &&
+                    instance->TypeNamespace() == StringView(reinterpret_cast<const utf8char*>(cooked->namespaceName)))
+                {
+                    return factory->ProductType();
+                }
+            }
+            return nullptr;
+        }
+
+        /// BindAsync of `id` as whatever its cooked form makes (ProductTypeOf); null when nothing
+        /// reads it. What a loader warming a set of resources it knows only by id calls.
+        [[nodiscard]] RefPtr<ResourceHandle> BindAsyncAny(const Guid& id)
+        {
+            const TypeInfo* product = ProductTypeOf(id);
+            return product != nullptr ? BindAsync(*product, id) : RefPtr<ResourceHandle>{};
+        }
+
         template <typename T>
         [[nodiscard]] Proxy<T> BindAsync(const Guid& id)
         {
@@ -508,7 +544,7 @@ export namespace foundation::resource
 
         // Finalize completed async decodes on the main thread, FIFO, until `budgetSeconds` is
         // spent (default ~2ms). Tick once per frame before subsystem update so this frame's spawns
-        // see ready resources. On a 0-worker (web) JobSystem it also drives queued decodes inline
+        // see ready resources. On a 0-worker (web) task pool it also drives queued decodes inline
         // within the budget (the pool has no threads to run them otherwise).
         void Pump(f64 budgetSeconds = 0.002)
         {
@@ -530,7 +566,7 @@ export namespace foundation::resource
                 if (!have)
                 {
                     // 0-worker fallback: nothing has run the decode yet, so drive one inline.
-                    if (m_jobs != nullptr && m_jobs->WorkerCount() == 0 &&
+                    if (m_tasks != nullptr && m_tasks->WorkerCount() == 0 &&
                         stopwatch.Elapsed().AsSeconds() < budgetSeconds && DriveOneInlineDecode())
                     {
                         continue;
@@ -571,7 +607,7 @@ export namespace foundation::resource
             for (usize guard = 0; guard < 4096; ++guard)
             {
                 bool anyOutstanding = false;
-                if (m_jobs != nullptr)
+                if (m_tasks != nullptr)
                 {
                     for (auto& [id, record] : m_pending)
                     {
@@ -579,7 +615,7 @@ export namespace foundation::resource
                         if (!record->finalized)
                         {
                             anyOutstanding = true;
-                            m_jobs->Wait(record->counter); // runs the decode inline if not yet done
+                            m_tasks->Wait(*record->task); // a pool of no workers runs it here
                         }
                     }
                 }
@@ -692,16 +728,15 @@ export namespace foundation::resource
         }
 
     private:
-        // Async-load records. PendingLoad holds a non-movable Counter, so it lives in a
-        // UniquePtr slot (a heap-stable address the JobSystem signals). CompletedDecode is the
-        // self-contained result a worker pushes and Pump finalizes; it carries its own handle and
-        // factory, so finalize never has to touch the pending map.
+        // Async-load records. CompletedDecode is the self-contained result a worker pushes and Pump
+        // finalizes; it carries its own handle and factory, so finalize never has to touch the
+        // pending map.
         struct PendingLoad
         {
             RefPtr<ResourceHandle> handle;
             Guid id;
-            Counter counter{1};     // 1 -> 0 when the decode job completes
-            bool finalized = false; // product set on main; safe to reap once counter == 0
+            RefPtr<TaskHandle> task; // the decode; ended once its result is queued
+            bool finalized = false;  // product set on main; safe to reap once the task has ended
         };
         struct CompletedDecode
         {
@@ -762,7 +797,7 @@ export namespace foundation::resource
 
         // Kick off an async build: park any old product, mark Pending, submit the pure decode to a
         // worker. Degrades to a synchronous, immediately-settled BuildInto when async is impossible
-        // (no job system, instance or factory, or a factory that does not support async).
+        // (no task pool, instance or factory, or a factory that does not support async).
         void StartAsyncBuild(const RefPtr<ResourceHandle>& handle, TypeId productTypeId,
                              const Guid& id)
         {
@@ -772,7 +807,7 @@ export namespace foundation::resource
             IResourceFactory* const* factorySlot = m_factories.Find(productTypeId);
             IResourceFactory* factory = (factorySlot != nullptr) ? *factorySlot : nullptr;
 
-            if (m_jobs == nullptr || instance == nullptr || factory == nullptr ||
+            if (m_tasks == nullptr || instance == nullptr || factory == nullptr ||
                 !factory->SupportsAsync())
             {
                 BuildInto(*handle, productTypeId, id);
@@ -797,20 +832,22 @@ export namespace foundation::resource
             m_pending.InsertOrAssign(id, Move(pending));
             NoteBurstGrowth();
 
-            // The job captures only thread-safe data: the factory/instance pointers (stable for the
+            // The task captures only thread-safe data: the factory/instance pointers (stable for the
             // load's lifetime), a RefPtr copy of the handle (atomic refcount), and the id by value.
-            // It never touches the handle or pending maps, which stay main-thread. The counter
-            // going 1 -> 0 on completion lets WaitAll and the sync-upgrade path wait on this decode.
-            m_jobs->Submit(
-                [this, id, jobHandle = handle, factory, instance]() mutable
+            // It never touches the handle or pending maps, which stay main-thread. Its handle lets
+            // WaitAll and the sync-upgrade path wait on this decode; the manager's own Pump
+            // finalizes it, so it needs no completion of the pool's.
+            record->task = m_tasks->Submit(
+                instance->Name(),
+                [this, id, jobHandle = handle, factory, instance](TaskContext&) mutable
                 {
                     RefPtr<Object> decoded = factory->DecodeStage(*instance);
                     const bool ok = decoded.Get() != nullptr;
                     ScopedLock lock(m_completedMutex);
                     m_completed.PushBack(
                         CompletedDecode{id, Move(jobHandle), factory, Move(decoded), ok});
-                },
-                &record->counter);
+                    return Status{};
+                });
         }
 
         // Turn one decoded entry into its product on the main thread: FinalizeStage with the id on
@@ -869,9 +906,9 @@ export namespace foundation::resource
         {
             if (UniquePtr<PendingLoad>* record = m_pending.Find(id))
             {
-                if (m_jobs != nullptr)
+                if (m_tasks != nullptr)
                 {
-                    m_jobs->Wait((*record)->counter); // runs the decode inline if not yet done
+                    m_tasks->Wait(*(*record)->task); // a pool of no workers runs it here
                 }
             }
             // Finalize this id only. Draining every decoded entry here would make one sync Bind pay
@@ -907,16 +944,16 @@ export namespace foundation::resource
             handle.SetState(handle.Get() != nullptr ? ResourceState::Ready : ResourceState::Failed);
         }
 
-        // 0-worker fallback: run one not-yet-started queued decode inline (Wait participates,
-        // executing the job). False when no undriven decode remains.
+        // 0-worker fallback: run one not-yet-run queued decode here (the pool's Wait runs its queue
+        // on this thread). False when no undriven decode remains.
         bool DriveOneInlineDecode()
         {
             for (auto& [id, record] : m_pending)
             {
                 (void)id;
-                if (!record->finalized && record->counter.Value() != 0)
+                if (!record->finalized && !record->task->IsEnded())
                 {
-                    m_jobs->Wait(record->counter);
+                    m_tasks->Wait(*record->task);
                     return true;
                 }
             }
@@ -949,32 +986,23 @@ export namespace foundation::resource
                          m_burstPeak, static_cast<i64>(m_burstClock.Elapsed().AsMilliseconds()));
             }
         }
-        // Free finalized pending records. Freeing must go through the JobSystem's lifetime fence
-        // (Wait), not a bare counter.Value()==0 check: the count is set to 0 inside the JobSystem's
-        // Counter lock (see RunJob), so a value of 0 is observable while the signaling worker is
-        // still touching the Counter, and destroying it then is a data race (TSAN-confirmed). Wait
-        // returns only after that critical section is released; for a finalized record the decode
-        // body is already done, so Wait is effectively non-blocking here.
+        // Free finalized pending records whose decode has ended. Finalized alone is not enough: the
+        // worker queues its result under m_completedMutex and is still releasing it when the main
+        // thread can already take the result, so a record (and with the last one, the manager the
+        // destructor would then free) waits until the pool has seen the task end.
         void ReapPending()
         {
             Array<Guid> reap;
             for (auto& [id, record] : m_pending)
             {
-                if (record->finalized)
+                if (record->finalized && record->task->IsEnded())
                 {
                     reap.PushBack(id);
                 }
             }
             for (const Guid& id : reap)
             {
-                if (UniquePtr<PendingLoad>* record = m_pending.Find(id))
-                {
-                    if (m_jobs != nullptr)
-                    {
-                        m_jobs->Wait((*record)->counter); // lifetime fence before free
-                    }
-                    m_pending.Remove(id);
-                }
+                m_pending.Remove(id);
             }
         }
 
@@ -1080,7 +1108,7 @@ export namespace foundation::resource
         Array<Guid> m_buildStack;                  // ids currently building (auto-edge source)
 
         // --- async load bookkeeping; PendingLoad/CompletedDecode declared above ---
-        JobSystem* m_jobs = nullptr; // shared decode pool (null = sync-only)
+        TaskPool* m_tasks = nullptr; // the decodes' pool (null = sync-only)
         u64 m_mainThreadId = 0;      // thread that constructs/pumps; async finalize must run here
         bool m_asyncBinds = false;   // Ref<T>::Bind routes through BindAsync while set
         bool m_reportsMissingFactories = true; // off: a collector, quiet on a missing factory

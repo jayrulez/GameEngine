@@ -218,8 +218,8 @@ TEST_CASE("texture.factory: async load produces the same product as the sync loa
     REQUIRE(a);
 
     // Async: decode on a worker, finalize on the main thread via WaitAll.
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager asyncManager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager asyncManager(DefaultAllocator(), db, &tasks);
     asyncManager.AddFactory(&factory);
     Proxy<Texture> b = asyncManager.BindAsync<Texture>(id);
     asyncManager.WaitAll();
@@ -263,8 +263,8 @@ TEST_CASE("texture.factory: many concurrent async loads decode on workers withou
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     TextureFactory factory(DefaultAllocator(), device);
-    JobSystem jobs(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), db, &jobs);
+    TaskPool tasks(DefaultAllocator(), TaskPool::DefaultWorkerCount());
+    ResourceManager manager(DefaultAllocator(), db, &tasks);
     manager.AddFactory(&factory);
 
     Array<Proxy<Texture>> textures;

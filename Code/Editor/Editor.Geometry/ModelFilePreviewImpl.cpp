@@ -63,8 +63,9 @@ namespace editor
         // What the worker reads, for the main thread to cook and bind.
         struct Read : RefCounted
         {
-            foundation::model::Model model;
+            foundation::model::Model model; // when the preview reads the file itself
             ModelStats stats;
+            Guid guid; // what the cook made, to bind
             OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
         };
 
@@ -88,6 +89,7 @@ namespace editor
         Float3 center{};
         f32 radius = 1.0f;
         RefPtr<TaskHandle> read;
+        TaskPool* pool = nullptr;
 
         Impl(IAllocator& alloc, ModelFilePreview& preview, StringView file)
             : allocator(&alloc), owner(&preview), path(file), open(alloc), facts(alloc), clipNames(alloc), bonePoses(alloc)
@@ -177,8 +179,9 @@ namespace editor
             }
         }
 
-        void Start(StringView cacheRoot, TaskPool& tasks, foundation::model::Model* imported)
+        void Start(StringView cacheRoot, TaskPool& tasks, Object* prepared)
         {
+            pool = &tasks;
             message->SetText(Format(u8"Reading {}...", pipeline::FileNameOf(path.AsView())).AsView());
             // As the importer reads it: without the viewer's loose texture rule, which the import
             // does not apply either, so the preview shows what will come in.
@@ -195,40 +198,55 @@ namespace editor
                 Failed(outcome);
                 return;
             }
-            // The importer read it already: cook and bind that, with no second read.
-            if (imported != nullptr)
-            {
-                const OpenModel::Outcome finished = open.Finish(*imported, CountModel(*imported)); // CountModel works out its bounds, nothing more
-                if (finished == OpenModel::Outcome::Opened)
-                    Opened();
-                else
-                    Failed(finished);
-                return;
-            }
+            // Read (unless the importer has) and cooked on the worker, bound here. The task holds the
+            // cache and the importer's read by reference, so a preview that goes first frees neither
+            // under it; StopReading cancels it and waits, before the import changes the importer's model.
             RefPtr<Read> result = MakeRef<Read>(*allocator);
+            RefPtr<Object> keep(prepared);
+            auto* loaded = Cast<pipeline::LoadedModel>(prepared);
+            if (loaded != nullptr)
+                result->stats = CountModel(loaded->model); // here: it works out the model's bounds, which this thread reads too
             Impl* self = this;
-            // On the worker: only the file and `result` (LoadFile makes its own loaders).
-            read = tasks.Submit(Format(u8"Reading {}", pipeline::FileNameOf(path.AsView())).AsView(),
-                                [result, file = path](TaskContext&)
-                               {
-                                   result->outcome = OpenModel::LoadFile(file.AsView(), false, result->model, result->stats);
-                                   return Status{};
-                               },
-                               // On the main thread, which owns the cache's database and resources, and
-                               // only while this preview lives (it cancels the read as it goes).
-                               [self, result](Status)
-                               {
-                                   if (result->outcome != OpenModel::Outcome::Opened)
-                                   {
-                                       self->Failed(result->outcome);
-                                       return;
-                                   }
-                                   const OpenModel::Outcome finished = self->open.Finish(result->model, result->stats);
-                                   if (finished == OpenModel::Outcome::Opened)
-                                       self->Opened();
-                                   else
-                                       self->Failed(finished);
-                               });
+            read = tasks.Submit(Format(u8"Previewing {}", pipeline::FileNameOf(path.AsView())).AsView(),
+                                [result, keep, loaded, cache = open.Cache(), file = path](TaskContext& context)
+                                {
+                                    const foundation::model::Model* model = loaded != nullptr ? &loaded->model : nullptr;
+                                    if (model == nullptr)
+                                    {
+                                        result->outcome = OpenModel::LoadFile(file.AsView(), false, result->model, result->stats);
+                                        if (result->outcome != OpenModel::Outcome::Opened)
+                                            return Status{};
+                                        model = &result->model;
+                                    }
+                                    result->outcome = OpenModel::Cook(*cache, *model, result->stats, result->guid, context.Token());
+                                    return result->outcome == OpenModel::Outcome::Cancelled ? Status(ErrorCode::Cancelled) : Status{};
+                                },
+                                // On the main thread, which owns the cache's resources, and only while this
+                                // preview lives (it cancels the task as it goes).
+                                [self, result](Status)
+                                {
+                                    if (result->outcome != OpenModel::Outcome::Opened)
+                                    {
+                                        self->Failed(result->outcome);
+                                        return;
+                                    }
+                                    const OpenModel::Outcome bound = self->open.Bind(result->guid, result->stats);
+                                    if (bound == OpenModel::Outcome::Opened)
+                                        self->Opened();
+                                    else
+                                        self->Failed(bound);
+                                });
+        }
+
+        // Before the import changes the importer's model: the cook stops at its next item, and is
+        // waited for.
+        void StopReading()
+        {
+            if (read && pool != nullptr)
+            {
+                read->Cancel();
+                pool->Wait(*read);
+            }
         }
 
         void Failed(OpenModel::Outcome outcome)
@@ -360,12 +378,12 @@ namespace editor
     };
 
     ModelFilePreview::ModelFilePreview(StringView path, StringView cacheRoot, TaskPool& tasks, IAllocator& allocator, const app::AssetPageServices& services,
-                                       foundation::model::Model* imported)
+                                       Object* prepared)
     {
         m_impl = MakeUnique<Impl>(allocator, allocator, *this, path);
         Provide<app::IImportPreviewFrames>(*this);
         m_impl->BuildView(services);
-        m_impl->Start(cacheRoot, tasks, imported);
+        m_impl->Start(cacheRoot, tasks, prepared);
     }
 
     ModelFilePreview::~ModelFilePreview()
@@ -393,10 +411,15 @@ namespace editor
         return m_impl->facts.AsSpan();
     }
 
+    void ModelFilePreview::StopReading()
+    {
+        m_impl->StopReading();
+    }
+
     void ModelFilePreview::OnUpdate(foundation::runtime::IApplicationHost&, f32 dt)
     {
-        if (m_impl->open.Resources() != nullptr)
-            m_impl->open.Resources()->Pump(); // the model's textures finish loading
+        if (m_impl->open.IsOpen())
+            m_impl->open.Resources()->Pump(); // the model's textures finish loading (not while it cooks)
         if (!m_impl->viewport)
             return;
         if (m_impl->viewport->Update(dt))
@@ -427,9 +450,7 @@ namespace editor
             return {};
         const String cacheRoot = PathJoin(m_context->Project()->CacheRoot().AsView(), StringView(kModelPreviewCacheFolder));
         const app::AssetPageServices services = m_services->Make();
-        auto* loaded = Cast<pipeline::LoadedModel>(file.prepared);
-        return UniquePtr<IImportPreview>(
-            allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), tasks, allocator, services, loaded != nullptr ? &loaded->model : nullptr), allocator);
+        return UniquePtr<IImportPreview>(allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), tasks, allocator, services, file.prepared), allocator);
     }
 
     void RegisterModelFilePreview(EditorContext& context, const app::AssetPageServicesSource& services)

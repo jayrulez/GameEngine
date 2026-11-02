@@ -37,16 +37,19 @@ export namespace editor
     {
     public:
         /// Opens `path` with its cooked files under `cacheRoot`: bound at once when opened before,
-        /// else cooked from `imported` (the model the importer read, which must outlive this call),
-        /// else read on `tasks`. `services` give the host and GUI the view needs (none: no view).
+        /// else cooked on `tasks` from `prepared` (the importer's read, a pipeline::LoadedModel,
+        /// held by the task while it cooks), else read and cooked there. `services` give the host
+        /// and GUI the view needs (none: no view).
         ModelFilePreview(StringView path, StringView cacheRoot, TaskPool& tasks, IAllocator& allocator, const app::AssetPageServices& services,
-                         foundation::model::Model* imported = nullptr);
+                         Object* prepared = nullptr);
         ModelFilePreview(const ModelFilePreview&) = delete;
         ModelFilePreview& operator=(const ModelFilePreview&) = delete;
         ~ModelFilePreview() override;
 
         [[nodiscard]] foundation::gui::Node& View() override;
         [[nodiscard]] Span<const String> Facts() const override;
+        /// Stops the cook, which reads the importer's model, and waits for it.
+        void StopReading() override;
 
         void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) override;
         void OnRenderWindow(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame) override;

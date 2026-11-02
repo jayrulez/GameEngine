@@ -53,6 +53,11 @@ export namespace editor
         /// Called by the window when the file's settings changed, for a preview that shows them.
         virtual void OnSettingsChanged() {}
 
+        /// Called by the window before it imports: stop what reads the file's prepared payload and
+        /// wait for it, since the import may change that payload (a model's scale is applied to the
+        /// model the importer read). A preview that reads none has nothing to stop.
+        virtual void StopReading() {}
+
         /// What the preview pane shows.
         [[nodiscard]] virtual foundation::gui::Node& View() = 0;
         /// The line under it, a fact each ("2048 x 2048", "RGBA, 8-bit"); empty while it reads and

@@ -35,6 +35,11 @@ namespace
     };
 
     // Takes ".box": would make a mesh and two textures.
+    // Previews stopped so far, and how many had been when a box last imported: Import must stop
+    // the preview before the import runs.
+    Atomic<usize> g_previewStops{0};
+    Atomic<usize> g_stopsWhenImported{0};
+
     class BoxImporter final : public pipeline::IFileImporter
     {
     public:
@@ -60,6 +65,7 @@ namespace
         [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions* options, Object*,
                                                         Array<pipeline::DeferredImportWrite>*) override
         {
+            g_stopsWhenImported.store(g_previewStops.load());
             content::Instance* primary = nullptr;
             for (const pipeline::ImportPlanEntry& entry : options->selection.entries)
                 if (entry.enabled)
@@ -82,6 +88,7 @@ namespace
         }
         [[nodiscard]] gui::Node& View() override { return *m_view; }
         [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
+        void StopReading() override { g_previewStops.fetch_add(1); }
         // As a read coming back does: new facts, and the window told.
         void Arrive(StringView fact)
         {
@@ -311,7 +318,13 @@ TEST_CASE("import window: the preview registered for the type a file is listed b
     // A preview's read coming back shows its facts again.
     static_cast<NamePreview*>(bed.window->Preview())->Arrive(u8"Read at last");
     CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Read at last"));
-    bed.window->Close();
+
+    // Import stops the preview first: the import may change what the importer read, which a
+    // preview may be reading.
+    const usize before = g_previewStops.load();
+    CHECK(bed.window->Import());
+    CHECK(g_previewStops.load() == before + 1u);
+    CHECK(g_stopsWhenImported.load() == before + 1u); // stopped before the box imported
 }
 
 TEST_CASE("import window: a file's settings, as its importer's options declare them, in the inspector's property grid; a file with none shows none")

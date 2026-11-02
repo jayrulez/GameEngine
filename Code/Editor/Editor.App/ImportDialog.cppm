@@ -160,8 +160,17 @@ export namespace editor::app
         /// Imports what is kept and closes; false (the window stays, saying why) when it cannot yet.
         bool Import()
         {
-            if (!m_session || !m_services.import->Commit(*m_session))
+            if (!m_session)
                 return false;
+            if (m_preview)
+                m_preview->StopReading(); // before the import changes what the importer read
+            if (!m_services.import->Commit(*m_session))
+            {
+                // The window stays, saying why: its preview is made again rather than stay stopped.
+                m_previewPath = {};
+                ShowPreview();
+                return false;
+            }
             Close();
             return true;
         }

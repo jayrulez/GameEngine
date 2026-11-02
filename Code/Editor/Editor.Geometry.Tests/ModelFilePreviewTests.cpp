@@ -79,7 +79,7 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
     (void)RemoveDirectoryRecursive(cache.AsView());
 }
 
-TEST_CASE("model file preview: given the importer's read, it cooks that and reads nothing itself")
+TEST_CASE("model file preview: given the importer's read, it cooks that on the pool, never on the window's thread, and reads nothing itself")
 {
     const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_read");
     (void)RemoveDirectoryRecursive(cache.AsView());
@@ -88,11 +88,33 @@ TEST_CASE("model file preview: given the importer's read, it cooks that and read
     const String fox = Fox();
     pipeline::ModelFileImporter importer;
     RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
-    auto* loaded = Cast<pipeline::LoadedModel>(prepared.Get());
-    REQUIRE(loaded != nullptr);
-    editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, &loaded->model);
-    CHECK(preview.IsOpen()); // at once
-    CHECK(tasks.InFlight() == 0u); // no read of its own
-    CHECK(preview.Facts().Size() == 6u);
+    REQUIRE(Cast<pipeline::LoadedModel>(prepared.Get()) != nullptr);
+    {
+        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, prepared.Get());
+        CHECK_FALSE(preview.IsOpen()); // its cook is a task: the window's thread goes on
+        CHECK(tasks.InFlight() == 1u);  // the cook alone, no read of its own
+        tasks.Finish();
+        CHECK(preview.IsOpen()); // bound in the completion
+        CHECK(preview.Facts().Size() == 6u);
+    }
+    (void)RemoveDirectoryRecursive(cache.AsView());
+}
+
+TEST_CASE("model file preview: StopReading ends its cook before the import may change the importer's model; it then never opens")
+{
+    const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_stop");
+    (void)RemoveDirectoryRecursive(cache.AsView());
+    TaskPool tasks(DefaultAllocator(), 1u);
+    const editor::app::AssetPageServices services{};
+    const String fox = Fox();
+    pipeline::ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
+    {
+        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, prepared.Get());
+        preview.StopReading();
+        CHECK(tasks.InFlight() <= 1u); // ended (cancelled, or finished just before), only its hand-back left
+        tasks.Finish();
+        CHECK_FALSE(preview.IsOpen()); // a stopped preview's completion does not run
+    }
     (void)RemoveDirectoryRecursive(cache.AsView());
 }

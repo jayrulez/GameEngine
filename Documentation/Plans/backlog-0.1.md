@@ -8,6 +8,40 @@
 
 ## Editor
 
+- **The editor's frame, what is left** (user 2026-11-02, after comparing the old UI and the GUI):
+  The user finds the editor slower than the old one, which was snappy even in Debug. Measured so far
+  (Debug, clang): on one page of rows built in both sandboxes (GUI_PERF_ROWS / GUI_PERF_MODE, timing
+  code uncommitted in UISandbox, UIRuntime.cppm and GUISandbox), the GUI was no slower than the old
+  UI: at 150 rows a relayout 6.4 ms against 8.2, render 1.2 ms against 3.4, 42 draw commands against
+  153. The old editor's viewport called the layout-affecting `Invalidate()` every frame it showed, so it
+  relaid out every frame too. The user's printed frame was CPU-bound (38 ms, 1.2 ms on the GPU fence),
+  three 3D views about 18 ms of it. Fixed: the toast host's clock asked for a frame every frame
+  (fc5842fec). Held until the user has felt the editor with that fix; each item is measured before and
+  after:
+
+  1. **Disabled icon buttons draw through offscreen layers.** `button:disabled { opacity: ... }`
+     (`Data/Editor/editor.css:265`) on a node with children fades it through a VG layer
+     (`Node.cppm`, `layered`), one render pass each: 8 a frame on Sky Hopper's Level 1 (the disabled
+     toolbar buttons). Options: a disabled look by colour (`image-color`, text colour), or opacity
+     multiplied into the children when they do not overlap.
+  2. **Draw calls break at every tree row.** 272 GUI draw commands a frame on Level 1, most of the GUI's
+     main-thread time in driver calls (`VGRenderer::DrawCommands`). A row draws its background, its icon
+     (its own texture, Layer mode) and its text (the glyph atlas), and each change of texture or mode
+     starts a new command. Options: the draw mode per vertex and the glyph atlas and an icon atlas bound
+     together, or merging commands across non-overlapping draws. The largest of the items: the VG
+     renderer.
+  3. **The scene overlay walks every entity each frame.** `SceneOverlays::DrawGizmos` and
+     `DrawEntityMarkers` (`Editor.Scene/SceneOverlays.cppm`) visit every entity, and each one every
+     component manager (`GizmoRendererRegistry::DrawEntity`): about 19% of the main thread on Level 1.
+     The old editor did the same; skipping entities with nothing to draw would save it.
+  4. **Input to screen, in frames.** Not measured: whether input reaches the screen later in the GUI
+     than in the old UI (routing, hover, layout order). Count frames from an injected event to the
+     changed picture in both sandboxes. The editor's third swapchain image (4f7a8931b, the user's
+     ruling) adds a frame while the editor keeps up with vsync, little at 26 fps.
+  5. **Unscoped time.** About 5 ms of the printed frame's Update and 5.4 ms of its Render had no
+     profiler scope (the GUI host's input and context update, the pumps: MCP, the Samples tab,
+     tasks, export, the status bar). Scopes first, then measure.
+
 - **Terrain and vegetation tools: fixes and a regression check** (user 2026-11-01):
   - Sculpting (and maybe the vegetation tool) still acts when the pointer is over UI: a press or
     drag over a panel or the tool's own controls goes through to the viewport.

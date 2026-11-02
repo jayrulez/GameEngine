@@ -202,6 +202,7 @@ export namespace editor::app
                           if (hadPart)
                               selected = file.plan.entries[static_cast<usize>(self->m_part)];
                           self->m_services.import->RefreshPlan(*self->m_session, index);
+                          self->PlanChanged(index);
                           if (hadPart)
                           {
                               self->m_part = -1;
@@ -237,6 +238,7 @@ export namespace editor::app
             for (pipeline::ImportPlanEntry& entry : file.plan.entries)
                 if (entry.kind == kind)
                     entry.enabled = on;
+            PlanChanged(index);
             ImportWindow* self = this;
             Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
         }
@@ -267,6 +269,20 @@ export namespace editor::app
                 }
             }
             return given;
+        }
+
+        /// File `index`'s plan changed (a part kept or dropped, the file described again): its settings
+        /// carry the plan as the review stands, what the import will make part by part, and its
+        /// preview draws that (a material dropped draws the default).
+        void PlanChanged(usize index)
+        {
+            if (!m_session || index >= m_session->files.Size())
+                return;
+            AssetImport::File& file = m_session->files[index];
+            if (file.options)
+                file.options->selection = file.plan;
+            if (index == m_selected && m_preview)
+                m_preview->OnSettingsChanged();
         }
 
         /// Shows file `index`'s preview and settings.
@@ -524,6 +540,8 @@ export namespace editor::app
                     m_previewPath = {};
                 if (factory != nullptr && !waits)
                 {
+                    if (file.options)
+                        m_session->files[m_selected].options->selection = file.plan; // the preview draws the plan as it stands
                     const editor::ImportPreviewSource source{file.path.AsView(), file.options.Get(), file.prepared.Get()};
                     m_preview = factory->Create(source, *m_services.tasks, m_allocator);
                 }
@@ -772,6 +790,7 @@ export namespace editor::app
                                      {
                                          if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
                                              self->m_session->files[index].plan.entries[e].enabled = checked;
+                                         self->PlanChanged(index);
                                          self->Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
                                      });
                     RefPtr<gui::Button> name = MakeRef<gui::Button>(m_allocator);
@@ -843,6 +862,7 @@ export namespace editor::app
                              {
                                  if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
                                      self->m_session->files[index].plan.entries[e].enabled = checked;
+                                 self->PlanChanged(index);
                                  self->Later([self]() { self->ShowFiles(); self->ShowWhy(); });
                              });
             detail.AddChild(on.Get());

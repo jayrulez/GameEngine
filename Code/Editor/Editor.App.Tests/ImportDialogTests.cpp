@@ -493,6 +493,10 @@ TEST_CASE("import window: a kind row is its importer's setting for the kind: unt
     CHECK(options->books);
     CHECK_FALSE(session->files[0].plan.entries[0].enabled);
     CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"0 of 1"));
+    // The settings carry the plan as the review stands, for a preview that draws it so.
+    const pipeline::ImportPlanEntry* board = options->selection.Find(pipeline::ImportResourceKind::Mesh, u8"Board");
+    REQUIRE(board != nullptr);
+    CHECK_FALSE(board->enabled);
     bed.window->Close();
 }
 

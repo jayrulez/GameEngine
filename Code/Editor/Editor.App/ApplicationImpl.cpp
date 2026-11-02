@@ -1172,6 +1172,8 @@ namespace editor::app
         }
         m_window.Update(dt);
         m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
+        if (m_importWindow)
+            m_importWindow->OnUpdate(host, dt); // the same for the import window's preview (a model's view)
         if (m_home)
             m_home->Refresh();
     }
@@ -1259,6 +1261,8 @@ namespace editor::app
             if (m_sceneRenderer != nullptr)
                 m_sceneRenderer->BeginRendering(*frame.encoder, frame.frameIndex);
             m_pages->Render(host, frame);
+            if (m_importWindow)
+                m_importWindow->OnRenderWindow(host, frame); // the import window's model preview
             if (editor::ThumbnailStage* stage = m_session.Stage())
                 stage->Render(frame); // a thumbnail in the same bracket
             if (m_sceneRenderer != nullptr)

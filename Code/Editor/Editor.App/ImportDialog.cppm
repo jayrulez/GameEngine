@@ -26,6 +26,8 @@ export module editor.app:import_dialog;
 import foundation.core;
 import foundation.content;
 import foundation.gui;
+import foundation.runtime.client; // IApplicationHost (a preview's frame hooks)
+import foundation.graphics;       // FrameContext
 import pipeline.importer;
 import editor.core; // EditorIcons
 import :asset_import;
@@ -41,6 +43,20 @@ export namespace editor::app
     /// ImportWindow::kPath, at namespace scope for another library to read (MSVC exports no class's
     /// static constexpr member from a shared library).
     inline constexpr const char8_t* kImportWindowPath = u8"Editor/Import.xml";
+
+    /// What a preview that renders (a model's live view) publishes: the editor's frame hooks, which
+    /// the window passes on while it is open, as the editor drives a page's.
+    class IImportPreviewFrames : public editor::IImportPreviewService
+    {
+    public:
+        /// Each frame, after the GUI laid out.
+        virtual void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) = 0;
+        /// Each frame, inside the scene renderer's bracket, before the GUI draws.
+        virtual void OnRenderWindow(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame) = 0;
+
+    protected:
+        ~IImportPreviewFrames() = default;
+    };
 
     class ImportWindow
     {
@@ -121,6 +137,20 @@ export namespace editor::app
         {
             if (IsOpen())
                 m_window->Close();
+        }
+
+        /// The editor's frame, passed to the selected file's preview while the window is open.
+        void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
+        {
+            if (IsOpen() && m_preview)
+                if (IImportPreviewFrames* frames = m_preview->Service<IImportPreviewFrames>())
+                    frames->OnUpdate(host, dt);
+        }
+        void OnRenderWindow(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame)
+        {
+            if (IsOpen() && m_preview)
+                if (IImportPreviewFrames* frames = m_preview->Service<IImportPreviewFrames>())
+                    frames->OnRenderWindow(host, frame);
         }
 
         /// Imports what is kept and closes; false (the window stays, saying why) when it cannot yet.

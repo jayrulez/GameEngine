@@ -12,6 +12,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include <type_traits>
 
 export module editor.core:import_preview;
 
@@ -116,11 +117,28 @@ export namespace editor
         Atomic<u32> m_inFlight{0};
     };
 
+    /// An interface a preview publishes beyond IImportPreview, which the window asks for by type
+    /// (the editor's frame hooks, for a preview that renders), as a page publishes its services.
+    class IImportPreviewService
+    {
+    protected:
+        ~IImportPreviewService() = default;
+    };
+
     /// One file's preview, made for the window and dropped when another file is selected.
     class IImportPreview
     {
     public:
         virtual ~IImportPreview() = default;
+
+        /// The interface this preview publishes as T, or null when it publishes none.
+        template <typename T>
+            requires std::is_base_of_v<IImportPreviewService, T>
+        [[nodiscard]] T* Service() const noexcept
+        {
+            IImportPreviewService* const* found = m_services.Find(TypeOf<T>().id);
+            return found != nullptr ? static_cast<T*>(*found) : nullptr;
+        }
 
         /// Set by the window: called when the preview's facts change (its read arrived).
         Function<void()> onChanged;
@@ -130,6 +148,18 @@ export namespace editor
         /// The line under it, a fact each ("2048 x 2048", "RGBA, 8-bit"); empty while it reads and
         /// when the file did not read.
         [[nodiscard]] virtual Span<const String> Facts() const = 0;
+
+    protected:
+        /// Publishes an interface this preview implements, from its constructor.
+        template <typename T>
+            requires std::is_base_of_v<IImportPreviewService, T>
+        void Provide(T& service)
+        {
+            m_services.InsertOrAssign(TypeOf<T>().id, static_cast<IImportPreviewService*>(&service));
+        }
+
+    private:
+        HashMap<TypeId, IImportPreviewService*> m_services;
     };
 
     /// Makes previews of the files an importer lists by one asset type (and, through nearest-type

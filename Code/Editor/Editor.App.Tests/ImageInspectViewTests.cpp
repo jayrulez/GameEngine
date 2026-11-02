@@ -13,6 +13,7 @@ import foundation.core;
 import foundation.image;
 import foundation.image.io;
 import foundation.gui;
+import editor.core;
 import editor.app;
 
 using namespace foundation::core;
@@ -134,12 +135,20 @@ TEST_CASE("image inspect: a new picture of the same size is a new image, so the 
     CHECK(view.Fitting()); // the same size: the fit is kept as it was
 }
 
-TEST_CASE("image file preview: a picture file shown, with its size, its channels as stored and whether its alpha is used")
+TEST_CASE("image file preview: read off the main thread, then the picture with its size, its channels as stored and whether its alpha is used")
 {
     const StringView path = u8"scratch_image_file_preview.png";
     REQUIRE(image::io::SaveImage(Picture(), path, image::io::ImageFileFormat::PNG).IsOk());
+    editor::ImportPreviewReader reader(DefaultAllocator());
     {
-        editor::app::ImageFilePreview preview(path, DefaultAllocator());
+        editor::app::ImageFilePreview preview(path, reader, DefaultAllocator());
+        u32 changed = 0;
+        preview.onChanged = [&changed]() { ++changed; };
+        // Reading: no picture and no facts until the read is handed back.
+        CHECK_FALSE(preview.Picture().View().HasImage());
+        CHECK(preview.Facts().IsEmpty());
+        reader.Finish();
+        CHECK(changed == 1u);
         CHECK(preview.Picture().View().HasImage());
         const Span<const String> facts = preview.Facts();
         REQUIRE(facts.Size() == 3u);
@@ -147,10 +156,18 @@ TEST_CASE("image file preview: a picture file shown, with its size, its channels
         CHECK(facts[1] == StringView(u8"RGBA, 8-bit"));
         CHECK(facts[2] == StringView(u8"Uses alpha"));
     }
+
+    // A preview gone before its read comes back: the result is dropped.
+    {
+        editor::app::ImageFilePreview gone(path, reader, DefaultAllocator());
+    }
+    reader.Finish();
+    CHECK(reader.InFlight() == 0u);
     FileDelete(path);
 
     // A file that does not decode shows why, with no facts.
-    editor::app::ImageFilePreview missing(u8"scratch_image_file_preview_missing.png", DefaultAllocator());
+    editor::app::ImageFilePreview missing(u8"scratch_image_file_preview_missing.png", reader, DefaultAllocator());
+    reader.Finish();
     CHECK_FALSE(missing.Picture().View().HasImage());
     CHECK(missing.Facts().IsEmpty());
 }

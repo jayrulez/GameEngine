@@ -73,6 +73,13 @@ namespace
         }
         [[nodiscard]] gui::Node& View() override { return *m_view; }
         [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
+        // As a read coming back does: new facts, and the window told.
+        void Arrive(StringView fact)
+        {
+            m_facts.PushBack(String(fact));
+            if (onChanged)
+                onChanged();
+        }
 
     private:
         RefPtr<gui::Label> m_view;
@@ -83,7 +90,7 @@ namespace
     public:
         explicit NamePreviewFactory(usize& made) : m_made(&made) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return &WindowThing::StaticType(); }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, IAllocator& allocator) override
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, editor::ImportPreviewReader&, IAllocator& allocator) override
         {
             ++*m_made;
             return UniquePtr<editor::IImportPreview>(allocator.New<NamePreview>(path), allocator);
@@ -151,6 +158,7 @@ namespace
             ImportWindow::Services windows;
             windows.import = import.Get();
             windows.previews = &context.ImportPreviews();
+            windows.previewReader = &context.ImportPreviewReads();
             window = MakeUnique<ImportWindow>(DefaultAllocator(), DefaultAllocator(), Move(windows), LoadImport());
             root->SetSize(Float2{1000.0f, 700.0f});
         }
@@ -237,7 +245,7 @@ TEST_CASE("import window: Import waits while a file is read, saying so, and open
     CHECK(session->closed);
 }
 
-TEST_CASE("import window: the preview registered for the type a file is listed by, its facts and the size under it, made again only for another file")
+TEST_CASE("import window: the preview registered for the type a file is listed by, its facts and the size under it, made again only for another file, its facts shown again when its read arrives")
 {
     Bed bed;
     usize made = 0;
@@ -255,5 +263,9 @@ TEST_CASE("import window: the preview registered for the type a file is listed b
     bed.window->Select(1);
     CHECK(made == 2u);
     CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Made for b.box"));
+
+    // A preview's read coming back shows its facts again.
+    static_cast<NamePreview*>(bed.window->Preview())->Arrive(u8"Read at last");
+    CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Read at last"));
     bed.window->Close();
 }

@@ -55,8 +55,10 @@ export namespace editor::app
             Function<void(content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
             /// The asset types' icons, as the Assets panel shows them (null: the generic one).
             editor::EditorIcons* icons = nullptr;
-            /// The domains' previews by asset type (null: none, each file shows its icon).
+            /// The domains' previews by asset type, and the reader they read their files on (either
+            /// null: none, each file shows its icon).
             const editor::ImportPreviewRegistry* previews = nullptr;
+            editor::ImportPreviewReader* previewReader = nullptr;
         };
 
         ImportWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> body)
@@ -303,12 +305,12 @@ export namespace editor::app
 
         // Shows the selected file's preview, and its facts under it: the preview a domain registers
         // for the type its importer lists it by, made again only when the file or that type
-        // changes; with none, its type's icon and its name. Its size ends the facts.
+        // changes; with none, its type's icon and its name. A preview reads its file off the main
+        // thread, and its facts show again when the read comes back.
         void ShowPreview()
         {
             auto* view = Find<gui::UIWidget>(u8"import-preview-view");
-            auto* facts = Find<gui::UIWidget>(u8"import-facts");
-            if (view == nullptr || facts == nullptr || !m_session || m_selected >= m_session->files.Size())
+            if (view == nullptr || !m_session || m_selected >= m_session->files.Size())
                 return;
             const AssetImport::File& file = m_session->files[m_selected];
             const pipeline::IFileImporter* importer = file.Importer();
@@ -320,10 +322,17 @@ export namespace editor::app
                 m_preview = {};
                 m_previewPath = file.path;
                 m_previewType = type;
-                if (editor::IImportPreviewFactory* factory = m_services.previews != nullptr ? m_services.previews->FindByName(type.AsView()) : nullptr)
-                    m_preview = factory->Create(file.path.AsView(), m_allocator);
+                editor::IImportPreviewFactory* factory = m_services.previews != nullptr && m_services.previewReader != nullptr
+                                                             ? m_services.previews->FindByName(type.AsView())
+                                                             : nullptr;
+                if (factory != nullptr)
+                    m_preview = factory->Create(file.path.AsView(), *m_services.previewReader, m_allocator);
                 if (m_preview)
+                {
+                    ImportWindow* self = this;
+                    m_preview->onChanged = [self]() { self->ShowFacts(); };
                     view->AddChild(&m_preview->View());
+                }
                 else
                 {
                     RefPtr<gui::Image> icon = MakeRef<gui::Image>(m_allocator);
@@ -333,6 +342,16 @@ export namespace editor::app
                     view->AddChild(Text(file.Name(), u8"import-preview-name").Get());
                 }
             }
+            ShowFacts();
+        }
+
+        // The selected file's facts: its preview's (its importer's label without one), then its size.
+        void ShowFacts()
+        {
+            auto* facts = Find<gui::UIWidget>(u8"import-facts");
+            if (facts == nullptr || !m_session || m_selected >= m_session->files.Size())
+                return;
+            const AssetImport::File& file = m_session->files[m_selected];
             while (facts->ChildCount() > 0)
                 facts->RemoveChild(facts->GetChildAt(facts->ChildCount() - 1));
             if (m_preview)

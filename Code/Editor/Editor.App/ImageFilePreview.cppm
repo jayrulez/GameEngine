@@ -6,8 +6,9 @@
 // The import window's preview of a picture file (Specs/import-window.md W2): the image pages'
 // ImagePreview over a bar of its own (fit, 1:1, the zoom, the channels, the pixel under the
 // pointer), with the facts the file's header gives: its size, its channels and depth as stored,
-// and whether its alpha is used. A domain whose importer makes an asset from a picture registers
-// it for that asset type (RegisterImageFilePreview).
+// and whether its alpha is used. It decodes the file on the ImportPreviewReader's worker, saying it
+// is reading meanwhile. A domain whose importer makes an asset from a picture registers it for that
+// asset type (RegisterImageFilePreview).
 
 module;
 #include "Core/Prelude.h"
@@ -16,6 +17,7 @@ module;
 export module editor.app:image_file_preview;
 
 import foundation.core;
+import foundation.image;
 import foundation.gui;
 import editor.core;
 import :image_inspect_view;
@@ -25,14 +27,17 @@ using namespace foundation::core;
 export namespace editor::app
 {
     namespace gui = foundation::gui;
+    namespace image = foundation::image;
 
     class ImageFilePreview final : public editor::IImportPreview
     {
     public:
-        /// Reads and shows the picture at `path`; a file that does not decode shows why, and no facts.
-        ImageFilePreview(StringView path, IAllocator& allocator);
+        /// Shows that it is reading `path`, and starts the read on `reader`; the picture and its
+        /// facts show when it comes back, or why it did not decode.
+        ImageFilePreview(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator);
         ImageFilePreview(const ImageFilePreview&) = delete;
         ImageFilePreview& operator=(const ImageFilePreview&) = delete;
+        ~ImageFilePreview() override;
 
         [[nodiscard]] gui::Node& View() override { return *m_root; }
         [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
@@ -41,9 +46,19 @@ export namespace editor::app
         [[nodiscard]] ImagePreview& Picture() noexcept { return *m_picture; }
 
     private:
+        // What the worker reads, for the main thread to show.
+        struct Decoded : RefCounted
+        {
+            image::Image pixels; // RGBA8, shown as is
+            Array<String> facts;
+            bool ok = false;
+        };
+        void Show(Decoded& decoded);
+
         RefPtr<gui::Node> m_root;
         UniquePtr<ImagePreview> m_picture;
         Array<String> m_facts;
+        RefPtr<editor::ImportPreviewRead> m_read;
     };
 
     /// Previews the picture files an importer lists by one asset type.
@@ -52,7 +67,7 @@ export namespace editor::app
     public:
         explicit ImageFilePreviewFactory(const TypeInfo& type) : m_type(&type) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

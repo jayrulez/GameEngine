@@ -14,6 +14,7 @@ import foundation.image;
 import foundation.image.io;
 import foundation.gui;
 import foundation.gui.toolkit;
+import pipeline.importer; // FileNameOf
 import editor.core;
 import :image_inspect_view;
 import :image_file_preview;
@@ -107,32 +108,59 @@ namespace editor::app
         }
     }
 
-    ImageFilePreview::ImageFilePreview(StringView path, IAllocator& allocator)
+    ImageFilePreview::ImageFilePreview(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator)
         : m_root(BuildView(allocator)), m_facts(allocator)
     {
         m_picture = MakeUnique<ImagePreview>(allocator, *m_root);
-        image::Image source;
-        if (!image::io::LoadImage(path, source).IsOk() || source.Width() == 0 || source.Height() == 0)
-        {
-            m_picture->ShowNone(u8"This file did not decode as a picture.");
-            return;
-        }
-        // The display is 8-bit: converted through the image library (floats clamp).
-        image::Image shown = source.Format() == image::PixelFormat::RGBA8 ? Move(source) : source.ConvertFormat(image::PixelFormat::RGBA8);
-        m_facts.PushBack(Format(u8"{} × {}", shown.Width(), shown.Height()));
-        image::io::ImageFileInfo info;
-        if (image::io::ReadImageFileInfo(path, info))
-        {
-            m_facts.PushBack(ChannelsText(info));
-            if (info.channels == 2 || info.channels == 4)
-                m_facts.PushBack(String(UsesAlpha(shown) ? StringView(u8"Uses alpha") : StringView(u8"Alpha unused")));
-        }
-        m_picture->Show(Move(shown));
+        m_picture->ShowNone(Format(u8"Reading {}...", pipeline::FileNameOf(path)).AsView());
+        RefPtr<Decoded> decoded = MakeRef<Decoded>(allocator);
+        ImageFilePreview* self = this;
+        // On the worker: only the file and `decoded`, which nothing else touches until it is back.
+        m_read = reader.Read([decoded, file = String(path)]()
+                             {
+                                 image::Image source;
+                                 if (!image::io::LoadImage(file.AsView(), source).IsOk() || source.Width() == 0 || source.Height() == 0)
+                                     return;
+                                 // The display is 8-bit: converted through the image library (floats clamp).
+                                 decoded->pixels = source.Format() == image::PixelFormat::RGBA8 ? Move(source) : source.ConvertFormat(image::PixelFormat::RGBA8);
+                                 decoded->facts.PushBack(Format(u8"{} × {}", decoded->pixels.Width(), decoded->pixels.Height()));
+                                 image::io::ImageFileInfo info;
+                                 if (image::io::ReadImageFileInfo(file.AsView(), info))
+                                 {
+                                     decoded->facts.PushBack(ChannelsText(info));
+                                     if (info.channels == 2 || info.channels == 4)
+                                         decoded->facts.PushBack(String(UsesAlpha(decoded->pixels) ? StringView(u8"Uses alpha") : StringView(u8"Alpha unused")));
+                                 }
+                                 decoded->ok = true;
+                             },
+                             // On the main thread, and only while this preview lives (it cancels the read as it goes).
+                             [self, decoded]() { self->Show(*decoded); });
     }
 
-    UniquePtr<editor::IImportPreview> ImageFilePreviewFactory::Create(StringView path, IAllocator& allocator)
+    ImageFilePreview::~ImageFilePreview()
     {
-        return UniquePtr<editor::IImportPreview>(allocator.New<ImageFilePreview>(path, allocator), allocator);
+        if (m_read)
+            m_read->Cancel();
+    }
+
+    void ImageFilePreview::Show(Decoded& decoded)
+    {
+        if (!decoded.ok)
+        {
+            m_picture->ShowNone(u8"This file did not decode as a picture.");
+        }
+        else
+        {
+            m_facts = Move(decoded.facts);
+            m_picture->Show(Move(decoded.pixels));
+        }
+        if (onChanged)
+            onChanged();
+    }
+
+    UniquePtr<editor::IImportPreview> ImageFilePreviewFactory::Create(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator)
+    {
+        return UniquePtr<editor::IImportPreview>(allocator.New<ImageFilePreview>(path, reader, allocator), allocator);
     }
 
     void RegisterImageFilePreview(editor::EditorContext& context, const TypeInfo& type)

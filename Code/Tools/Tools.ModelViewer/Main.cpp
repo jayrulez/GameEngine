@@ -3247,6 +3247,7 @@ namespace
             case editor::OpenModel::Outcome::LoadFailed: return u8"the file could not be read";
             case editor::OpenModel::Outcome::CookFailed: return u8"it did not cook";
             case editor::OpenModel::Outcome::BindFailed: return u8"it did not load";
+            case editor::OpenModel::Outcome::Cancelled: return u8"its cook was stopped";
             }
             return u8"";
         }

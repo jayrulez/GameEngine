@@ -331,3 +331,39 @@ TEST_CASE("model preview: the materials and textures are listed, kept in the rec
     CHECK(counted.textureList[0].file == u8"Texture.png");
     CHECK(counted.textureList[0].width > 0u);
 }
+
+TEST_CASE("model preview: a cook told to stop says so and clears its folder, so the next open cooks afresh; Cook and Bind are Finish's two halves")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String cache = FreshCache(u8"scratch_model_viewer_cook_cancel");
+    foundation::model::Model model;
+    editor::ModelStats stats;
+    REQUIRE(editor::OpenModel::LoadFile(fox.AsView(), true, model, stats) == editor::OpenModel::Outcome::Opened);
+
+    String folder;
+    {
+        editor::OpenModel open(DefaultAllocator());
+        editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
+        REQUIRE(open.Begin(fox.AsView(), cache.AsView(), nullptr, outcome) == editor::OpenModel::Begun::NeedsFile);
+        folder = String(open.CacheFolder());
+        RefPtr<editor::ModelCache> kept = open.Cache();
+        REQUIRE(kept);
+        CancelSource cancel(DefaultAllocator());
+        cancel.Cancel();
+        Guid guid;
+        CHECK(editor::OpenModel::Cook(*kept, model, stats, guid, cancel.Token()) == editor::OpenModel::Outcome::Cancelled);
+        CHECK_FALSE(DirectoryExists(folder.AsView())); // nothing half-made is left for the next open
+        CHECK_FALSE(open.IsOpen());
+    }
+
+    // The next open finds no record and cooks; split, as a window runs it, it binds what Cook made.
+    editor::OpenModel open(DefaultAllocator());
+    editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
+    REQUIRE(open.Begin(fox.AsView(), cache.AsView(), nullptr, outcome) == editor::OpenModel::Begun::NeedsFile);
+    Guid guid;
+    REQUIRE(editor::OpenModel::Cook(*open.Cache(), model, stats, guid) == editor::OpenModel::Outcome::Opened);
+    CHECK(FileExists(PathJoin(folder.AsView(), StringView(editor::OpenModel::kRecordName)).AsView()));
+    CHECK(open.Bind(guid, stats) == editor::OpenModel::Outcome::Opened);
+    CHECK(open.IsOpen());
+    CHECK(open.Stats().triangles == stats.triangles);
+}

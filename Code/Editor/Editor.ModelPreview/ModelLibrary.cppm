@@ -452,6 +452,23 @@ export namespace editor
         return haveModel;
     }
 
+    /// A model's cook cache: its folder and the content database over it. Reference-counted, so a
+    /// cook running on a worker keeps it alive when the OpenModel that made it goes first.
+    class ModelCache final : public RefCounted
+    {
+    public:
+        ModelCache(IAllocator& allocator, StringView folderPath)
+            : folder(folderPath),
+              fileSystem(MakeUnique<foundation::vfs::NativeFileSystem>(allocator, folderPath, allocator)),
+              database(MakeUnique<content::ContentDatabase>(allocator, allocator, *fileSystem, BinarySerializerFactory(), u8".rasset"))
+        {
+        }
+
+        String folder;
+        UniquePtr<foundation::vfs::NativeFileSystem> fileSystem;
+        UniquePtr<content::ContentDatabase> database;
+    };
+
     /// A model file open for viewing: its stats and the bound cooked model, which lives as long as this.
     class OpenModel
     {
@@ -464,6 +481,7 @@ export namespace editor
             LoadFailed, // the loaders could not read it
             CookFailed,
             BindFailed,
+            Cancelled, // its cook was told to stop
         };
 
         OpenModel(IAllocator& allocator) : m_allocator(&allocator) {}
@@ -538,26 +556,23 @@ export namespace editor
             outcome = Outcome::NotFound;
             if (folder.IsEmpty())
                 return Begun::Failed;
+            String text;
+            if (Result<Array<byte>> bytes = ReadFile(PathJoin(folder.AsView(), StringView(kRecordName)).AsView()); bytes.HasValue())
+                text = String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+            Guid guid;
+            const bool cooked = !text.IsEmpty() && ReadRecord(text.AsView(), guid, m_stats);
             outcome = Outcome::CookFailed;
             if (!CreateDirectories(folder.AsView()))
                 return Begun::Failed;
-            m_folder = folder;
-            m_fileSystem = MakeUnique<foundation::vfs::NativeFileSystem>(*m_allocator, folder.AsView(), *m_allocator);
-            m_database = MakeUnique<content::ContentDatabase>(*m_allocator, *m_allocator, *m_fileSystem, BinarySerializerFactory(),
-                                                              u8".rasset");
-            m_resources = MakeUnique<resource::ResourceManager>(*m_allocator, *m_allocator, *m_database);
+            m_cache = MakeRef<ModelCache>(*m_allocator, *m_allocator, folder.AsView());
+            m_resources = MakeUnique<resource::ResourceManager>(*m_allocator, *m_allocator, *m_cache->database);
             resource::ResourceServiceTable services;
             if (device != nullptr)
                 services.Add<foundation::rhi::Device>(device);
             engine::FullComposition().CreateFactories(m_factories, *m_allocator, services);
             m_factories.Register(*m_resources);
             engine::RegisterAllResourceTypes();
-
-            String text;
-            if (Result<Array<byte>> bytes = ReadFile(RecordPath().AsView()); bytes.HasValue())
-                text = String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
-            Guid guid;
-            if (text.IsEmpty() || !ReadRecord(text.AsView(), guid, m_stats))
+            if (!cooked)
             {
                 m_stats = {};
                 return Begun::NeedsFile;
@@ -567,17 +582,47 @@ export namespace editor
         }
 
         /// The last step, after Begin returned NeedsFile: cooks `model` (as LoadFile read it) into
-        /// the cache, writes its record, and binds it.
-        Outcome Finish(foundation::model::Model& model, const ModelStats& stats)
+        /// the cache, writes its record, and binds it. Cook and Bind are the same two halves, for a
+        /// window that cooks on a worker.
+        Outcome Finish(const foundation::model::Model& model, const ModelStats& stats)
         {
-            if (!m_database)
+            if (!m_cache)
                 return Outcome::CookFailed;
-            m_stats = stats;
             Guid guid;
-            if (!pipeline::CookModel(model, *m_database, u8"model", guid).IsOk())
+            const Outcome cooked = Cook(*m_cache, model, stats, guid);
+            return cooked == Outcome::Opened ? Bind(guid, stats) : cooked;
+        }
+
+        /// The cache Begin made (null before it): what a worker cooks into.
+        [[nodiscard]] RefPtr<ModelCache> Cache() const noexcept { return m_cache; }
+
+        /// Cooks `model` into `cache` and writes its record; safe on a worker while nothing else uses
+        /// the cache (Begin made it and binds nothing until Bind). Stops when `cancel` is cancelled
+        /// and clears the folder of what it made, so the next open cooks afresh; the OpenModel that
+        /// cancelled it is going, and binds nothing from it. Opened on success, with `guid` the model
+        /// to Bind.
+        static Outcome Cook(ModelCache& cache, const foundation::model::Model& model, const ModelStats& stats, Guid& guid, const CancelToken& cancel = {})
+        {
+            const Status cooked = pipeline::CookModel(model, *cache.database, u8"model", guid, cancel);
+            if (cooked.Code() == ErrorCode::Cancelled)
+            {
+                (void)RemoveDirectoryRecursive(cache.folder.AsView());
+                return Outcome::Cancelled;
+            }
+            if (!cooked.IsOk())
                 return Outcome::CookFailed;
-            const String record = WriteRecord(guid, m_stats);
-            (void)WriteFile(RecordPath().AsView(), Span<const byte>(reinterpret_cast<const byte*>(record.Data()), record.Size()));
+            const String record = WriteRecord(guid, stats);
+            (void)WriteFile(PathJoin(cache.folder.AsView(), StringView(kRecordName)).AsView(),
+                            Span<const byte>(reinterpret_cast<const byte*>(record.Data()), record.Size()));
+            return Outcome::Opened;
+        }
+
+        /// Binds what Cook made, on the thread that owns the resources.
+        Outcome Bind(const Guid& guid, const ModelStats& stats)
+        {
+            if (!m_resources)
+                return Outcome::BindFailed;
+            m_stats = stats;
             return BindCooked(guid, Outcome::Opened);
         }
 
@@ -587,15 +632,14 @@ export namespace editor
             m_model = {};
             m_resources.Reset();
             m_factories.Clear();
-            m_database.Reset();
-            m_fileSystem.Reset();
+            m_cache.Reset(); // a cook still running keeps its own reference
         }
 
         [[nodiscard]] bool IsOpen() const noexcept { return static_cast<bool>(m_model); }
         [[nodiscard]] foundation::model::ModelResource* Model() const noexcept { return m_model.Get(); }
         [[nodiscard]] const ModelStats& Stats() const noexcept { return m_stats; }
         [[nodiscard]] StringView Path() const noexcept { return m_path.AsView(); }
-        [[nodiscard]] StringView CacheFolder() const noexcept { return m_folder.AsView(); }
+        [[nodiscard]] StringView CacheFolder() const noexcept { return m_cache ? m_cache->folder.AsView() : StringView{}; }
         /// The resource manager; its loads finish as it is pumped.
         [[nodiscard]] resource::ResourceManager* Resources() const noexcept { return m_resources.Get(); }
 
@@ -603,7 +647,6 @@ export namespace editor
         static constexpr ENGINE_EXPORT_DATA const char8_t* kRecordName = u8"viewer-record.txt";
 
     private:
-        [[nodiscard]] String RecordPath() const { return PathJoin(m_folder.AsView(), StringView(kRecordName)); }
         Outcome BindCooked(const Guid& guid, Outcome done)
         {
             m_model = m_resources->Bind<foundation::model::ModelResource>(guid);
@@ -613,10 +656,8 @@ export namespace editor
         IAllocator* m_allocator;
         String m_path;
         bool m_looseTextures = true;
-        String m_folder;
         ModelStats m_stats;
-        UniquePtr<foundation::vfs::NativeFileSystem> m_fileSystem;
-        UniquePtr<content::ContentDatabase> m_database;
+        RefPtr<ModelCache> m_cache;
         UniquePtr<resource::ResourceManager> m_resources;
         resource::ResourceFactorySet m_factories;
         resource::Proxy<foundation::model::ModelResource> m_model;

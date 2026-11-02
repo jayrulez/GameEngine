@@ -57,6 +57,10 @@ export namespace editor
         // === For tests ===
         /// Whether the model opened (cooked or from the cache, and bound).
         [[nodiscard]] bool IsOpen() const;
+        /// Whether its parts are loading (it binds once they are in).
+        [[nodiscard]] bool IsLoading() const;
+        /// Runs its pool and its loading to the end, as frames would, without a host.
+        void FinishLoading();
         /// The clips the picker lists, by name.
         [[nodiscard]] Span<const String> Clips() const;
 

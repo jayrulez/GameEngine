@@ -482,12 +482,17 @@ export namespace editor
             CookFailed,
             BindFailed,
             Cancelled, // its cook was told to stop
+            Loading,   // its parts load on the task pool; Update binds it once they have
         };
 
         OpenModel(IAllocator& allocator) : m_allocator(&allocator) {}
         /// Whether a material without its texture takes an image beside the model (ApplyLooseTextures).
         /// On by default. It changes what cooks, so each setting has its own cache folder.
         void SetLooseTextures(bool on) noexcept { m_looseTextures = on; }
+        /// Where the model's parts decode (before Begin). With a pool the model loads over frames:
+        /// Begin and Bind answer Loading, and Update binds it once every part is in. Without one,
+        /// everything binds at once on the calling thread.
+        void SetTasks(TaskPool* tasks) noexcept { m_tasks = tasks; }
         [[nodiscard]] bool LooseTextures() const noexcept { return m_looseTextures; }
         OpenModel(const OpenModel&) = delete;
         OpenModel& operator=(const OpenModel&) = delete;
@@ -543,6 +548,7 @@ export namespace editor
         {
             Bound,     // cooked before: bound from the cache and open
             NeedsFile, // the file must be read (LoadFile, on any thread), then Finish called
+            Loading,   // cooked before: its parts load on the task pool, Update binds it
             Failed,
         };
         /// The first step, run on the thread that owns the resources. It creates the cache folder,
@@ -565,7 +571,7 @@ export namespace editor
             if (!CreateDirectories(folder.AsView()))
                 return Begun::Failed;
             m_cache = MakeRef<ModelCache>(*m_allocator, *m_allocator, folder.AsView());
-            m_resources = MakeUnique<resource::ResourceManager>(*m_allocator, *m_allocator, *m_cache->database);
+            m_resources = MakeUnique<resource::ResourceManager>(*m_allocator, *m_allocator, *m_cache->database, m_tasks);
             resource::ResourceServiceTable services;
             if (device != nullptr)
                 services.Add<foundation::rhi::Device>(device);
@@ -576,6 +582,12 @@ export namespace editor
             {
                 m_stats = {};
                 return Begun::NeedsFile;
+            }
+            if (m_tasks != nullptr)
+            {
+                StartLoading(guid, Outcome::FromCache);
+                outcome = Outcome::Loading;
+                return Begun::Loading;
             }
             outcome = BindCooked(guid, Outcome::FromCache);
             return outcome == Outcome::FromCache ? Begun::Bound : Begun::Failed;
@@ -617,19 +629,49 @@ export namespace editor
             return Outcome::Opened;
         }
 
-        /// Binds what Cook made, on the thread that owns the resources.
+        /// Binds what Cook made, on the thread that owns the resources (with a pool: starts its
+        /// parts loading, and answers Loading).
         Outcome Bind(const Guid& guid, const ModelStats& stats)
         {
             if (!m_resources)
                 return Outcome::BindFailed;
             m_stats = stats;
+            if (m_tasks != nullptr)
+            {
+                StartLoading(guid, Outcome::Opened);
+                return Outcome::Loading;
+            }
             return BindCooked(guid, Outcome::Opened);
         }
+
+        /// Once a frame on the thread that owns the resources: finishes the parts decoded since,
+        /// within the frame's share, and binds the model once none is left. Loading until then;
+        /// then what the open came to (Opened or FromCache once, BindFailed when it did not bind).
+        Outcome Update()
+        {
+            if (!m_resources)
+                return Outcome::BindFailed;
+            m_resources->Pump();
+            if (!m_loading)
+                return IsOpen() ? Outcome::Opened : Outcome::BindFailed;
+            if (m_resources->PendingCount() > 0)
+                return Outcome::Loading;
+            m_loading = false;
+            m_parts.Clear(); // the model holds what it uses now
+            return BindCooked(m_loadingGuid, m_loadingOutcome);
+        }
+
+        /// While it loads: the parts asked for, and how many are still on their way.
+        [[nodiscard]] bool IsLoading() const noexcept { return m_loading; }
+        [[nodiscard]] usize PartsAsked() const noexcept { return m_parts.Size(); }
+        [[nodiscard]] usize PartsPending() const noexcept { return m_resources ? m_resources->PendingCount() : 0u; }
 
         /// Releases the model and everything it bound.
         void Close()
         {
             m_model = {};
+            m_loading = false;
+            m_parts.Clear();
             m_resources.Reset();
             m_factories.Clear();
             m_cache.Reset(); // a cook still running keeps its own reference
@@ -647,6 +689,38 @@ export namespace editor
         static constexpr ENGINE_EXPORT_DATA const char8_t* kRecordName = u8"viewer-record.txt";
 
     private:
+        // Asks for every part the model's manifest names, each as whatever its cooked form makes,
+        // so their decodes run on the pool; under the async scope, so a material's textures do too.
+        // The model binds in Update once none is pending: from parts all in, at once.
+        void StartLoading(const Guid& model, Outcome done)
+        {
+            m_loading = true;
+            m_loadingGuid = model;
+            m_loadingOutcome = done;
+            m_parts.Clear();
+            content::Instance* instance = m_cache->database->GetInstance(model);
+            RefPtr<ISerializable> object = instance != nullptr ? instance->ReadObject() : RefPtr<ISerializable>{};
+            const auto* manifest = Cast<foundation::model::ModelManifestSource>(object.Get());
+            if (manifest == nullptr)
+                return; // Update binds it at once, and says why it did not
+            resource::AsyncBindScope scope(*m_resources);
+            const auto ask = [this](const Guid& id)
+            {
+                if (!id.IsNil())
+                    if (RefPtr<resource::ResourceHandle> part = m_resources->BindAsyncAny(id))
+                        m_parts.PushBack(Move(part));
+            };
+            for (const Guid& id : manifest->meshGuids)
+                ask(id);
+            for (const Guid& id : manifest->materialAlbedo)
+                ask(id);
+            for (const Guid& id : manifest->materialGuids)
+                ask(id);
+            ask(manifest->skeletonGuid);
+            for (const Guid& id : manifest->animationGuids)
+                ask(id);
+        }
+
         Outcome BindCooked(const Guid& guid, Outcome done)
         {
             m_model = m_resources->Bind<foundation::model::ModelResource>(guid);
@@ -657,7 +731,12 @@ export namespace editor
         String m_path;
         bool m_looseTextures = true;
         ModelStats m_stats;
+        TaskPool* m_tasks = nullptr;
         RefPtr<ModelCache> m_cache;
+        Array<RefPtr<resource::ResourceHandle>> m_parts; // asked for while it loads
+        Guid m_loadingGuid;
+        Outcome m_loadingOutcome = Outcome::Opened;
+        bool m_loading = false;
         UniquePtr<resource::ResourceManager> m_resources;
         resource::ResourceFactorySet m_factories;
         resource::Proxy<foundation::model::ModelResource> m_model;

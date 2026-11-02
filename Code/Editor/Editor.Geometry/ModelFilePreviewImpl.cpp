@@ -186,11 +186,17 @@ namespace editor
             // As the importer reads it: without the viewer's loose texture rule, which the import
             // does not apply either, so the preview shows what will come in.
             open.SetLooseTextures(false);
+            open.SetTasks(&tasks); // its parts decode there, and OnUpdate binds it once they are in
             OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
             const OpenModel::Begun begun = open.Begin(path.AsView(), cacheRoot, device, outcome);
             if (begun == OpenModel::Begun::Bound)
             {
                 Opened();
+                return;
+            }
+            if (begun == OpenModel::Begun::Loading)
+            {
+                ShowLoading();
                 return;
             }
             if (begun == OpenModel::Begun::Failed)
@@ -231,7 +237,9 @@ namespace editor
                                         return;
                                     }
                                     const OpenModel::Outcome bound = self->open.Bind(result->guid, result->stats);
-                                    if (bound == OpenModel::Outcome::Opened)
+                                    if (bound == OpenModel::Outcome::Loading)
+                                        self->ShowLoading();
+                                    else if (bound == OpenModel::Outcome::Opened)
                                         self->Opened();
                                     else
                                         self->Failed(bound);
@@ -247,6 +255,29 @@ namespace editor
                 read->Cancel();
                 pool->Wait(*read);
             }
+        }
+
+        // While its parts load: how many are in.
+        void ShowLoading()
+        {
+            const usize asked = open.PartsAsked();
+            const usize pending = open.PartsPending();
+            message->SetText(Format(u8"Loading {} of {} parts...", asked > pending ? asked - pending : 0u, asked).AsView());
+            message->SetDisplayed(true);
+        }
+
+        // Once a frame while it loads: binds it when its parts are in.
+        void UpdateLoading()
+        {
+            if (!open.IsLoading())
+                return;
+            const OpenModel::Outcome outcome = open.Update();
+            if (outcome == OpenModel::Outcome::Loading)
+                ShowLoading();
+            else if (outcome == OpenModel::Outcome::Opened || outcome == OpenModel::Outcome::FromCache)
+                Opened();
+            else
+                Failed(outcome);
         }
 
         void Failed(OpenModel::Outcome outcome)
@@ -418,7 +449,9 @@ namespace editor
 
     void ModelFilePreview::OnUpdate(foundation::runtime::IApplicationHost&, f32 dt)
     {
-        if (m_impl->open.IsOpen())
+        if (m_impl->open.IsLoading())
+            m_impl->UpdateLoading(); // its parts finish a few a frame; it binds once they are in
+        else if (m_impl->open.IsOpen())
             m_impl->open.Resources()->Pump(); // the model's textures finish loading (not while it cooks)
         if (!m_impl->viewport)
             return;
@@ -437,6 +470,23 @@ namespace editor
     bool ModelFilePreview::IsOpen() const
     {
         return m_impl->open.IsOpen();
+    }
+
+    bool ModelFilePreview::IsLoading() const
+    {
+        return m_impl->open.IsLoading();
+    }
+
+    void ModelFilePreview::FinishLoading()
+    {
+        if (m_impl->pool != nullptr)
+            m_impl->pool->Finish();
+        for (u32 frame = 0; frame < 100000u && m_impl->open.IsLoading(); ++frame)
+        {
+            if (m_impl->pool != nullptr)
+                m_impl->pool->Finish();
+            m_impl->UpdateLoading();
+        }
     }
 
     Span<const String> ModelFilePreview::Clips() const

@@ -45,6 +45,9 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
         CHECK_FALSE(preview.IsOpen()); // still reading
         CHECK(preview.Facts().IsEmpty());
         tasks.Finish();
+        CHECK(preview.IsLoading()); // cooked; its parts now load on the pool, a few a frame
+        CHECK_FALSE(preview.IsOpen());
+        preview.FinishLoading();
         CHECK(changed == 1u);
         REQUIRE(preview.IsOpen());
         // Fox.gltf: one mesh of 576 triangles, one material and texture, 24 bones, three clips.
@@ -60,11 +63,14 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
         CHECK(preview.Clips()[0] == StringView(u8"Survey"));
     }
 
-    // Opened again, it binds what the first open cooked, with no read.
+    // Opened again, it loads what the first open cooked, with no read and no cook: its parts
+    // load on the pool, never on the window's thread.
     {
         editor::ModelFilePreview again(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services);
+        CHECK(again.IsLoading());
+        CHECK_FALSE(again.IsOpen());
+        again.FinishLoading();
         CHECK(again.IsOpen());
-        CHECK(tasks.InFlight() == 0u);
         CHECK(again.Facts().Size() == 6u);
     }
 
@@ -94,7 +100,8 @@ TEST_CASE("model file preview: given the importer's read, it cooks that on the p
         CHECK_FALSE(preview.IsOpen()); // its cook is a task: the window's thread goes on
         CHECK(tasks.InFlight() == 1u);  // the cook alone, no read of its own
         tasks.Finish();
-        CHECK(preview.IsOpen()); // bound in the completion
+        preview.FinishLoading(); // its parts, then the bind
+        CHECK(preview.IsOpen());
         CHECK(preview.Facts().Size() == 6u);
     }
     (void)RemoveDirectoryRecursive(cache.AsView());

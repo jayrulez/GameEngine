@@ -64,7 +64,7 @@ export namespace editor
         // The allocator (required; the editor application passes its tagged "Editor" root) backs
         // every page, panel and editor service.
         explicit EditorContext(IAllocator& allocator) noexcept
-            : m_allocator(&allocator), m_importers(allocator), m_creators(allocator)
+            : m_allocator(&allocator), m_importers(allocator), m_previewReader(allocator), m_creators(allocator)
         {
             // The argument-less action calls (menus, chords, the palette, the MCP bridge) run over
             // the active page; a page's own toolbar names its page instead.
@@ -346,6 +346,8 @@ export namespace editor
         [[nodiscard]] EditorPageRegistry& Pages() noexcept { return m_pageRegistry; }
         /// The import window's previews, by asset type: a domain registers one beside its page.
         [[nodiscard]] ImportPreviewRegistry& ImportPreviews() noexcept { return m_importPreviews; }
+        /// The previews' reads, off the main thread; the host pumps it each frame.
+        [[nodiscard]] ImportPreviewReader& ImportPreviewReads() noexcept { return m_previewReader; }
 
         /// The editor's actions (see :actions): registered in the composition roots, every
         /// surface built from them, executed through them.
@@ -544,6 +546,7 @@ export namespace editor
         pipeline::ImporterRegistry m_importers;                               // borrowed
         EditorPageRegistry m_pageRegistry;
         ImportPreviewRegistry m_importPreviews;
+        ImportPreviewReader m_previewReader;
         EditorActionRegistry m_actions;
         pipeline::AssetCreatorRegistry m_creators;
         String m_clipboardKind;

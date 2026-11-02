@@ -230,3 +230,9 @@ TEST_CASE("importer: the ledger keeps one line per file, the last origin")
     CHECK(lines == 2u);
     CHECK(ImportOriginOf({}, u8"a.png").IsEmpty()); // no ledger: says nothing
 }
+
+TEST_CASE("importer: the type a file is listed by is its one asset's, unless the importer names another")
+{
+    FakeImporter fake;
+    CHECK(fake.ListedTypeName(u8"a.fak") == fake.AssetTypeName(u8"a.fak")); // the default follows the asset it makes
+}

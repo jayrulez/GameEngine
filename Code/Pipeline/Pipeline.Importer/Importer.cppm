@@ -335,6 +335,10 @@ export namespace pipeline
         /// name-clash check before an import; empty for an importer that makes several (a
         /// model's), which keeps its own names apart.
         [[nodiscard]] virtual StringView AssetTypeName(StringView /*sourcePath*/) const { return {}; }
+        /// The asset type that stands for `sourcePath` where the file is listed (its icon in the
+        /// import window): the one asset a single-asset importer makes, else the one the others
+        /// hang from (a model's manifest).
+        [[nodiscard]] virtual StringView ListedTypeName(StringView sourcePath) const { return AssetTypeName(sourcePath); }
 
         /// The clash an import of `sourcePath` would meet in `group` under the names `plan` gives
         /// (ImportClashKind): what the editor's window shows on the file's row, and what an agent's

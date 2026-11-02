@@ -235,6 +235,7 @@ export namespace pipeline
     {
     public:
         [[nodiscard]] StringView Label() const override { return u8"Model"; }
+        [[nodiscard]] StringView ListedTypeName(StringView) const override { return u8"ModelManifestAsset"; }
 
         [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override
         {

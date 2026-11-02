@@ -2597,3 +2597,10 @@ TEST_CASE("model import: the same file re-imports in place; another file of its 
     project.Reset();
     (void)RemoveDirectoryRecursive(dir.AsView());
 }
+
+TEST_CASE("model-import: a model file is listed by its manifest, while it names no single asset type")
+{
+    pipeline::ModelFileImporter importer;
+    CHECK(importer.AssetTypeName(u8"rider.glb").IsEmpty()); // several assets: it keeps its own names apart
+    CHECK(importer.ListedTypeName(u8"rider.glb") == StringView(u8"ModelManifestAsset"));
+}

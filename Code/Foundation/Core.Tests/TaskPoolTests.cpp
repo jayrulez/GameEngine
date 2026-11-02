@@ -239,3 +239,28 @@ TEST_CASE("task pool: the default worker count leaves the frame its threads")
     CHECK(count <= 4u);
 #endif
 }
+
+TEST_CASE("task pool: Finish waits for every task, then hands them back; InFlight counts what is not handed back yet")
+{
+    const u32 counts[] = {0u, 2u}; // no workers, then two
+    for (u32 workers : counts)
+    {
+#if PLATFORM_WEB
+        if (workers > 0u)
+            continue;
+#endif
+        TaskPool pool(DefaultAllocator(), workers);
+        const TaskLane lane = pool.CreateLane(u8"serial");
+        Atomic<int> ran{0};
+        int completed = 0;
+        for (int i = 0; i < 3; ++i)
+            (void)pool.Submit(u8"shared", [&ran](TaskContext&) { ran.fetch_add(1); return Status{}; }, [&completed](Status) { ++completed; });
+        for (int i = 0; i < 3; ++i)
+            (void)pool.Submit(u8"lane", [&ran](TaskContext&) { ran.fetch_add(1); return Status{}; }, [&completed](Status) { ++completed; }, lane);
+        CHECK(pool.InFlight() == 6u);
+        pool.Finish();
+        CHECK(ran.load() == 6);
+        CHECK(completed == 6);
+        CHECK(pool.InFlight() == 0u);
+    }
+}

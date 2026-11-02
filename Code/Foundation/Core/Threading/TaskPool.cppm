@@ -171,14 +171,13 @@ export namespace foundation::core
 #endif
         }
 
-        /// `workerCount` 0 runs every task in Pump on the calling thread.
+        /// `workerCount` 0 runs every task in Pump on the calling thread. The workers start with the
+        /// first task, so a pool nothing uses costs no threads.
         TaskPool(IAllocator& allocator, u32 workerCount)
-            : m_allocator(&allocator), m_lanes(allocator), m_runnable(allocator), m_running(allocator), m_finished(allocator),
-              m_workers(allocator)
+            : m_allocator(&allocator), m_workerCount(workerCount), m_lanes(allocator), m_runnable(allocator), m_running(allocator),
+              m_finished(allocator), m_workers(allocator)
         {
             m_lanes.PushBack(Lane{String(u8"Shared"), Array<RefPtr<TaskHandle>>(allocator), false}); // TaskLane::Shared, never busy
-            for (u32 i = 0; i < workerCount; ++i)
-                m_workers.PushBack(Thread([this]() { WorkerLoop(); }));
         }
 
         TaskPool(const TaskPool&) = delete;
@@ -218,6 +217,9 @@ export namespace foundation::core
         {
             RefPtr<TaskHandle> task = MakeRef<TaskHandle>(*m_allocator, *m_allocator, name, lane, static_cast<Function<Status(TaskContext&)>&&>(work),
                                                           static_cast<Function<void(Status)>&&>(done));
+            if (m_workers.Size() < m_workerCount)
+                for (u32 i = static_cast<u32>(m_workers.Size()); i < m_workerCount; ++i)
+                    m_workers.PushBack(Thread([this]() { WorkerLoop(); }));
             {
                 ScopedLock lock(m_mutex);
                 DIAGNOSTIC_ASSERT(static_cast<usize>(lane) < m_lanes.Size());
@@ -241,7 +243,7 @@ export namespace foundation::core
         /// queued tasks here, one at a time, for as long as `budget` allows (at least one).
         void Pump(const Function<void(const TaskHandle&, StringView)>& log = {}, Duration budget = Duration::FromMilliseconds(8.0))
         {
-            if (m_workers.IsEmpty())
+            if (m_workerCount == 0u)
             {
                 const Stopwatch clock = Stopwatch::StartNew();
                 do
@@ -283,7 +285,7 @@ export namespace foundation::core
                         return;
                     if (task.State() == TaskState::Queued && task.IsCancelled() && DropIfQueued(task))
                         return;
-                    if (!m_workers.IsEmpty())
+                    if (m_workerCount != 0u)
                     {
                         while (!task.IsEnded())
                             m_ended.Wait(m_mutex);
@@ -293,6 +295,35 @@ export namespace foundation::core
                 if (!RunOneInline())
                     return; // nothing left to run: it was never this pool's
             }
+        }
+
+        /// Waits for every task to end, then pumps: the completions run here (tests; a host that
+        /// must have its work done before it goes on). A pool of no workers runs them all here.
+        void Finish(const Function<void(const TaskHandle&, StringView)>& log = {})
+        {
+            if (m_workerCount == 0u)
+            {
+                while (RunOneInline())
+                {
+                }
+            }
+            else
+            {
+                ScopedLock lock(m_mutex);
+                while (!m_runnable.IsEmpty() || !m_running.IsEmpty() || AnyLaneQueued())
+                    m_ended.Wait(m_mutex);
+            }
+            Pump(log);
+        }
+
+        /// Tasks submitted and not yet handed back by Pump.
+        [[nodiscard]] u32 InFlight() const
+        {
+            ScopedLock lock(m_mutex);
+            usize count = m_runnable.Size() + m_running.Size() + m_finished.Size();
+            for (const Lane& lane : m_lanes)
+                count += lane.queued.Size();
+            return static_cast<u32>(count);
         }
 
         /// Whether `lane` has a task queued or running (the editor gates project changes on its
@@ -313,7 +344,7 @@ export namespace foundation::core
             return {};
         }
 
-        [[nodiscard]] u32 WorkerCount() const noexcept { return static_cast<u32>(m_workers.Size()); }
+        [[nodiscard]] u32 WorkerCount() const noexcept { return m_workerCount; }
 
     private:
         struct Lane
@@ -322,6 +353,14 @@ export namespace foundation::core
             Array<RefPtr<TaskHandle>> queued; // behind the one it has runnable or running
             bool busy = false;                // a task of it runnable or running
         };
+
+        [[nodiscard]] bool AnyLaneQueued() const
+        {
+            for (const Lane& lane : m_lanes)
+                if (!lane.queued.IsEmpty())
+                    return true;
+            return false;
+        }
 
         static void DropQueued(Array<RefPtr<TaskHandle>>& queue)
         {
@@ -482,6 +521,7 @@ export namespace foundation::core
         }
 
         IAllocator* m_allocator;
+        u32 m_workerCount;
         mutable Mutex m_mutex; // guards everything below but the workers
         ConditionVariable m_wake;  // a task became runnable, or the pool stops
         ConditionVariable m_ended; // a task ended (Wait)

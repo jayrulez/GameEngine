@@ -256,5 +256,6 @@ namespace editor
     void RegisterVegetationMaskEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<VegetationMaskPageFactory>(services), editor::EditorRootAllocator()));
+        app::RegisterImageFilePreview(context, pipeline::VegetationMaskAsset::StaticType());
     }
 }

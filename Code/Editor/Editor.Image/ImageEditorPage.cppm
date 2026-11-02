@@ -65,5 +65,6 @@ export namespace editor
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<ImageEditorPageFactory>(services), editor::EditorRootAllocator()));
+        app::RegisterImageFilePreview(context, pipeline::ImageAsset::StaticType());
     }
 }

@@ -81,6 +81,7 @@ export namespace editor
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<HeightfieldEditorPageFactory>(services), editor::EditorRootAllocator()));
+        app::RegisterImageFilePreview(context, pipeline::HeightfieldAsset::StaticType());
         if (context.Thumbnails() != nullptr)
         {
             RegisterHeightfieldThumbnailGenerator(*context.Thumbnails());

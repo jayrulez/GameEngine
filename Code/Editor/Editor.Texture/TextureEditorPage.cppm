@@ -99,6 +99,7 @@ export namespace editor
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<TextureEditorPageFactory>(services), editor::EditorRootAllocator()));
+        app::RegisterImageFilePreview(context, pipeline::TextureAsset::StaticType());
         if (context.Thumbnails() != nullptr)
         {
             RegisterTextureThumbnailGenerator(*context.Thumbnails());

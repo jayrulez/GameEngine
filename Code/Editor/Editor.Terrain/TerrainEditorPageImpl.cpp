@@ -626,5 +626,6 @@ namespace editor
     void RegisterTerrainEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<TerrainEditorPageFactory>(services), editor::EditorRootAllocator()));
+        app::RegisterImageFilePreview(context, pipeline::SplatmapAsset::StaticType());
     }
 }

@@ -3,13 +3,15 @@
 
 // The picture on the image pages (ImageInspectView). It fits its view until zoomed or panned, the
 // wheel zooms about the pointer, and a drag pans. A pixel is found under a point and read, a single
-// channel shows as grey, and the readout describes a pixel.
+// channel shows as grey, and the readout describes a pixel. The import window's preview of a
+// picture file (ImageFilePreview) shows it with the facts its header gives.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
 import foundation.image;
+import foundation.image.io;
 import foundation.gui;
 import editor.app;
 
@@ -130,4 +132,25 @@ TEST_CASE("image inspect: a new picture of the same size is a new image, so the 
     view.SetImage(Picture()); // a font rebaked at the same size
     CHECK(view.Pixels().InstanceId() != first);
     CHECK(view.Fitting()); // the same size: the fit is kept as it was
+}
+
+TEST_CASE("image file preview: a picture file shown, with its size, its channels as stored and whether its alpha is used")
+{
+    const StringView path = u8"scratch_image_file_preview.png";
+    REQUIRE(image::io::SaveImage(Picture(), path, image::io::ImageFileFormat::PNG).IsOk());
+    {
+        editor::app::ImageFilePreview preview(path, DefaultAllocator());
+        CHECK(preview.Picture().View().HasImage());
+        const Span<const String> facts = preview.Facts();
+        REQUIRE(facts.Size() == 3u);
+        CHECK(facts[0] == StringView(u8"40 × 20"));
+        CHECK(facts[1] == StringView(u8"RGBA, 8-bit"));
+        CHECK(facts[2] == StringView(u8"Uses alpha"));
+    }
+    FileDelete(path);
+
+    // A file that does not decode shows why, with no facts.
+    editor::app::ImageFilePreview missing(u8"scratch_image_file_preview_missing.png", DefaultAllocator());
+    CHECK_FALSE(missing.Picture().View().HasImage());
+    CHECK(missing.Facts().IsEmpty());
 }

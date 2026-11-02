@@ -36,6 +36,7 @@ export import :asset_picker_slot;
 export import :resource_ref_editor;
 export import :asset_page;
 export import :image_inspect_view;
+export import :image_file_preview;
 export import :asset_object_page;
 export import :preview_pane;
 export import :picker;

@@ -27,6 +27,20 @@ namespace pipeline
         builder.Value("Z", ModelUpAxis::Z);
     }
 
+    // A clip's own settings, which the import window draws in the clip's details.
+    REFLECT_MEMBERS(ClipImportSettings, "rtti::pipeline::modelimporter")
+    {
+        builder.Property<&ClipImportSettings::travel>("travel")
+            .PropAttribute("displayName", String(u8"Root travel"))
+            .PropAttribute("description", String(u8"The root's travel on the ground moves the character; the clip plays in place"))
+            .Property<&ClipImportSettings::vertical>("vertical")
+            .PropAttribute("displayName", String(u8"Root height"))
+            .PropAttribute("description", String(u8"The root's rise and fall moves the character too (a climb; off for a walk, which keeps its bob)"))
+            .Property<&ClipImportSettings::turn>("turn")
+            .PropAttribute("displayName", String(u8"Root turn"))
+            .PropAttribute("description", String(u8"The root's turn about up turns the character"));
+    }
+
     // The import's settings, which the import window draws and an agent sets by label.
     REFLECT_MEMBERS(ModelImportOptions, "rtti::pipeline::modelimporter")
     {
@@ -60,7 +74,7 @@ namespace pipeline
             .PropAttribute("description", String(u8"Simplified LOD chains for large static meshes (10k+ triangles); meshes with authored _LOD1/_LOD2 levels keep those instead"))
             .Property<&ModelImportOptions::rootMotion>("rootMotion")
             .PropAttribute("displayName", String(u8"Root motion"))
-            .PropAttribute("description", String(u8"New clips move the character by their root's travel and turn, and play in place (each clip's page can change it; a re-import keeps what the clip says)"))
+            .PropAttribute("description", String(u8"The default for each new clip: it moves the character by its root's travel and turn, and plays in place (each clip sets its own in the import window and on its page; a re-import keeps what the clip says)"))
             .Property<&ModelImportOptions::collisionConvex>("collisionConvex")
             .PropAttribute("displayName", String(u8"Convex collision"))
             .PropAttribute("description", String(u8"Simplified convex hulls (dynamic-capable) instead of exact triangle meshes"))

@@ -2427,6 +2427,43 @@ TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and 
     REQUIRE(run != nullptr);
     CHECK(run->source.rootMotion.horizontal);
     CHECK(run->source.rootMotion.yaw);
+
+    // Its own settings in the review (the import window's clip details): they start as the clip
+    // has them, and what is set there is what the clip gets; a clip not set keeps its own.
+    pipeline::ModelImportOptions reviewed;
+    pipeline::ImportPlanEntry walkEntry{pipeline::ImportResourceKind::AnimationClip, String(u8"Walk"), String(u8"Walk"), true};
+    walkEntry.settings = importer.PartSettings(fakeSource.AsView(), &reviewed, walkEntry, project->SourceDb().RootGroup(), DefaultAllocator());
+    auto* own = Cast<pipeline::ClipImportSettings>(walkEntry.settings.Get());
+    REQUIRE(own != nullptr);
+    CHECK(own->travel); // as the clip has it
+    CHECK_FALSE(own->turn);
+    CHECK_FALSE(own->vertical);
+    own->travel = false;
+    own->vertical = true;
+    reviewed.selection.entries.PushBack(walkEntry);
+    auto third = prepare(true);
+    REQUIRE(importer.Import(fakeSource.AsView(), pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()},
+                            *project->SourceDb().RootGroup(), &reviewed, third.Get(), nullptr)
+                .HasValue());
+    RefPtr<ISerializable> walkSet = readClip(u8"Walk");
+    auto* set = Cast<pipeline::AnimationClipAsset>(walkSet.Get());
+    REQUIRE(set != nullptr);
+    CHECK_FALSE(set->source.rootMotion.horizontal);
+    CHECK(set->source.rootMotion.vertical);
+    CHECK_FALSE(set->source.rootMotion.yaw);
+    CHECK(set->source.rootMotion.rootBone == StringView(u8"Hips")); // what the review does not set stays
+    RefPtr<ISerializable> runKept = readClip(u8"Run");
+    auto* runAfter = Cast<pipeline::AnimationClipAsset>(runKept.Get());
+    REQUIRE(runAfter != nullptr);
+    CHECK(runAfter->source.rootMotion.horizontal); // not set in the review: its own
+    CHECK(runAfter->source.rootMotion.yaw);
+
+    // A part of another kind has no settings of its own; root motion among the file's settings is
+    // only their default.
+    CHECK_FALSE(importer.PartSettings(fakeSource.AsView(), &reviewed, pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Mesh, String(u8"Body"), {}, true},
+                                      nullptr, DefaultAllocator()));
+    CHECK(importer.SettingIsPerPart(u8"rootMotion"));
+    CHECK_FALSE(importer.SettingIsPerPart(u8"scale"));
 }
 
 // Each material made on the built-in its shading model names, as its file authored it, by the

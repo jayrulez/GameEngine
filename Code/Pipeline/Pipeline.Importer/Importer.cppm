@@ -110,6 +110,10 @@ export namespace pipeline
         String sourceName;
         String targetName;
         bool enabled = true;
+        /// The part's own settings (a clip's root motion), a reflected object its importer made
+        /// (IFileImporter::PartSettings); null while nobody asked, the part then importing as it
+        /// would have. Not stored with a previous import's selection: the part's asset holds them.
+        RefPtr<Object> settings{};
     };
 
     /// DescribeImport's result: everything the import would create, in fan-out order.
@@ -160,6 +164,10 @@ export namespace pipeline
                 if (!s->targetName.IsEmpty())
                 {
                     e.targetName = s->targetName;
+                }
+                if (s->settings)
+                {
+                    e.settings = s->settings;
                 }
             }
         }
@@ -343,6 +351,12 @@ export namespace pipeline
             const ImportPlanEntry* e = selection.Find(kind, sourceName);
             return e == nullptr || e->enabled;
         }
+        /// The part's own settings when the review set them (ImportPlanEntry::settings), else null.
+        [[nodiscard]] Object* SelectionSettings(ImportResourceKind kind, StringView sourceName) const
+        {
+            const ImportPlanEntry* e = selection.Find(kind, sourceName);
+            return e != nullptr ? e->settings.Get() : nullptr;
+        }
         /// The user's target name for the resource (falls back to the importer's base name).
         [[nodiscard]] StringView SelectionName(ImportResourceKind kind, StringView sourceName) const
         {
@@ -476,6 +490,21 @@ export namespace pipeline
         {
             return {};
         }
+
+        /// A part's own settings (a clip's root motion), a reflected object the import window shows
+        /// in the part's details and the import applies to that part (ImportOptions::
+        /// SelectionSettings); null when parts of its kind have none. It starts as the part would
+        /// import: its asset's own, when `group` (the group the file imports into) has it from an
+        /// earlier import, else the file's settings' default.
+        [[nodiscard]] virtual RefPtr<Object> PartSettings(StringView /*sourcePath*/, const ImportOptions* /*options*/, const ImportPlanEntry& /*part*/,
+                                                          foundation::content::Group* /*group*/, IAllocator& /*allocator*/) const
+        {
+            return {};
+        }
+
+        /// Whether `setting` of this importer's options is only the default for a setting each part
+        /// carries (PartSettings): the import window shows it on the parts, not among the file's.
+        [[nodiscard]] virtual bool SettingIsPerPart(StringView /*setting*/) const { return false; }
 
         /// The bool setting of this importer's options that, off, leaves every part of `kind` out of
         /// the import (a model's "importTextures" for its textures); empty when none does. The import

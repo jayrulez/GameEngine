@@ -196,6 +196,18 @@ export namespace pipeline
         }
     };
 
+    /// One clip's own settings in an import (IFileImporter::PartSettings): which of its root's
+    /// motion moves the character rather than playing in place. Reflected (ModelImporterImpl.cpp),
+    /// drawn in the import window's clip details.
+    class ClipImportSettings final : public Object
+    {
+        RTTI_OBJECT(ClipImportSettings, Object)
+    public:
+        bool travel = false;   // the ground-plane translation
+        bool vertical = false; // height (a climb; off for a walk, which keeps its bob)
+        bool turn = false;     // the turn about up
+    };
+
     /// Scale and up axis applied to a loaded model before its import fans out: each root node's
     /// transform, and the keys of the clips that move a root node, so its meshes, skeleton and
     /// clips all come in scaled and turned. A skinned mesh follows its skeleton's root.
@@ -465,6 +477,36 @@ export namespace pipeline
             }
             return facts;
         }
+
+        /// A clip's root motion: as its asset has it from an earlier import into `group`, else the
+        /// file's Root motion default (travel and turn).
+        [[nodiscard]] RefPtr<Object> PartSettings(StringView sourcePath, const pipeline::ImportOptions* options, const pipeline::ImportPlanEntry& part,
+                                                  content::Group* group, IAllocator& allocator) const override
+        {
+            if (part.kind != pipeline::ImportResourceKind::AnimationClip)
+                return {};
+            RefPtr<ClipImportSettings> settings = MakeRef<ClipImportSettings>(allocator);
+            const auto* opt = Cast<ModelImportOptions>(options);
+            settings->travel = settings->turn = opt != nullptr && opt->rootMotion;
+            // The clip as an earlier import made it: its folder group, named after the file.
+            const StringView stem = pipeline::FileStemOf(pipeline::FileNameOf(sourcePath));
+            content::Group* folder = group != nullptr ? group->GetGroup(stem) : nullptr;
+            const StringView name = part.targetName.IsEmpty() ? part.sourceName.AsView() : part.targetName.AsView();
+            if (content::Instance* clip = folder != nullptr ? folder->GetInstance(name) : nullptr)
+            {
+                RefPtr<ISerializable> object = clip->ReadObject();
+                if (const auto* before = Cast<pipeline::AnimationClipAsset>(object.Get()))
+                {
+                    settings->travel = before->source.rootMotion.horizontal;
+                    settings->vertical = before->source.rootMotion.vertical;
+                    settings->turn = before->source.rootMotion.yaw;
+                }
+            }
+            return settings;
+        }
+
+        /// Root motion is each clip's own; the file's setting is the default for new clips.
+        [[nodiscard]] bool SettingIsPerPart(StringView setting) const override { return setting == StringView(u8"rootMotion"); }
 
         /// Textures, materials, and the skeleton with its clips each have a setting that leaves them out.
         [[nodiscard]] StringView KindSetting(pipeline::ImportResourceKind kind) const override
@@ -1410,6 +1452,13 @@ export namespace pipeline
                         clip.source.rootMotion.horizontal = true;
                         clip.source.rootMotion.yaw = true;
                     }
+                }
+                // Set for this clip in the review (the import window's clip details): that, over both.
+                if (const auto* own = Cast<ClipImportSettings>(sel.SelectionSettings(pipeline::ImportResourceKind::AnimationClip, clipBase.AsView())))
+                {
+                    clip.source.rootMotion.horizontal = own->travel;
+                    clip.source.rootMotion.vertical = own->vertical;
+                    clip.source.rootMotion.yaw = own->turn;
                 }
                 if (clipInst != nullptr && clipInst->WriteObject(clip).IsOk())
                 {

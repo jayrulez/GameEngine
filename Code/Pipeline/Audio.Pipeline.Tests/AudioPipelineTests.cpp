@@ -898,3 +898,17 @@ TEST_CASE("audio importer: each setting says what it does to this sound, or why 
     CHECK(importer.DescribeSetting(path, *options, nullptr, *options->FindSetting(u8"Force mono")).reason.IsEmpty());
     FileDelete(path);
 }
+
+TEST_CASE("import options: settings copy to options of the same type, and not to another type")
+{
+    AudioImportOptions from;
+    from.forceMono = true;
+    from.normalize = true;
+    AudioImportOptions to;
+    CHECK(to.CopySettingsFrom(from));
+    CHECK(to.forceMono);
+    CHECK(to.normalize);
+    CHECK_FALSE(to.stream);
+    pipeline::ImportOptions bare;
+    CHECK_FALSE(bare.CopySettingsFrom(from)); // another type: nothing changes
+}

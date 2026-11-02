@@ -173,6 +173,22 @@ export namespace editor::app
             ShowPreview();
             ShowDetail();
         }
+        /// Gives file `index`'s settings to the session's other files of its importer (its
+        /// "Use these for every ..."); returns how many took them.
+        usize ShareSettings(usize index)
+        {
+            if (!m_session || index >= m_session->files.Size() || !m_session->files[index].options)
+                return 0;
+            const AssetImport::File& from = m_session->files[index];
+            usize shared = 0;
+            for (usize i = 0; i < m_session->files.Size(); ++i)
+            {
+                AssetImport::File& to = m_session->files[i];
+                if (i != index && to.Importer() == from.Importer() && to.options && to.options->CopySettingsFrom(*from.options))
+                    ++shared;
+            }
+            return shared;
+        }
         /// Opens or closes a kind of what the selected file would create (its items listed or not).
         void SetKindOpen(pipeline::ImportResourceKind kind, bool open)
         {
@@ -477,6 +493,19 @@ export namespace editor::app
                 grid->SetSource(m_settings.Get());
                 detail->AddChild(grid.Get());
                 m_settingsGrid = grid;
+                // The same settings for the drop's other files of this importer, in one click.
+                usize others = 0;
+                for (usize i = 0; i < m_session->files.Size(); ++i)
+                    others += i != index && m_session->files[i].Importer() == file.Importer() && m_session->files[i].options ? 1u : 0u;
+                if (others > 0)
+                {
+                    RefPtr<gui::Button> share = MakeRef<gui::Button>(m_allocator);
+                    share->AddClass(u8"import-share");
+                    share->SetText(Format(u8"Use these for every {} in this import", LabelOf(file)).AsView());
+                    share->SetTooltip(Format(u8"Gives the {} other {} files these settings", others, LabelOf(file)).AsView());
+                    share->SetOnClick([self, index]() { self->ShareSettings(index); });
+                    detail->AddChild(share.Get());
+                }
             }
             ShowClash(*detail, file, index);
             if (file.plan.IsEmpty())

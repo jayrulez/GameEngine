@@ -207,6 +207,19 @@ export namespace pipeline
             return nullptr;
         }
 
+        /// Takes `other`'s settings when it is the same type of options (the import window's "Use
+        /// these for every ..."); false, changing nothing, when it is not. The plan's choices stay.
+        bool CopySettingsFrom(const ImportOptions& other)
+        {
+            if (other.GetType() != GetType() || &other == this)
+                return &other == this;
+            const Instance from(const_cast<ImportOptions*>(&other), other.GetType());
+            const Instance to(this, GetType());
+            for (const PropertyInfo* setting : Settings())
+                (void)SetProperty(*setting, to, GetProperty(*setting, from));
+            return true;
+        }
+
         void Serialize(ISerializer&) override {}
 
         /// The review dialog's per-resource decisions (edited copy of DescribeImport's plan).

@@ -180,7 +180,7 @@ TEST_CASE("project page: a project with no scenes shows a note with New Scene an
     CHECK(FindId<foundation::gui::Button>(*content, u8"home-first-scene")->HandleActivate());
     CHECK(scenesMade == 1);
     CHECK(FindId<foundation::gui::Button>(*content, u8"home-first-docs")->HandleActivate());
-    CHECK(docs == StringView(app::ProjectHomeView::kFirstProjectPage));
+    CHECK(docs == StringView(app::kProjectHomeFirstProjectPage));
 
     context.SetProject(nullptr);
     project.Reset();

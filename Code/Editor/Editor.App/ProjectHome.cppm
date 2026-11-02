@@ -39,6 +39,8 @@ export namespace editor::app
     /// ProjectHomeView::kPath, at namespace scope for another library to read (MSVC exports no class's
     /// static constexpr member from a shared library).
     inline constexpr const char8_t* kProjectHomeViewPath = u8"Editor/ProjectHome.xml";
+    /// ProjectHomeView::kFirstProjectPage, at namespace scope for the same reason.
+    inline constexpr const char8_t* kProjectHomeFirstProjectPage = u8"getting-started/first-project/";
 
     class ProjectHomeView
     {
@@ -46,7 +48,7 @@ export namespace editor::app
         /// Its frame's markup path, under the data root.
         static constexpr const char8_t* kPath = kProjectHomeViewPath;
         /// The documentation page the note for a project with no scenes points at, under the site.
-        static constexpr const char8_t* kFirstProjectPage = u8"getting-started/first-project/";
+        static constexpr const char8_t* kFirstProjectPage = kProjectHomeFirstProjectPage;
 
         /// Builds the view over `context`'s project in the frame `content` (from the markup);
         /// `cook` (nullable) tells it when the project's assets changed.

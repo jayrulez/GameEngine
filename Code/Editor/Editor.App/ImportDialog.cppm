@@ -26,6 +26,7 @@ export module editor.app:import_dialog;
 import foundation.core;
 import foundation.content;
 import foundation.gui;
+import foundation.gui.toolkit;    // PropertyGrid, ReflectedPropertySource (the importer's settings)
 import foundation.runtime.client; // IApplicationHost (a preview's frame hooks)
 import foundation.graphics;       // FrameContext
 import pipeline.importer;
@@ -436,22 +437,23 @@ export namespace editor::app
                 detail->AddChild(Text(u8"It could not be read; the Console says why.", u8"form-help refused").Get());
                 return;
             }
-            // Its options.
-            if (file.options)
-                for (const pipeline::ImportOptions::Toggle& toggle : file.options->Toggles())
-                {
-                    RefPtr<gui::CheckBox> box = MakeRef<gui::CheckBox>(m_allocator);
-                    box->SetText(toggle.label);
-                    box->SetTooltip(toggle.description);
-                    box->SetChecked(toggle.value != nullptr && *toggle.value);
-                    bool* value = toggle.value;
-                    box->SetOnToggled([value](bool on)
-                                      {
-                                          if (value != nullptr)
-                                              *value = on;
-                                      });
-                    detail->AddChild(box.Get());
-                }
+            // Its settings, as its importer declares them, drawn by the inspector's property editors.
+            // The last grid lets go of its source before the source goes.
+            if (m_settingsGrid)
+                m_settingsGrid->SetSource(nullptr);
+            m_settingsGrid = {};
+            m_settings.Reset();
+            if (file.options && !file.options->Settings().IsEmpty())
+            {
+                m_settings = MakeUnique<gui::ReflectedPropertySource>(m_allocator, m_allocator);
+                const Instance target(file.options.Get(), file.options->GetType());
+                m_settings->SetObjects(Span<const Instance>(&target, 1u));
+                RefPtr<gui::PropertyGrid> grid = MakeRef<gui::PropertyGrid>(m_allocator);
+                grid->AddClass(u8"import-settings");
+                grid->SetSource(m_settings.Get());
+                detail->AddChild(grid.Get());
+                m_settingsGrid = grid;
+            }
             ShowClash(*detail, file, index);
             if (file.plan.IsEmpty())
             {
@@ -647,6 +649,8 @@ export namespace editor::app
         RefPtr<AssetImport::Session> m_session;
         usize m_selected = 0;
         Array<pipeline::ImportResourceKind> m_openKinds; // the selected file's kinds shown item by item
+        UniquePtr<gui::ReflectedPropertySource> m_settings; // the selected file's settings, which its grid shows
+        RefPtr<gui::PropertyGrid> m_settingsGrid;
         UniquePtr<editor::IImportPreview> m_preview; // the selected file's, while its path and type stay
         String m_previewPath;
         String m_previewType;

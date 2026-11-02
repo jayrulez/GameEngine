@@ -134,7 +134,8 @@ export namespace pipeline
         }
     };
 
-    /// Options for one model import (the import dialog renders the toggles).
+    /// Options for one model import: its settings, reflected (ModelImporterImpl.cpp), which the
+    /// import window draws and an agent sets by label.
     class ModelImportOptions final : public pipeline::ImportOptions
     {
         RTTI_OBJECT(ModelImportOptions, pipeline::ImportOptions)
@@ -148,45 +149,6 @@ export namespace pipeline
         bool collisionConvex = false;   // hull (dynamic-capable) instead of exact triangle mesh
         bool generateLods = true;       // auto-LOD chains for big static meshes (authored _LODn wins)
         bool rootMotion = false; // new clips extract their root's travel and turn
-
-        [[nodiscard]] Array<Toggle> Toggles() override
-        {
-            Array<Toggle> toggles;
-            toggles.PushBack(Toggle{u8"Textures", u8"Import the model's images as texture assets",
-                                    &importTextures});
-            toggles.PushBack(Toggle{
-                u8"Materials", u8"Import PBR materials (textures wire in when they import too)",
-                &importMaterials});
-            toggles.PushBack(Toggle{u8"Animations", u8"Import the skeleton and animation clips",
-                                    &importAnimations});
-            toggles.PushBack(Toggle{u8"Generate prefab",
-                                    u8"Create a spawnable prefab of the model's node hierarchy; "
-                                    u8"re-import regenerates it",
-                                    &generatePrefab});
-            toggles.PushBack(Toggle{u8"Generate scene",
-                                    u8"Create a standalone scene of the model's node hierarchy; "
-                                    u8"re-import regenerates it",
-                                    &generateScene});
-            toggles.PushBack(Toggle{u8"Generate collision",
-                                    u8"Cook a collision shape per mesh and add colliders (+ a "
-                                    u8"static rigid body) to the generated prefab",
-                                    &generateCollision});
-            toggles.PushBack(Toggle{
-                u8"Generate LODs",
-                u8"Simplified LOD chains for large static meshes (10k+ triangles); meshes with "
-                u8"authored _LOD1/_LOD2 levels keep those instead",
-                &generateLods});
-            toggles.PushBack(Toggle{
-                u8"Root motion",
-                u8"New clips move the character by their root's travel and turn, and play in place "
-                u8"(each clip's page can change it; a re-import keeps what the clip says)",
-                &rootMotion});
-            toggles.PushBack(Toggle{
-                u8"Convex collision",
-                u8"Simplified convex hulls (dynamic-capable) instead of exact triangle meshes",
-                &collisionConvex});
-            return toggles;
-        }
 
         void Serialize(ISerializer& ar) override
         {
@@ -1562,6 +1524,5 @@ export namespace pipeline
         RegisterSerializable<ModelManifestAsset>();
     }
 
-    RTTI_DEFINE_OBJECT(ModelImportOptions, "rtti::pipeline::modelimporter")
     RTTI_DEFINE_OBJECT(LoadedModel, "rtti::pipeline::modelimporter")
 }

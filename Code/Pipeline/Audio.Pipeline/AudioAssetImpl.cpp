@@ -50,6 +50,26 @@ namespace pipeline{
     }
 
     // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    // The import's settings, which the import window draws and an agent sets by label.
+    REFLECT_MEMBERS(AudioImportOptions, "rtti::pipeline::audio")
+    {
+        builder.Property<&AudioImportOptions::stream>("stream")
+            .PropAttribute("displayName", String(u8"Stream"))
+            .PropAttribute("description", String(u8"Decode on the fly at runtime (auto-enabled for sources over 10 s / 2 MB)"))
+            .Property<&AudioImportOptions::forceMono>("forceMono")
+            .PropAttribute("displayName", String(u8"Force mono"))
+            .PropAttribute("description", String(u8"Downmix to one channel at cook (recommended for 3D-positioned sounds)"))
+            .Property<&AudioImportOptions::loop>("loop")
+            .PropAttribute("displayName", String(u8"Loop"))
+            .PropAttribute("description", String(u8"Loop by default when played (WAV smpl loop points are detected automatically)"))
+            .Property<&AudioImportOptions::trimTrailingSilence>("trimTrailingSilence")
+            .PropAttribute("displayName", String(u8"Trim trailing silence"))
+            .PropAttribute("description", String(u8"Drop the silent tail at cook"))
+            .Property<&AudioImportOptions::normalize>("normalize")
+            .PropAttribute("displayName", String(u8"Normalize"))
+            .PropAttribute("description", String(u8"Peak-normalize to -1 dBFS at cook"));
+    }
+
     REFLECT_MEMBERS(AudioBusLayoutAsset, "rtti::pipeline::audio")
     {
         builder.DataVersion(2)

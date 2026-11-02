@@ -297,8 +297,9 @@ export namespace pipeline{
         }
     };
 
-    // Import-dialog options, all toggles. The Stream default is computed from the probed
-    // file at import, so the checkbox here only forces streaming on.
+    // Import options, reflected (AudioAssetImpl.cpp) as the settings the import window draws. The
+    // Stream default is computed from the probed file at import, so the setting only forces
+    // streaming on.
     class AudioImportOptions final : public pipeline::ImportOptions
     {
         RTTI_OBJECT(AudioImportOptions, pipeline::ImportOptions)
@@ -308,28 +309,6 @@ export namespace pipeline{
         bool loop = false;
         bool trimTrailingSilence = false;
         bool normalize = false;
-
-        [[nodiscard]] Array<Toggle> Toggles() override
-        {
-            Array<Toggle> toggles;
-            toggles.PushBack(
-                Toggle{u8"Stream",
-                       u8"Decode on the fly at runtime (auto-enabled for sources over 10 s / 2 MB)",
-                       &stream});
-            toggles.PushBack(
-                Toggle{u8"Force mono",
-                       u8"Downmix to one channel at cook (recommended for 3D-positioned sounds)",
-                       &forceMono});
-            toggles.PushBack(Toggle{
-                u8"Loop",
-                u8"Loop by default when played (WAV smpl loop points are detected automatically)",
-                &loop});
-            toggles.PushBack(Toggle{u8"Trim trailing silence", u8"Drop the silent tail at cook",
-                                    &trimTrailingSilence});
-            toggles.PushBack(
-                Toggle{u8"Normalize", u8"Peak-normalize to -1 dBFS at cook", &normalize});
-            return toggles;
-        }
     };
 
     // OS-file importer (editor drag-drop): copies the audio file into Sources/ and
@@ -780,7 +759,6 @@ export namespace pipeline{
 
     // The asset classes' StaticType() bodies are defined in AudioAssetImpl.cpp; the import
     // options stay identity-only.
-    RTTI_DEFINE_OBJECT(AudioImportOptions, "rtti::pipeline::audio")
 
     /// File > New's audio creators (pipeline.registration composes every domain's).
     void RegisterAudioCreators(AssetCreatorRegistry& registry);

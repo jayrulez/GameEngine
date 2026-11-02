@@ -565,10 +565,13 @@ TEST_CASE("audio.pipeline: the file importer creates an AudioClipAsset with prob
                             *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr)
                     .HasValue());
 
-    // Import options object exposes the five toggles.
+    // The import options declare five settings, each labelled, found by its label.
     RefPtr<pipeline::ImportOptions> options = importer.CreateOptions(DefaultAllocator());
     REQUIRE(options.Get() != nullptr);
-    CHECK(options->Toggles().Size() == 5u);
+    CHECK(options->Settings().Size() == 5u);
+    REQUIRE(options->FindSetting(u8"force MONO") != nullptr); // case and spaces ignored
+    CHECK(pipeline::ImportOptions::SettingLabel(*options->FindSetting(u8"forcemono")) == StringView(u8"Force mono"));
+    CHECK(options->FindSetting(u8"Generate collision") == nullptr);
 
     FileDelete(u8"scratch_audiopipe_short.wav");
     FileDelete(u8"scratch_audiopipe_long.wav");

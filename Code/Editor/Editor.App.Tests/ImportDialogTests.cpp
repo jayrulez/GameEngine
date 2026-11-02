@@ -14,6 +14,7 @@
 import foundation.core;
 import foundation.content;
 import foundation.gui;
+import foundation.gui.toolkit;
 import pipeline.importer;
 import editor.core;
 import editor.app;
@@ -100,6 +101,28 @@ namespace
         usize* m_made;
     };
 
+    // Options that declare one setting, as a real importer's do.
+    class CrateOptions final : public pipeline::ImportOptions
+    {
+        RTTI_OBJECT(CrateOptions, pipeline::ImportOptions)
+    public:
+        bool hollow = false;
+    };
+
+    // Takes ".crate": one asset, with a setting.
+    class CrateImporter final : public pipeline::IFileImporter
+    {
+    public:
+        [[nodiscard]] StringView Label() const override { return u8"Crate"; }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"crate"); }
+        [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override { return MakeRef<CrateOptions>(allocator); }
+        [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions*, Object*,
+                                                        Array<pipeline::DeferredImportWrite>*) override
+        {
+            return group.CreateInstance(u8"Crate", WindowThing::StaticType());
+        }
+    };
+
     RefPtr<gui::Node> LoadImport()
     {
         const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(editor::app::kImportWindowPath));
@@ -151,6 +174,7 @@ namespace
             GlobalTypeRegistry().Register(WindowThing::StaticType());
             context.SetProject(project.Get());
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<BoxImporter>(), DefaultAllocator()));
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<CrateImporter>(), DefaultAllocator()));
             top = project->SourceDb().RootGroup();
             AssetImport::Services services;
             services.context = &context;
@@ -182,6 +206,10 @@ namespace
 }
 
 RTTI_DEFINE_OBJECT(WindowThing, "rtti::tests::importwindow")
+REFLECT_MEMBERS(CrateOptions, "rtti::tests::importwindow")
+{
+    builder.Property<&CrateOptions::hollow>("hollow").PropAttribute("displayName", String(u8"Hollow"));
+}
 
 TEST_CASE("import window: a file's plan by kind, each kept and named; Import open saying what it does; Import makes what is kept and closes")
 {
@@ -267,5 +295,22 @@ TEST_CASE("import window: the preview registered for the type a file is listed b
     // A preview's read coming back shows its facts again.
     static_cast<NamePreview*>(bed.window->Preview())->Arrive(u8"Read at last");
     CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Read at last"));
+    bed.window->Close();
+}
+
+TEST_CASE("import window: a file's settings, as its importer's options declare them, in the inspector's property grid; a file with none shows none")
+{
+    Bed bed;
+    const String two[] = {String(u8"/somewhere/a.crate"), String(u8"/somewhere/b.box")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(two, 2u));
+    // The crate's options declare Hollow: one grid of its settings.
+    CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 1u);
+    REQUIRE(session->files[0].options);
+    CHECK(session->files[0].options->Settings().Size() == 1u);
+    // The box's importer declares none: no grid.
+    bed.window->Select(1);
+    CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 0u);
+    bed.window->Select(0);
+    CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 1u);
     bed.window->Close();
 }

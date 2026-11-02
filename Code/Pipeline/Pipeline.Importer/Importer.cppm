@@ -157,14 +157,48 @@ export namespace pipeline
     {
         RTTI_OBJECT(ImportOptions, ISerializable)
     public:
-        struct Toggle
+        /// The settings an importer's options declare: the reflected properties of the options'
+        /// type and its bases, in order. Each is labelled by its `displayName` and explained by its
+        /// `description`; the import window draws them with the property editors and an agent sets
+        /// them by label (asset_import's `options`).
+        [[nodiscard]] Array<const PropertyInfo*> Settings() const
         {
-            StringView label;       // checkbox text ("Generate prefab")
-            StringView description; // tooltip (empty = none)
-            bool* value = nullptr;  // points into the options object
-        };
+            Array<const PropertyInfo*> settings;
+            Array<const TypeInfo*> chain; // base first, so a base's settings come before its subclass's
+            for (const TypeInfo* t = GetType(); t != nullptr; t = t->base)
+                chain.Insert(0, t);
+            for (const TypeInfo* t : chain)
+                for (u32 i = 0; i < t->propertyCount; ++i)
+                    settings.PushBack(&t->properties[i]);
+            return settings;
+        }
+        /// What a setting is called: its `displayName`, else its name.
+        [[nodiscard]] static StringView SettingLabel(const PropertyInfo& setting)
+        {
+            if (const Attribute* named = FindAttribute(setting, StringView(u8"displayName")))
+                if (const String* text = named->value.TryGet<String>())
+                    return text->AsView();
+            return StringView(reinterpret_cast<const utf8char*>(setting.name));
+        }
+        /// The setting labelled `label`, case and spaces ignored ("generate collision" finds
+        /// "Generate collision"); null when there is none.
+        [[nodiscard]] const PropertyInfo* FindSetting(StringView label) const
+        {
+            const auto squeeze = [](StringView text)
+            {
+                String out;
+                for (const utf8char c : text)
+                    if (c != u8' ')
+                        out += static_cast<utf8char>((c >= u8'A' && c <= u8'Z') ? c + 32 : c);
+                return out;
+            };
+            const String wanted = squeeze(label);
+            for (const PropertyInfo* setting : Settings())
+                if (squeeze(SettingLabel(*setting)) == wanted)
+                    return setting;
+            return nullptr;
+        }
 
-        [[nodiscard]] virtual Array<Toggle> Toggles() { return {}; }
         void Serialize(ISerializer&) override {}
 
         /// The review dialog's per-resource decisions (edited copy of DescribeImport's plan).

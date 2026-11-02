@@ -978,7 +978,9 @@ TEST_CASE("model-import: options gate textures/materials/animations")
     CHECK_FALSE(options->generateScene); // opt-in
     CHECK_FALSE(options->generateCollision); // opt-in
     CHECK_FALSE(options->collisionConvex);
-    CHECK(options->Toggles().Size() == 9u); // including Root motion and Generate LODs
+    CHECK(options->Settings().Size() == 9u); // including Root motion and Generate LODs
+    CHECK(pipeline::ImportOptions::SettingLabel(*options->Settings()[0]) == StringView(u8"Textures"));
+    CHECK(options->FindSetting(u8"Generate collision") != nullptr);
 
     // Geometry-only import: no textures, no materials, no skeleton or clips in the fan-out.
     options->importTextures = false;

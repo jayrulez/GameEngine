@@ -353,11 +353,14 @@ namespace
             sawToggles.Clear();
             if (request.options.Get() != nullptr)
             {
-                for (const pipeline::ImportOptions::Toggle& toggle : request.options->Toggles())
+                const Instance target(request.options.Get(), request.options->GetType());
+                for (const PropertyInfo* setting : request.options->Settings())
                 {
-                    sawToggles.PushBack(String(toggle.label));
-                    sawCollision = toggle.label == u8"Generate collision" ? *toggle.value : sawCollision;
-                    sawPrefab = toggle.label == u8"Generate prefab" ? *toggle.value : sawPrefab;
+                    const StringView label = pipeline::ImportOptions::SettingLabel(*setting);
+                    const bool value = setting->type == &TypeOf<bool>() && *static_cast<const bool*>(setting->address(target));
+                    sawToggles.PushBack(String(label));
+                    sawCollision = label == StringView(u8"Generate collision") ? value : sawCollision;
+                    sawPrefab = label == StringView(u8"Generate prefab") ? value : sawPrefab;
                 }
             }
             if (importEntries < answerOnEntry)

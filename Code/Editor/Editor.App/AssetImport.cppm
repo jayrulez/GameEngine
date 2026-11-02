@@ -120,7 +120,7 @@ export namespace editor::app
             if (session.files.Size() != 1)
                 return false;
             const File& file = session.files[0];
-            return file.state == File::State::Ready && file.plan.IsEmpty() && file.options && file.options->Toggles().IsEmpty() &&
+            return file.state == File::State::Ready && file.plan.IsEmpty() && file.options && file.options->Settings().IsEmpty() &&
                    file.importers.Size() == 1 && pipeline::ImportClashAllows(ClashOf(session, file), pipeline::ImportConflictChoice::Refuse);
         }
 

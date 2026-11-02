@@ -29,7 +29,13 @@
      (its own texture, Layer mode) and its text (the glyph atlas), and each change of texture or mode
      starts a new command. Options: the draw mode per vertex and the glyph atlas and an icon atlas bound
      together, or merging commands across non-overlapping draws. The largest of the items: the VG
-     renderer.
+     renderer. First, the cheap part (user 2026-10-28, from a RenderDoc capture where every icon was
+     its own draw): `DrawImagePremultiplied` closes the open command before every image
+     (`Foundation/VG/Context.cppm`, FlushCurrentCommand), even the next one on the same atlas page
+     with the same clip, blend and draw mode, so a bar's icons are a draw each. Keep the command open
+     while the state holds, with a test counting the commands a row of icons makes; first verify the
+     icons land on one atlas page (the picture baker's pages, GpuPictureBaker), not a texture each.
+     Every clip push also closes a command.
   3. **The scene overlay walks every entity each frame.** `SceneOverlays::DrawGizmos` and
      `DrawEntityMarkers` (`Editor.Scene/SceneOverlays.cppm`) visit every entity, and each one every
      component manager (`GizmoRendererRegistry::DrawEntity`): about 19% of the main thread on Level 1.
@@ -134,15 +140,6 @@
   the root's clip fix). Decide whether every window asks, and check the 3D views' cost at the higher
   resolution.
 
-- **Images that share a texture draw in one call** (user 2026-10-28, from a RenderDoc capture of
-  the editor: every icon is its own draw): VG's DrawImagePremultiplied closes the open command
-  before every image (Context.cppm), even the next one on the same atlas page with the same clip,
-  blend and draw mode, so a bar's icons are a draw each. Keep the command open while the state
-  holds, with a test counting the commands a row of icons makes. First verify the icons do land on
-  one atlas page (the picture baker's pages, GpuPictureBaker), not one texture each. Beyond it, by
-  design and for when a measurement asks: a box, an icon and a label alternate three pipelines or
-  textures in draw order, and every clip push closes a command.
-
 ## Engine
 
 - **Terrain lit as the forward lights** (user 2026-10-31): `terrain.ps.hlsl` lights with a
@@ -197,8 +194,9 @@
 
 - **Players rebind their controls** (user 2026-10-12; found writing the input docs): a player's
   rebinding has a home, `InputBindingOverrides` in the user settings (`Foundation/Input/
-  InputMap.cppm`), but nothing outside its tests reads or writes it, so a game cannot offer
-  rebinding. Apply the overrides when the input map binds at startup, and give scripts what a
+  InputMap.cppm`), and only the InputActions sample applies and saves it (`ApplyBindingOverrides`);
+  the engine does not, so a game cannot offer rebinding. Apply the overrides when the input map
+  binds at startup, and give scripts what a
   controls menu needs: list an action's bindings with their display names, listen for the next
   input to rebind one, reset to the map's own, and save. Then the input docs page gains a section.
 - **Debug views hold still under TAA** (user 2026-10-13): a debug view (albedo, normals,
@@ -250,11 +248,6 @@
   a custom shader that moves its vertices or cuts out, on any slot but the first, casts and
   occludes as if it did neither. Wanted: per-submesh depth draws where a slot's material has its
   own depth program, wind, or a cutout.
-- **Pausing a run from the Game tab stops its clock too** (user 2026-10-26, playing Sky Hopper in the
-  editor): with the run paused from the Game tab's bar, the level clock on Sky Hopper's HUD keeps
-  counting. Not looked into yet: whether the clock's script reads time that a paused scene still
-  advances, or the HUD's canvas runs apart from the scene it shows. A paused run should hold every
-  clock a game reads.
 - **The player opens on a black window** (user 2026-10-29, running the exported Linux players): the
   window stays black through startup (the graphics device, the shader and content packs, the GUI's
   fonts and sheets, the game script), then the title appears. The player's only drawn screen is the
@@ -345,13 +338,7 @@ website and the flagship game.
   - **a showcase game**: the engine's flagship, released on Steam. Separate from the sample
     games in this repository and not part of it (its own project and repository); the samples
     stay the engine's examples.
-  The items marked for 0.1 above (the documentation and the fifth sample below) belong to it.
-- **A fifth sample game, on networking and crowds, before 0.1** (user 2026-10-09): no sample
-  project uses the network stack or crowds yet, so neither has been showcased or stressed in a
-  game. The fifth sample in `Data/SampleProjects/` built around both: players over the network
-  (the engine's reliable UDP and replication) and a crowd (instanced skinning, navigation
-  crowds), built and playtested through the MCP tools as the others were. (Lamplight's crowd
-  was set aside "for later" when it was planned.)
+  The items marked for 0.1 above (the documentation) belong to it.
 - **The model viewer, a standalone build** (user 2026-10-30): the viewer is in use for curating
   the flagship game's assets, from the Debug tree. Build the relocatable release with
   `scripts/build-model-viewer-dist.sh` (RelWithDebInfo, the clang-reldbg preset: a full build, so

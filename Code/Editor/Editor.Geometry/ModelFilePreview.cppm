@@ -73,8 +73,10 @@ export namespace editor
         [[nodiscard]] bool IsLoading() const;
         /// Whether a texture's picture shows in place of the model.
         [[nodiscard]] bool ShowsPicture() const;
-        /// Whether the model draws the default material, its own being left out of the import.
+        /// Whether the model draws the default material for a material left out of the import.
         [[nodiscard]] bool DrawsDefaultMaterial() const;
+        /// Whether the model draws a material without a texture left out of the import.
+        [[nodiscard]] bool DrawsWithoutTextures() const;
         /// Runs its pool and its loading to the end, as frames would, without a host.
         void FinishLoading();
         /// The clips the picker lists, by name.

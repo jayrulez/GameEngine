@@ -158,7 +158,7 @@ TEST_CASE("model file preview: a texture part shows its picture in place of the 
     (void)RemoveDirectoryRecursive(cache.AsView());
 }
 
-TEST_CASE("model file preview: with its materials left out of the import it draws the default material, and its own again when they are back")
+TEST_CASE("model file preview: it draws the model as it will import: a material left out (all, or one) as the default, a texture left out (all, or one) not drawn")
 {
     const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_default_material");
     (void)RemoveDirectoryRecursive(cache.AsView());
@@ -183,6 +183,29 @@ TEST_CASE("model file preview: with its materials left out of the import it draw
         model->importMaterials = false;
         preview.OnSettingsChanged();
         CHECK(preview.DrawsDefaultMaterial());
+
+        // One material left out in the review (the plan as the window keeps it in the settings).
+        model->importMaterials = true;
+        const pipeline::ImportPlan plan = importer.DescribeImport(fox.AsView(), options.Get(), prepared.Get());
+        model->selection = plan;
+        for (pipeline::ImportPlanEntry& entry : model->selection.entries)
+            if (entry.kind == pipeline::ImportResourceKind::Material)
+                entry.enabled = false;
+        preview.OnSettingsChanged();
+        CHECK(preview.DrawsDefaultMaterial());
+        CHECK_FALSE(preview.DrawsWithoutTextures());
+
+        // (One texture left out is found by its texture, which a preview without a device has none of:
+        // that case is the editor's to check.)
+        // All textures left out by the setting; then nothing left out.
+        model->selection = plan;
+        model->importTextures = false;
+        preview.OnSettingsChanged();
+        CHECK(preview.DrawsWithoutTextures());
+        model->importTextures = true;
+        preview.OnSettingsChanged();
+        CHECK_FALSE(preview.DrawsWithoutTextures());
+        CHECK_FALSE(preview.DrawsDefaultMaterial());
     }
     (void)RemoveDirectoryRecursive(cache.AsView());
 }

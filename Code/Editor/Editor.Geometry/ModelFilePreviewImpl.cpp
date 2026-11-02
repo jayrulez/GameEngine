@@ -20,6 +20,7 @@ import foundation.geometry;
 import foundation.materials; // a material part shown on a sphere
 import foundation.resource;  // a part found as its resource handle
 import foundation.image;     // a texture part's picture
+import foundation.texture.resource; // a texture left out of the import, drawn without
 import foundation.image.io;
 import foundation.model;
 import foundation.model.resource;
@@ -117,7 +118,15 @@ namespace editor
             Array<foundation::resource::Ref<foundation::materials::Material>> materials;
         };
         Array<Kept> keptMaterials;
-        bool defaultMaterial = false;
+        bool defaultMaterial = false; // a material drawn as the default
+        bool withoutTextures = false; // a material drawn without a texture
+        RefPtr<foundation::materials::Material> fallbackMaterial;
+        struct Stripped
+        {
+            const foundation::materials::Material* from = nullptr;
+            RefPtr<foundation::materials::Material> copy; // null: it uses none of the textures left out
+        };
+        Array<Stripped> stripped;
 
         Impl(IAllocator& alloc, ModelFilePreview& preview, StringView file)
             : allocator(&alloc), owner(&preview), path(file), open(alloc), facts(alloc), clipNames(alloc), bonePoses(alloc)
@@ -397,36 +406,126 @@ namespace editor
             viewport->Frame(center, radius);
         }
 
-        // Draws the model as the import will make it: with the default material while its materials
-        // are left out (the Materials row unticked), its own again when they are not.
+        // Draws the model as the import will make it, from the file's settings and the plan as the
+        // review stands (the settings' selection): a material left out (all of them, or one) draws the
+        // default material, and a texture left out (all, or one) is drawn without, on a copy of each
+        // material that uses it, the bound materials untouched. Undone and done again on each change.
         void ShowAsImported()
         {
-            const auto* model = Cast<pipeline::ModelImportOptions>(options);
-            const bool leftOut = model != nullptr && !model->importMaterials;
-            if (leftOut == defaultMaterial)
-                return;
             scene::Scene* level = viewport ? viewport->Scene() : nullptr;
             auto* meshes = level != nullptr ? level->GetSystem<engine::render::MeshComponentManager>() : nullptr;
-            defaultMaterial = leftOut;
-            if (meshes == nullptr || !instance.root.IsAssigned())
+            if (meshes != nullptr)
+                for (Kept& kept : keptMaterials)
+                    if (engine::render::MeshComponent* component = meshes->Get(kept.entity))
+                    {
+                        component->materials = Move(kept.materials);
+                        component->materialCache.Clear();
+                    }
+            keptMaterials.Clear();
+            stripped.Clear();
+            defaultMaterial = false;
+            withoutTextures = false;
+            const auto* model = Cast<pipeline::ModelImportOptions>(options);
+            if (model == nullptr || !open.IsOpen())
                 return;
-            if (leftOut)
+            const bool allMaterials = !model->importMaterials;
+            const bool allTextures = !model->importTextures;
+            Array<const Object*> droppedMaterials;
+            Array<foundation::rhi::TextureView*> droppedTextures;
+            usize texturesFound = 0; // left out and found, drawn on the GPU or not (a test has no device)
+            for (const pipeline::ImportPlanEntry& entry : model->selection.entries)
             {
-                keptMaterials.Clear();
-                meshes->ForEach([&](engine::render::MeshComponent& component, scene::EntityHandle entity)
-                                {
-                                    if (!Under(*level, entity, instance.root))
-                                        return;
-                                    keptMaterials.PushBack(Kept{entity, component.materials});
-                                    component.materials.Clear(); // no material: the renderer's default
-                                    component.materialCache.Clear();
-                                });
+                if (entry.enabled)
+                    continue;
+                if (entry.kind == pipeline::ImportResourceKind::Material)
+                {
+                    if (RefPtr<foundation::resource::ResourceHandle> found = open.FindPart(entry.sourceName.AsView(), foundation::materials::Material::StaticType()))
+                        droppedMaterials.PushBack(found->Get());
+                }
+                else if (entry.kind == pipeline::ImportResourceKind::Texture)
+                {
+                    if (RefPtr<foundation::resource::ResourceHandle> found = open.FindPart(entry.sourceName.AsView(), foundation::texture::Texture::StaticType()))
+                    {
+                        ++texturesFound;
+                        if (auto* texture = Cast<foundation::texture::Texture>(found->Get()); texture != nullptr && texture->View() != nullptr)
+                            droppedTextures.PushBack(texture->View());
+                    }
+                }
+            }
+            if (!allMaterials && !allTextures && droppedMaterials.IsEmpty() && texturesFound == 0)
+                return;
+            if (meshes == nullptr || !instance.root.IsAssigned())
+            {
+                defaultMaterial = allMaterials || !droppedMaterials.IsEmpty(); // no view (a test): what it would draw
+                withoutTextures = !defaultMaterial && (allTextures || texturesFound > 0);
                 return;
             }
-            for (Kept& kept : keptMaterials)
-                if (engine::render::MeshComponent* component = meshes->Get(kept.entity))
-                    component->materials = Move(kept.materials);
-            keptMaterials.Clear();
+            if (!fallbackMaterial)
+                fallbackMaterial = foundation::materials::CreatePBR(u8"preview.default"); // as the renderer draws a mesh with none
+            const auto contains = [](const auto& list, const auto* item)
+            {
+                for (const auto* each : list)
+                    if (each == item)
+                        return true;
+                return false;
+            };
+            meshes->ForEach([&](engine::render::MeshComponent& component, scene::EntityHandle entity)
+                            {
+                                if (!Under(*level, entity, instance.root))
+                                    return;
+                                Array<foundation::resource::Ref<foundation::materials::Material>> drawn;
+                                bool changed = false;
+                                for (const foundation::resource::Ref<foundation::materials::Material>& slot : component.materials)
+                                {
+                                    foundation::materials::Material* material = slot.Get();
+                                    if (material != nullptr && (allMaterials || contains(droppedMaterials, static_cast<const Object*>(material))))
+                                    {
+                                        drawn.PushBack(foundation::resource::Ref<foundation::materials::Material>(fallbackMaterial));
+                                        defaultMaterial = changed = true;
+                                        continue;
+                                    }
+                                    if (material != nullptr && (allTextures || !droppedTextures.IsEmpty()))
+                                        if (RefPtr<foundation::materials::Material> without = Without(*material, allTextures, droppedTextures))
+                                        {
+                                            drawn.PushBack(foundation::resource::Ref<foundation::materials::Material>(without));
+                                            withoutTextures = changed = true;
+                                            continue;
+                                        }
+                                    drawn.PushBack(slot);
+                                }
+                                if (!changed)
+                                    return;
+                                keptMaterials.PushBack(Kept{entity, component.materials});
+                                component.materials = Move(drawn);
+                                component.materialCache.Clear();
+                            });
+        }
+
+        // `material` without the textures the import leaves out (every one when `all`), as a copy
+        // made once per change; null when it uses none of them.
+        RefPtr<foundation::materials::Material> Without(const foundation::materials::Material& material, bool all, const Array<foundation::rhi::TextureView*>& dropped)
+        {
+            for (const Stripped& made : stripped)
+                if (made.from == &material)
+                    return made.copy;
+            RefPtr<foundation::materials::Material> copy;
+            for (usize i = 0; i < material.PropertyCount(); ++i)
+            {
+                const foundation::materials::MaterialPropertyDef& property = material.GetProperty(i);
+                foundation::rhi::TextureView* texture = property.IsTexture() ? material.GetDefaultTexture(i) : nullptr;
+                if (texture == nullptr)
+                    continue;
+                bool drop = all;
+                for (foundation::rhi::TextureView* each : dropped)
+                    drop = drop || each == texture;
+                if (!drop)
+                    continue;
+                if (!copy)
+                    copy = material.Clone(*allocator);
+                copy->SetDefaultTexture(property.name, nullptr); // drawn with the renderer's plain fallback
+            }
+            stripped.PushBack(Stripped{&material, copy});
+            return copy;
         }
 
         // The model as read (the importer's, or the preview's own read), or null when neither is here
@@ -750,6 +849,11 @@ namespace editor
     bool ModelFilePreview::DrawsDefaultMaterial() const
     {
         return m_impl->defaultMaterial;
+    }
+
+    bool ModelFilePreview::DrawsWithoutTextures() const
+    {
+        return m_impl->withoutTextures;
     }
 
     bool ModelFilePreview::ShowsPicture() const

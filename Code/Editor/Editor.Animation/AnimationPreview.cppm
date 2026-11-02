@@ -33,10 +33,17 @@ export namespace editor
     namespace animation = foundation::animation;
 
     /// Draws `skeleton` in the pose `localPoses` as its bones, placed by `base`, with bone `chosen`
-    /// (-1: none) drawn apart. `worldScratch` belongs to the caller and is kept between frames.
+    /// (-1: none) drawn apart, over everything. `worldScratch` belongs to the caller and is kept
+    /// between frames. `overTheModel` draws every bone over everything (bones inside a mesh).
     void DrawSkeletonBones(foundation::render::debug::DebugDraw& draw, animation::Skeleton& skeleton,
                            Span<const animation::BoneTransform> localPoses, Array<Float4x4>& worldScratch,
-                           const Float4x4& base = Float4x4::Identity(), i32 chosen = -1);
+                           const Float4x4& base = Float4x4::Identity(), i32 chosen = -1, bool overTheModel = false);
+
+    /// Fills `model` with `skeleton`'s bones, each under its parent in the skeleton's order among
+    /// its siblings, a bone icon each; `rows` gets the bone each node is, by node (a TreeView's item
+    /// id). With `search`, only the bones whose names contain it (any case) and every bone above
+    /// one, so its place in the hierarchy shows. For the skeleton page and the import window.
+    void FillBoneTree(foundation::gui::TreeModel& model, Array<i32>& rows, const animation::Skeleton& skeleton, StringView search = {});
 
     /// Draws the path `clip`'s root motion travels from its start (on the ground, and upwards where
     /// it extracts height), and where the clip is along it at `time`. Draws nothing for a clip

@@ -144,3 +144,37 @@ TEST_CASE("skeleton page: a rotation said in degrees about an axis")
     // The shorter way round: -90 about +Y is 90 about -Y.
     CHECK(DescribeRotation(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, -kPi * 0.5f)) == String(u8"90° about 0, -1, 0"));
 }
+
+TEST_CASE("bone tree: each bone under its parent in the skeleton's order, its node's bone kept; a search keeps a bone found and the bones above it")
+{
+    namespace animation = foundation::animation;
+    animation::Skeleton skeleton;
+    const auto bone = [&](StringView name, i32 parent)
+    {
+        animation::Bone b;
+        b.name = String(name);
+        b.parentIndex = parent;
+        skeleton.Bones().PushBack(b);
+    };
+    bone(u8"root", -1);  // 0
+    bone(u8"hips", 0);   // 1
+    bone(u8"spine", 1);  // 2
+    bone(u8"leg_l", 1);  // 3
+    bone(u8"prop", -1);  // 4: a second root
+    gui::TreeModel model;
+    Array<i32> rows;
+    FillBoneTree(model, rows, skeleton);
+    REQUIRE(rows.Size() == 5u);
+    // Depth first under each root, siblings in the skeleton's order: root, hips, spine, leg_l, prop.
+    CHECK(rows[0] == 0);
+    CHECK(rows[1] == 1);
+    CHECK(rows[2] == 2);
+    CHECK(rows[3] == 3);
+    CHECK(rows[4] == 4);
+
+    FillBoneTree(model, rows, skeleton, u8"LEG");
+    REQUIRE(rows.Size() == 3u); // leg_l and the bones above it, any case
+    CHECK(rows[0] == 0);
+    CHECK(rows[1] == 1);
+    CHECK(rows[2] == 3);
+}

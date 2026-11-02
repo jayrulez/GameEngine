@@ -173,7 +173,6 @@ namespace editor
         if (!m_skeleton)
             return;
         m_showing = true;
-        const i32 count = m_skeleton->BoneCount();
         // A bone the user folded stays folded through a rebuild (after a search or a reload).
         Array<i32> folded(Allocator());
         if (m_tree != nullptr)
@@ -182,35 +181,11 @@ namespace editor
                     folded.PushBack(m_rows[node]);
         // A search keeps the bones whose names contain it, and every bone above a kept one, so its place
         // in the hierarchy shows.
-        Array<bool> kept;
-        kept.Resize(static_cast<usize>(count), m_search.IsEmpty());
-        if (!m_search.IsEmpty())
-            for (i32 b = 0; b < count; ++b)
-                if (m_skeleton->GetBone(b)->name.AsView().ContainsIgnoreCase(m_search.AsView()))
-                    for (i32 walk = b; walk >= 0 && walk < count && !kept[static_cast<usize>(walk)]; walk = m_skeleton->GetBone(walk)->parentIndex)
-                        kept[static_cast<usize>(walk)] = true;
-        m_model->Clear();
-        m_rows.Clear();
+        FillBoneTree(*m_model, m_rows, *m_skeleton, m_search.AsView());
         i32 chosen = -1;
-        // Each bone under its parent, in the skeleton's order among its siblings.
-        const Function<void(i32, i32)> add = [&](i32 bone, i32 parentNode)
-        {
-            const animation::Bone* data = m_skeleton->GetBone(bone);
-            const i32 node = m_model->AddNode(parentNode, data->name.IsEmpty() ? Format(u8"Bone {}", bone).AsView() : data->name.AsView());
-            m_model->SetIcon(node, u8"Editor/Icons/Types/SkeletonAsset.svg", u8"cat-animation");
-            m_rows.PushBack(bone);
-            if (bone == m_chosen)
-                chosen = node;
-            for (i32 child = 0; child < count; ++child)
-                if (m_skeleton->GetBone(child)->parentIndex == bone && kept[static_cast<usize>(child)])
-                    add(child, node);
-        };
-        for (i32 b = 0; b < count; ++b)
-        {
-            const i32 parent = m_skeleton->GetBone(b)->parentIndex;
-            if ((parent < 0 || parent >= count) && kept[static_cast<usize>(b)])
-                add(b, gui::kTreeModelRoot);
-        }
+        for (usize node = 0; node < m_rows.Size(); ++node)
+            if (m_rows[node] == m_chosen)
+                chosen = static_cast<i32>(node);
         if (m_tree != nullptr)
         {
             for (usize node = 0; node < m_rows.Size(); ++node)

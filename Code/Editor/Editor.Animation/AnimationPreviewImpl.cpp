@@ -32,7 +32,8 @@ namespace editor
     namespace scene = foundation::scene;
 
     void DrawSkeletonBones(foundation::render::debug::DebugDraw& draw, animation::Skeleton& skeleton,
-                           Span<const animation::BoneTransform> localPoses, Array<Float4x4>& worldScratch, const Float4x4& base, i32 chosen)
+                           Span<const animation::BoneTransform> localPoses, Array<Float4x4>& worldScratch, const Float4x4& base, i32 chosen,
+                           bool overTheModel)
     {
         const usize boneCount = static_cast<usize>(skeleton.BoneCount());
         if (boneCount == 0 || localPoses.Size() < boneCount)
@@ -51,8 +52,38 @@ namespace editor
             const Color color = isChosen ? chosenColor : boneColor;
             const Float3 joint = at(worldScratch[b]);
             if (bone != nullptr && bone->parentIndex >= 0 && static_cast<usize>(bone->parentIndex) < boneCount)
-                draw.DrawLine(at(worldScratch[static_cast<usize>(bone->parentIndex)]), joint, color, isChosen);
+                draw.DrawLine(at(worldScratch[static_cast<usize>(bone->parentIndex)]), joint, color, isChosen || overTheModel);
             draw.DrawCross(joint, isChosen ? 0.05f : 0.02f, color);
+        }
+    }
+
+    void FillBoneTree(gui::TreeModel& model, Array<i32>& rows, const animation::Skeleton& skeleton, StringView search)
+    {
+        model.Clear();
+        rows.Clear();
+        const i32 count = skeleton.BoneCount();
+        Array<bool> kept;
+        kept.Resize(static_cast<usize>(count), search.IsEmpty());
+        if (!search.IsEmpty())
+            for (i32 b = 0; b < count; ++b)
+                if (skeleton.GetBone(b)->name.AsView().ContainsIgnoreCase(search))
+                    for (i32 walk = b; walk >= 0 && walk < count && !kept[static_cast<usize>(walk)]; walk = skeleton.GetBone(walk)->parentIndex)
+                        kept[static_cast<usize>(walk)] = true;
+        const Function<void(i32, i32)> add = [&](i32 bone, i32 parentNode)
+        {
+            const animation::Bone* data = skeleton.GetBone(bone);
+            const i32 node = model.AddNode(parentNode, data->name.IsEmpty() ? Format(u8"Bone {}", bone).AsView() : data->name.AsView());
+            model.SetIcon(node, u8"Editor/Icons/Types/SkeletonAsset.svg", u8"cat-animation");
+            rows.PushBack(bone);
+            for (i32 child = 0; child < count; ++child)
+                if (skeleton.GetBone(child)->parentIndex == bone && kept[static_cast<usize>(child)])
+                    add(child, node);
+        };
+        for (i32 b = 0; b < count; ++b)
+        {
+            const i32 parent = skeleton.GetBone(b)->parentIndex;
+            if ((parent < 0 || parent >= count) && kept[static_cast<usize>(b)])
+                add(b, gui::kTreeModelRoot);
         }
     }
 

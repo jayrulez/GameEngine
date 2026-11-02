@@ -67,6 +67,30 @@ namespace pipeline{
                            String(u8"Model-import embedded pixels (0 for file-backed textures)"));
     }
 
+    // The import's settings, which the import window draws and an agent sets by label.
+    REFLECT_MEMBERS(TextureImportOptions, "rtti::pipeline::texture")
+    {
+        // The names of the enums its settings take, before a setting of their type is drawn.
+        RegisterTextureReflection();
+        foundation::image::RegisterImageReflection();
+        texcomp::RegisterCompressionReflection();
+        builder.Property<&TextureImportOptions::usage>("usage")
+            .PropAttribute("displayName", String(u8"Usage"))
+            .PropAttribute("description", String(u8"What it is: a colour map, a normal map, a data mask (roughness, AO, height) or an HDR environment; sets its sampler as the texture page's profiles do"))
+            .Property<&TextureImportOptions::colorSpace>("colorSpace")
+            .PropAttribute("displayName", String(u8"Colour space"))
+            .PropAttribute("description", String(u8"sRGB for a colour map; linear for data (normals, masks) and HDR"))
+            .Property<&TextureImportOptions::compression>("compression")
+            .PropAttribute("displayName", String(u8"Compression"))
+            .PropAttribute("description", String(u8"Default picks by usage and platform; None keeps every pixel; Quality spends more time for a better result"))
+            .Property<&TextureImportOptions::wrap>("wrap")
+            .PropAttribute("displayName", String(u8"Wrap"))
+            .PropAttribute("description", String(u8"What lies past its edges, across and down: repeat it, or clamp to the edge"))
+            .Property<&TextureImportOptions::generateMipmaps>("generateMipmaps")
+            .PropAttribute("displayName", String(u8"Mipmaps"))
+            .PropAttribute("description", String(u8"Smaller copies for when it is drawn small, which keep it from shimmering"));
+    }
+
     REFLECT_ENUM(RenderTextureFormat, "rtti::pipeline::texture")
     {
         builder.Value("Ldr", RenderTextureFormat::Ldr);

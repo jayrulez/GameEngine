@@ -367,6 +367,11 @@ export namespace pipeline
             return {};
         }
 
+        /// Sets `options` (CreateOptions') as this importer would choose them for the file at
+        /// `sourcePath`, before anyone sees them: a texture's usage guessed from its name, say.
+        /// Reads at most a file's header. Default: the options' own defaults stand.
+        virtual void InitializeOptions(StringView /*sourcePath*/, ImportOptions& /*options*/) const {}
+
         /// Slow importers split in two: PrepareOnWorker runs off the UI thread (pure
         /// parsing and decoding of the source file, with no project or DB access) and its payload
         /// is then handed to Import on the main thread for the fast DB fan-out. Default: no

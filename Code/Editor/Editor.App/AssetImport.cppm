@@ -215,6 +215,7 @@ export namespace editor::app
             file.options = importer->CreateOptions(Context().Importers().Allocator());
             if (!file.options)
                 file.options = MakeRef<pipeline::ImportOptions>(Context().Importers().Allocator()); // a bare one carries the plan's choices
+            importer->InitializeOptions(file.path.AsView(), *file.options); // as the importer chooses for this file
             file.prepared = {};
             file.plan = {};
             const u64 generation = ++file.generation;

@@ -397,6 +397,8 @@ export namespace editor::mcp
                 }
                 // The options: the importer's defaults, then the call's settings by label.
                 request.options = request.importer->CreateOptions(editor::EditorRootAllocator());
+                if (request.options.Get() != nullptr)
+                    request.importer->InitializeOptions(request.source.AsView(), *request.options); // as the window would start them
                 if (args.Has(u8"options"))
                 {
                     const JsonValue asked = args.Get(u8"options");

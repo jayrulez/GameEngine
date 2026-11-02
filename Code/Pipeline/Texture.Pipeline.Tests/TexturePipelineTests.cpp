@@ -1198,3 +1198,57 @@ TEST_CASE("texture.pipeline: a render texture asset cooks to a record its factor
     CHECK(read.height == 128u);
     CHECK(read.format == RenderTextureFormat::Hdr);
 }
+
+TEST_CASE("texture-import: the settings start as the file's preset, its usage guessed from its name with the reason; the import takes them")
+{
+    RegisterTextureAsset();
+    TextureFileImporter importer;
+    RefPtr<pipeline::ImportOptions> base = importer.CreateOptions(DefaultAllocator());
+    REQUIRE(base.Get() != nullptr);
+    auto* options = Cast<TextureImportOptions>(base.Get());
+    REQUIRE(options != nullptr);
+    CHECK(options->Settings().Size() == 5u);
+
+    // A normal map by its name: Normal and linear, and the note says which token decided it.
+    importer.InitializeOptions(u8"/somewhere/rock_nor_gl.png", *options);
+    CHECK(options->usage == texcomp::TextureUsage::Normal);
+    CHECK(options->colorSpace == foundation::image::ImageColorSpace::Linear);
+    CHECK(options->generateMipmaps);
+    const PropertyInfo& usage = *options->FindSetting(u8"Usage");
+    CHECK(importer.DescribeSetting(u8"/somewhere/rock_nor_gl.png", *options, nullptr, usage).effect == StringView(u8"Its name has \"_nor\""));
+    // Another usage chosen: the note says what the name suggested.
+    options->usage = texcomp::TextureUsage::Mask;
+    CHECK(importer.DescribeSetting(u8"/somewhere/rock_nor_gl.png", *options, nullptr, usage).effect == StringView(u8"Its name suggests Normal"));
+    // A plain name: Color, sRGB, and nothing to say.
+    importer.InitializeOptions(u8"/somewhere/brick.png", *options);
+    CHECK(options->usage == texcomp::TextureUsage::Color);
+    CHECK(options->colorSpace == foundation::image::ImageColorSpace::Srgb);
+    CHECK(importer.DescribeSetting(u8"/somewhere/brick.png", *options, nullptr, usage).effect.IsEmpty());
+
+    // The import takes what is set: a mask with no mipmaps, clamped.
+    const StringView dir = u8"scratch_tex_import_settings_project";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    const byte fakePng[6] = {byte{'P'}, byte{'N'}, byte{'G'}, byte{1}, byte{2}, byte{3}};
+    REQUIRE(WriteFile(u8"brick.png", Span<const byte>(fakePng, 6)).IsOk());
+    options->usage = texcomp::TextureUsage::Mask;
+    options->colorSpace = foundation::image::ImageColorSpace::Linear;
+    options->generateMipmaps = false;
+    options->wrap = TextureWrap::ClampToEdge;
+    Result<foundation::content::Instance*> imported = importer.Import(
+        u8"brick.png", pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()}, *project->SourceDb().RootGroup(), options, nullptr, nullptr);
+    REQUIRE(imported.HasValue());
+    RefPtr<ISerializable> object = imported.Value()->ReadObject();
+    auto* asset = Cast<TextureAsset>(object.Get());
+    REQUIRE(asset != nullptr);
+    CHECK(asset->usage == texcomp::TextureUsage::Mask);
+    CHECK(asset->colorSpace == foundation::image::ImageColorSpace::Linear);
+    CHECK_FALSE(asset->generateMipmaps);
+    CHECK(asset->wrapU == TextureWrap::ClampToEdge);
+    CHECK(asset->wrapV == TextureWrap::ClampToEdge);
+    FileDelete(u8"brick.png");
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}

@@ -1002,8 +1002,9 @@ export namespace pipeline{
     // Usage inference from texture-pack name tokens, case-insensitive, matched anywhere in
     // the stem. A token counts only when what follows it is the end, an underscore, or a digit
     // ("foo_nor_gl_4k" matches "_nor"; "my_armor" does not match "_arm": the boundary rule
-    // keeps ordinary words out). Unrecognized names infer Color.
-    [[nodiscard]] inline texcomp::TextureUsage InferTextureUsage(StringView stem)
+    // keeps ordinary words out). Unrecognized names infer Color. `token`, when given, receives the
+    // token that decided it (empty for Color).
+    [[nodiscard]] inline texcomp::TextureUsage InferTextureUsage(StringView stem, String* token = nullptr)
     {
         String lower;
         lower.Reserve(stem.Size());
@@ -1054,6 +1055,8 @@ export namespace pipeline{
         {
             if (hasToken(t))
             {
+                if (token != nullptr)
+                    *token = String(t);
                 return texcomp::TextureUsage::Normal;
             }
         }
@@ -1062,11 +1065,63 @@ export namespace pipeline{
         {
             if (hasToken(t))
             {
+                if (token != nullptr)
+                    *token = String(t);
                 return texcomp::TextureUsage::Mask;
             }
         }
         return texcomp::TextureUsage::Color;
     }
+
+    /// A texture import's settings (reflected in TextureAssetImpl.cpp), which the import window
+    /// draws: what the texture is used for, its colour space, compression, wrap and mipmaps. They
+    /// start as the importer chooses for the file (TextureFileImporter::InitializeOptions), the
+    /// usage guessed from its name.
+    class TextureImportOptions final : public pipeline::ImportOptions
+    {
+        RTTI_OBJECT(TextureImportOptions, pipeline::ImportOptions)
+    public:
+        texcomp::TextureUsage usage = texcomp::TextureUsage::Color;
+        image::ImageColorSpace colorSpace = image::ImageColorSpace::Srgb;
+        texcomp::CompressionChoice compression = texcomp::CompressionChoice::Default;
+        TextureWrap wrap = TextureWrap::Repeat; // both U and V
+        bool generateMipmaps = true;
+
+        /// Takes the settings `asset` was set up with (a preset).
+        void From(const TextureAsset& asset)
+        {
+            usage = asset.usage;
+            colorSpace = asset.colorSpace;
+            compression = asset.compression;
+            wrap = asset.wrapU;
+            generateMipmaps = asset.generateMipmaps;
+        }
+        /// Sets `asset` up for the usage chosen (its sampler and the like, as the presets do), then
+        /// gives it these settings.
+        void ApplyTo(TextureAsset& asset) const
+        {
+            switch (usage)
+            {
+            case texcomp::TextureUsage::Normal:
+                asset.SetupForNormalMap();
+                break;
+            case texcomp::TextureUsage::Mask:
+                asset.SetupForDataMask();
+                break;
+            case texcomp::TextureUsage::HDR:
+                asset.SetupForEquirectangularSkybox();
+                break;
+            default:
+                asset.SetupFor3D();
+                break;
+            }
+            asset.colorSpace = colorSpace;
+            asset.compression = compression;
+            asset.wrapU = wrap;
+            asset.wrapV = wrap;
+            asset.generateMipmaps = generateMipmaps;
+        }
+    };
 
     class TextureFileImporter final : public pipeline::IFileImporter
     {
@@ -1156,6 +1211,76 @@ export namespace pipeline{
             return pipeline::SingleAssetStoredSelection(group, sourcePath, u8"TextureAsset");
         }
 
+        [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override
+        {
+            return MakeRef<TextureImportOptions>(allocator);
+        }
+
+        // The preset the file calls for, as an import with no settings makes it: an environment
+        // for an .hdr, what a DDS's header says, else the usage its name suggests.
+        static void SetupForFile(TextureAsset& asset, StringView sourcePath)
+        {
+            const StringView stem = pipeline::FileStemOf(pipeline::FileNameOf(sourcePath));
+            const String extension = pipeline::FileExtensionLower(sourcePath);
+            if (extension == u8"hdr")
+                asset.SetupForEquirectangularSkybox(); // .hdr = an environment, not a surface map
+            else if (extension == u8"dds")
+                SetupForDds(asset, sourcePath, stem);
+            else
+                SetupForInferredUsage(asset, stem);
+        }
+
+        void InitializeOptions(StringView sourcePath, pipeline::ImportOptions& options) const override
+        {
+            if (auto* texture = Cast<TextureImportOptions>(&options))
+            {
+                TextureAsset preset;
+                SetupForFile(preset, sourcePath);
+                texture->From(preset);
+            }
+        }
+
+        /// The usage's note: why it was guessed so (the token in the file's name, its .hdr or DDS
+        /// header), or what its name suggests when another is chosen.
+        [[nodiscard]] pipeline::ImportSettingNote DescribeSetting(StringView sourcePath, const pipeline::ImportOptions& options, Object*,
+                                                                  const PropertyInfo& setting) const override
+        {
+            pipeline::ImportSettingNote note;
+            const auto* texture = Cast<TextureImportOptions>(&options);
+            if (texture == nullptr || StringView(reinterpret_cast<const utf8char*>(setting.name)) != StringView(u8"usage"))
+                return note;
+            const String extension = pipeline::FileExtensionLower(sourcePath);
+            String token;
+            texcomp::TextureUsage guessed = texcomp::TextureUsage::Color;
+            String why;
+            if (extension == u8"hdr")
+            {
+                guessed = texcomp::TextureUsage::HDR;
+                why = String(u8"An .hdr is an environment");
+            }
+            else if (extension == u8"dds")
+            {
+                TextureAsset preset;
+                SetupForDds(preset, sourcePath, pipeline::FileStemOf(pipeline::FileNameOf(sourcePath)));
+                guessed = preset.usage;
+                why = String(u8"From its DDS header");
+            }
+            else
+            {
+                guessed = InferTextureUsage(pipeline::FileStemOf(pipeline::FileNameOf(sourcePath)), &token);
+                if (!token.IsEmpty())
+                    why = Format(u8"Its name has \"{}\"", token);
+            }
+            if (texture->usage == guessed)
+                note.effect = why;
+            else if (guessed != texcomp::TextureUsage::Color || !why.IsEmpty())
+            {
+                const char* name = EnumValueName(TypeOf<texcomp::TextureUsage>(), static_cast<i64>(guessed));
+                note.effect = Format(u8"Its name suggests {}", StringView(reinterpret_cast<const utf8char*>(name != nullptr ? name : "Color")));
+            }
+            return note;
+        }
+
         [[nodiscard]] Result<content::Instance*>
         Import(StringView sourcePath, const pipeline::ImportContext& context,
                content::Group& group, const pipeline::ImportOptions* options, Object*,
@@ -1192,23 +1317,15 @@ export namespace pipeline{
                 return Err(claimed.Error());
             }
             content::Instance* instance = claimed.Value();
-            const StringView stem = pipeline::FileStemOf(pipeline::FileNameOf(sourcePath));
 
             TextureAsset asset;
             asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
-            const String extension = pipeline::FileExtensionLower(sourcePath);
-            if (extension == u8"hdr")
-            {
-                asset.SetupForEquirectangularSkybox(); // .hdr = an environment, not a surface map
-            }
-            else if (extension == u8"dds")
-            {
-                SetupForDds(asset, sourcePath, stem);
-            }
+            // The window's settings when there are some (they start as the file's preset); the
+            // preset itself when not (a headless import).
+            if (const auto* texture = Cast<TextureImportOptions>(options))
+                texture->ApplyTo(asset);
             else
-            {
-                SetupForInferredUsage(asset, stem);
-            }
+                SetupForFile(asset, sourcePath);
             const Status written = instance->WriteObject(asset);
             if (!written.IsOk())
             {

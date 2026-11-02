@@ -27,7 +27,9 @@ file resolves to, or from what its domain registers.
 
 - **Three panes.** Files on the left, the selected file's preview in the middle, its settings on
   the right; the destination ("Into") and the count in the footer, beside Cancel and
-  "Import N Files". Larger than today and resizable.
+  "Import N Files". Larger than today and resizable. "Into" opens the group picker, where a
+  right-click offers New Group... (its name asked), so the group an import should go in can be
+  made without leaving the import.
 - **Files, grouped by importer.** One section per importer the drop's files resolve to, titled by
   the importer's own Label() ("Model", "Texture", "Audio") with its count. Each file: its checkbox,
   its asset type's icon, its name, its size, and its state when it needs attention (a choice to

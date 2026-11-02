@@ -91,10 +91,10 @@ namespace
     public:
         explicit NamePreviewFactory(usize& made) : m_made(&made) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return &WindowThing::StaticType(); }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, const pipeline::ImportOptions*, editor::ImportPreviewReader&, IAllocator& allocator) override
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(const editor::ImportPreviewSource& file, editor::ImportPreviewReader&, IAllocator& allocator) override
         {
             ++*m_made;
-            return UniquePtr<editor::IImportPreview>(allocator.New<NamePreview>(path), allocator);
+            return UniquePtr<editor::IImportPreview>(allocator.New<NamePreview>(file.path), allocator);
         }
 
     private:
@@ -329,5 +329,26 @@ TEST_CASE("import window: Use these for every <label> gives the selected file's 
     static_cast<CrateOptions*>(session->files[0].options.Get())->hollow = true;
     CHECK(bed.window->ShareSettings(0) == 1u); // the other crate; the box has its own importer
     CHECK(static_cast<CrateOptions*>(session->files[1].options.Get())->hollow);
+    bed.window->Close();
+}
+
+TEST_CASE("import window: while a file's importer reads it, its preview waits, and is made when the read arrives")
+{
+    Bed bed;
+    usize made = 0;
+    bed.context.ImportPreviews().Register(UniquePtr<editor::IImportPreviewFactory>(DefaultAllocator().New<NamePreviewFactory>(made), DefaultAllocator()));
+    const String two[] = {String(u8"/somewhere/a.box"), String(u8"/somewhere/b.box")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(two, 2u));
+    CHECK(made == 1u);
+    // b.box as a heavy importer's file, still being read: selected, it waits.
+    session->files[1].state = AssetImport::File::State::Reading;
+    bed.window->Select(1);
+    CHECK(made == 1u);
+    CHECK(bed.window->Preview() == nullptr);
+    // The read arrives: the preview is made, with it.
+    session->files[1].state = AssetImport::File::State::Ready;
+    session->onChanged(1);
+    CHECK(made == 2u);
+    CHECK(bed.window->Preview() != nullptr);
     bed.window->Close();
 }

@@ -126,7 +126,10 @@ export namespace editor::app
             {
                 self->ShowFiles();
                 if (file == self->m_selected)
+                {
+                    self->ShowPreview(); // one waiting for the importer's read is made now
                     self->ShowDetail();
+                }
                 self->ShowWhy();
             };
             ShowAll();
@@ -367,13 +370,24 @@ export namespace editor::app
                 while (view->ChildCount() > 0)
                     view->RemoveChild(view->GetChildAt(view->ChildCount() - 1));
                 m_preview = {};
-                m_previewPath = file.path;
-                m_previewType = type;
                 editor::IImportPreviewFactory* factory = m_services.previews != nullptr && m_services.previewReader != nullptr
                                                              ? m_services.previews->FindByName(type.AsView())
                                                              : nullptr;
-                if (factory != nullptr)
-                    m_preview = factory->Create(file.path.AsView(), file.options.Get(), *m_services.previewReader, m_allocator);
+                // While the importer reads the file, its preview waits to show that read rather
+                // than read it again (made when the read arrives, see Open).
+                const bool waits = factory != nullptr && file.state == AssetImport::File::State::Reading;
+                if (!waits)
+                {
+                    m_previewPath = file.path;
+                    m_previewType = type;
+                }
+                else
+                    m_previewPath = {};
+                if (factory != nullptr && !waits)
+                {
+                    const editor::ImportPreviewSource source{file.path.AsView(), file.options.Get(), file.prepared.Get()};
+                    m_preview = factory->Create(source, *m_services.previewReader, m_allocator);
+                }
                 if (m_preview)
                 {
                     ImportWindow* self = this;
@@ -386,7 +400,7 @@ export namespace editor::app
                     icon->AddClass(u8"import-preview-icon");
                     icon->SetSource(IconOf(file));
                     view->AddChild(icon.Get());
-                    view->AddChild(Text(file.Name(), u8"import-preview-name").Get());
+                    view->AddChild(Text(waits ? Format(u8"Reading {}...", file.Name()).AsView() : file.Name(), u8"import-preview-name").Get());
                 }
             }
             ShowFacts();

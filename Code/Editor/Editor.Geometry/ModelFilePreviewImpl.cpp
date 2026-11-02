@@ -177,9 +177,12 @@ namespace editor
             }
         }
 
-        void Start(StringView cacheRoot, ImportPreviewReader& reader)
+        void Start(StringView cacheRoot, ImportPreviewReader& reader, foundation::model::Model* imported)
         {
             message->SetText(Format(u8"Reading {}...", pipeline::FileNameOf(path.AsView())).AsView());
+            // As the importer reads it: without the viewer's loose texture rule, which the import
+            // does not apply either, so the preview shows what will come in.
+            open.SetLooseTextures(false);
             OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
             const OpenModel::Begun begun = open.Begin(path.AsView(), cacheRoot, device, outcome);
             if (begun == OpenModel::Begun::Bound)
@@ -192,12 +195,22 @@ namespace editor
                 Failed(outcome);
                 return;
             }
+            // The importer read it already: cook and bind that, with no second read.
+            if (imported != nullptr)
+            {
+                const OpenModel::Outcome finished = open.Finish(*imported, CountModel(*imported)); // CountModel works out its bounds, nothing more
+                if (finished == OpenModel::Outcome::Opened)
+                    Opened();
+                else
+                    Failed(finished);
+                return;
+            }
             RefPtr<Read> result = MakeRef<Read>(*allocator);
             Impl* self = this;
             // On the worker: only the file and `result` (LoadFile makes its own loaders).
             read = reader.Read([result, file = path]()
                                {
-                                   result->outcome = OpenModel::LoadFile(file.AsView(), true, result->model, result->stats);
+                                   result->outcome = OpenModel::LoadFile(file.AsView(), false, result->model, result->stats);
                                },
                                // On the main thread, which owns the cache's database and resources, and
                                // only while this preview lives (it cancels the read as it goes).
@@ -344,12 +357,13 @@ namespace editor
         }
     };
 
-    ModelFilePreview::ModelFilePreview(StringView path, StringView cacheRoot, ImportPreviewReader& reader, IAllocator& allocator, const app::AssetPageServices& services)
+    ModelFilePreview::ModelFilePreview(StringView path, StringView cacheRoot, ImportPreviewReader& reader, IAllocator& allocator, const app::AssetPageServices& services,
+                                       foundation::model::Model* imported)
     {
         m_impl = MakeUnique<Impl>(allocator, allocator, *this, path);
         Provide<app::IImportPreviewFrames>(*this);
         m_impl->BuildView(services);
-        m_impl->Start(cacheRoot, reader);
+        m_impl->Start(cacheRoot, reader, imported);
     }
 
     ModelFilePreview::~ModelFilePreview()
@@ -405,13 +419,15 @@ namespace editor
         return m_impl->clipNames.AsSpan();
     }
 
-    UniquePtr<IImportPreview> ModelFilePreviewFactory::Create(StringView path, const pipeline::ImportOptions*, ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<IImportPreview> ModelFilePreviewFactory::Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator)
     {
         if (m_context->Project() == nullptr)
             return {};
         const String cacheRoot = PathJoin(m_context->Project()->CacheRoot().AsView(), StringView(kModelPreviewCacheFolder));
         const app::AssetPageServices services = m_services->Make();
-        return UniquePtr<IImportPreview>(allocator.New<ModelFilePreview>(path, cacheRoot.AsView(), reader, allocator, services), allocator);
+        auto* loaded = Cast<pipeline::LoadedModel>(file.prepared);
+        return UniquePtr<IImportPreview>(
+            allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), reader, allocator, services, loaded != nullptr ? &loaded->model : nullptr), allocator);
     }
 
     void RegisterModelFilePreview(EditorContext& context, const app::AssetPageServicesSource& services)

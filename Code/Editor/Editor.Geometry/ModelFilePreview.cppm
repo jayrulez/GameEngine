@@ -12,8 +12,8 @@
 // thread, which owns the resources. Without a host (a test) there is no view, but the model still
 // opens and its facts show. The window drives it each frame (IImportPreviewFrames).
 //
-// The interface names no render, scene or model type (they are the body's): gcc's module merger
-// fails when a heavy translation unit imports an interface that pulls in engine.render.
+// The interface names no render or scene type (they are the body's): gcc's module merger fails
+// when a heavy translation unit imports an interface that pulls in engine.render.
 
 module;
 #include "Core/Prelude.h"
@@ -21,6 +21,7 @@ module;
 export module editor.geometry:model_file_preview;
 
 import foundation.core;
+import foundation.model; // Model (what the importer read, cooked rather than read again)
 import foundation.runtime.client;
 import foundation.graphics;
 import foundation.gui;
@@ -36,8 +37,10 @@ export namespace editor
     {
     public:
         /// Opens `path` with its cooked files under `cacheRoot`: bound at once when opened before,
+        /// else cooked from `imported` (the model the importer read, which must outlive this call),
         /// else read on `reader`. `services` give the host and GUI the view needs (none: no view).
-        ModelFilePreview(StringView path, StringView cacheRoot, ImportPreviewReader& reader, IAllocator& allocator, const app::AssetPageServices& services);
+        ModelFilePreview(StringView path, StringView cacheRoot, ImportPreviewReader& reader, IAllocator& allocator, const app::AssetPageServices& services,
+                         foundation::model::Model* imported = nullptr);
         ModelFilePreview(const ModelFilePreview&) = delete;
         ModelFilePreview& operator=(const ModelFilePreview&) = delete;
         ~ModelFilePreview() override;
@@ -69,8 +72,7 @@ export namespace editor
         {
         }
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
-                                                       IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

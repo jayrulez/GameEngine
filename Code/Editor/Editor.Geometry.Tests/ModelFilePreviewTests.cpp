@@ -15,6 +15,7 @@ import foundation.vfs;
 import editor.core;
 import editor.app;
 import editor.geometry;
+import modelimporter; // the importer's own read
 
 using namespace foundation::core;
 namespace vfs = foundation::vfs;
@@ -75,5 +76,23 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
     reader.Finish();
     CHECK_FALSE(broken.IsOpen());
     CHECK(broken.Facts().IsEmpty());
+    (void)RemoveDirectoryRecursive(cache.AsView());
+}
+
+TEST_CASE("model file preview: given the importer's read, it cooks that and reads nothing itself")
+{
+    const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_read");
+    (void)RemoveDirectoryRecursive(cache.AsView());
+    editor::ImportPreviewReader reader(DefaultAllocator());
+    const editor::app::AssetPageServices services{};
+    const String fox = Fox();
+    pipeline::ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
+    auto* loaded = Cast<pipeline::LoadedModel>(prepared.Get());
+    REQUIRE(loaded != nullptr);
+    editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), reader, DefaultAllocator(), services, &loaded->model);
+    CHECK(preview.IsOpen()); // at once
+    CHECK(reader.InFlight() == 0u); // no read of its own
+    CHECK(preview.Facts().Size() == 6u);
     (void)RemoveDirectoryRecursive(cache.AsView());
 }

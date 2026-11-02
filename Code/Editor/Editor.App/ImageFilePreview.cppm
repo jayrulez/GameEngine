@@ -68,8 +68,7 @@ export namespace editor::app
     public:
         explicit ImageFilePreviewFactory(const TypeInfo& type) : m_type(&type) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, editor::ImportPreviewReader& reader,
-                                                               IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(const editor::ImportPreviewSource& file, editor::ImportPreviewReader& reader, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

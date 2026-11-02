@@ -166,6 +166,17 @@ export namespace editor
         HashMap<TypeId, IImportPreviewService*> m_services;
     };
 
+    /// The file a preview is made for: its path, its settings (null when its importer has none),
+    /// and what its importer read of it on a worker (null when it reads nothing ahead, or has not
+    /// yet), which a preview may show rather than read the file again. Both stay alive as long as
+    /// the preview.
+    struct ImportPreviewSource
+    {
+        StringView path;
+        const pipeline::ImportOptions* options = nullptr;
+        Object* prepared = nullptr;
+    };
+
     /// Makes previews of the files an importer lists by one asset type (and, through nearest-type
     /// dispatch, its subclasses unless a nearer factory is registered).
     class IImportPreviewFactory
@@ -174,11 +185,9 @@ export namespace editor
         virtual ~IImportPreviewFactory() = default;
 
         [[nodiscard]] virtual const TypeInfo* AssetType() const = 0;
-        /// A preview of the source file at `path`, its read started on `reader`; null when it
-        /// shows nothing for it. `options` are the file's settings (null when its importer has
-        /// none), alive as long as the preview, for one that shows what they will do.
-        [[nodiscard]] virtual UniquePtr<IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
-                                                               IAllocator& allocator) = 0;
+        /// A preview of `file`, any read it needs started on `reader`; null when it shows nothing
+        /// for it.
+        [[nodiscard]] virtual UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator) = 0;
     };
 
     class ImportPreviewRegistry

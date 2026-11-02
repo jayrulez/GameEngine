@@ -251,11 +251,10 @@ namespace editor
         return m_state != nullptr ? m_state->GetText() : StringView{};
     }
 
-    UniquePtr<IImportPreview> SoundFilePreviewFactory::Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
-                                                              IAllocator& allocator)
+    UniquePtr<IImportPreview> SoundFilePreviewFactory::Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator)
     {
         const app::AssetPageServices services = m_services->Make();
         engine::audio::AudioSubsystem* audio = services.host != nullptr ? services.host->Subsystems().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr;
-        return UniquePtr<IImportPreview>(allocator.New<SoundFilePreview>(path, options, reader, allocator, audio), allocator);
+        return UniquePtr<IImportPreview>(allocator.New<SoundFilePreview>(file.path, file.options, reader, allocator, audio), allocator);
     }
 }

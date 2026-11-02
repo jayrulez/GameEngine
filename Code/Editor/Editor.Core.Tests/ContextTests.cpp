@@ -136,7 +136,7 @@ namespace
     public:
         explicit TestPreviewFactory(const TypeInfo& type) : m_type(&type) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView, const pipeline::ImportOptions*, ImportPreviewReader&, IAllocator&) override { return {}; }
+        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource&, ImportPreviewReader&, IAllocator&) override { return {}; }
 
     private:
         const TypeInfo* m_type;

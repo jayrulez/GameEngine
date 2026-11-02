@@ -104,8 +104,7 @@ export namespace editor
     public:
         SoundFilePreviewFactory(const TypeInfo& type, const app::AssetPageServicesSource& services) : m_type(&type), m_services(&services) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
-                                                       IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

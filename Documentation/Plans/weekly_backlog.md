@@ -13,6 +13,21 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-11-02 (user, an outside suggestion): a constant-time IsA by class ranges
+
+To discuss: replacing the chain walk behind `IsA`/`Cast` with a range test. Number the classes in
+depth-first order and keep each one's count of descendants; a class's descendants are then the
+numbers just after its own, and "is X an A" is `u32(index(X) - index(A)) <= descendants(A)`,
+one subtraction and compare whatever the depth. Today `IsDerivedFrom`
+(`Core/RTTI/Object.cppm:45`) walks the single-inheritance chain comparing by `TypeId`, a few
+steps at the depths this engine has. Questions: does a profile show `Cast` costing anything
+(nothing measured yet; measure before building); the type set changes while running
+(`TypeRegistry::Unregister`, types arriving and leaving with shared libraries, native game code,
+dynamic extensions), so the numbering must be redone on each change and a type outside it falls
+back to the walk; and each shared library holds its own copy of a `TypeInfo` (the reason the walk
+compares ids), so the numbers live in the registry by id or are written to every copy. Callers
+would not change either way.
+
 ## Queued 2026-10-31 (user, after a survey of the engine): transient textures reused within a frame
 
 The render graph pools transient textures across frames only (`TransientTexturePool.cppm`: an

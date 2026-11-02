@@ -66,6 +66,20 @@ export namespace editor
             return icon;
         }
 
+        /// The icon of the type named `typeName` (as an importer names the asset type it makes), as
+        /// For finds it; `fallback`'s when no type has that name.
+        [[nodiscard]] TypeIcon ForTypeName(StringView typeName, StringView fallback)
+        {
+            for (const TypeInfo* type : GlobalTypeRegistry().All())
+                if (type != nullptr && type->name != nullptr && StringView(reinterpret_cast<const utf8char*>(type->name)) == typeName)
+                    return For(*type, fallback);
+            TypeIcon icon;
+            String path = IconPath(fallback);
+            if (!fallback.IsEmpty() && m_exists && m_exists(path.AsView()))
+                icon.Source = Move(path);
+            return icon;
+        }
+
         /// Forgets what it found (the icon files changed on disk).
         void Forget() { m_cache.Clear(); }
 

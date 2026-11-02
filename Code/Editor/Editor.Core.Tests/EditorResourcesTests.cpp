@@ -121,3 +121,21 @@ TEST_CASE("editor icons: a type's own icon, else its base's, else the fallback; 
     CHECK(EditorIcons::CategoryClass(u8"UI") == String(u8"cat-ui"));
     CHECK(EditorIcons::CategoryClass(u8"--").IsEmpty());
 }
+
+TEST_CASE("editor icons: a type found by its name (as an importer names what it makes); an unknown name gets the fallback")
+{
+    const char8_t* const there[] = {u8"Editor/Icons/Types/IconLight.svg", u8"Editor/Icons/Types/Asset.svg"};
+    EditorIcons icons(DefaultAllocator(), [&there](StringView path)
+                      {
+                          for (const char8_t* p : there)
+                              if (path == StringView(p))
+                                  return true;
+                          return false;
+                      });
+    GlobalTypeRegistry().Register(IconLight::StaticType());
+    const TypeIcon named = icons.ForTypeName(u8"IconLight", u8"Asset");
+    CHECK(named.Source == String(u8"Editor/Icons/Types/IconLight.svg"));
+    CHECK(named.Class == String(u8"cat-visualeffects")); // as For finds it, category and all
+    CHECK(icons.ForTypeName(u8"NoSuchType", u8"Asset").Source == String(u8"Editor/Icons/Types/Asset.svg"));
+    CHECK(icons.ForTypeName(u8"NoSuchType", u8"Missing").Source.IsEmpty());
+}

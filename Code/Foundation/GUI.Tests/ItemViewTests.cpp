@@ -118,6 +118,25 @@ TEST_CASE("itemview: measured rows take their own heights once realised, estimat
     CHECK(row->GetSize().y == doctest::Approx(40.0f));
 }
 
+TEST_CASE("itemview: fitting its rows, it measures as tall as they are, and follows their count")
+{
+    // A list with no height of its own, as one placed among other content.
+    StringListModel model(Numbered(5));
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 600.0f});
+    auto list = Make<ListView>();
+    list->SetRowHeight(20.0f);
+    root->AddChild(list.Get());
+    list->SetModel(&model);
+    const LayoutConstraints open{core::Float2{0.0f, 0.0f}, core::Float2{300.0f, 10000.0f}};
+    list->SetFitsRows(true);
+    (void)root->UpdateLayout();
+    CHECK(list->Measure(open).y == doctest::Approx(100.0f)); // five rows of 20
+    model.SetItems(Numbered(3));
+    (void)root->UpdateLayout();
+    CHECK(list->Measure(open).y == doctest::Approx(60.0f));
+}
+
 TEST_CASE("itemview: rows come from a factory, one pool per type, recycled as they scroll")
 {
     StringListModel model(Numbered(200));

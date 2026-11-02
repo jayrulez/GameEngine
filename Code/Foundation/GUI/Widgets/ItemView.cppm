@@ -409,6 +409,17 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] f32 GetRowHeight() const noexcept { return m_rowHeight; }
+        /// Sets whether its natural height is its rows' (a short list among other content, as an
+        /// import's settings above what the file makes). Off, as by default, it measures as a box
+        /// of its pooled rows does and takes the height its layout gives it, which a long list wants.
+        void SetFitsRows(bool fits)
+        {
+            if (fits == m_fitsRows)
+                return;
+            m_fitsRows = fits;
+            RequestLayout();
+        }
+        [[nodiscard]] bool FitsRows() const noexcept { return m_fitsRows; }
         /// Sets the height assumed for a row until it is realised and measured.
         void SetEstimatedRowHeight(f32 height)
         {
@@ -830,6 +841,12 @@ export namespace foundation::gui
         virtual void BindContent(Node& content, i32 item, const ModelIndex& index) = 0;
         /// Returns the room above the rows, such as a table's header.
         [[nodiscard]] virtual f32 ContentTopInset() const { return 0.0f; }
+        /// With FitsRows, as tall as its rows (and what is above them); otherwise as any box.
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
+        {
+            const core::Float2 measured = UIWidget::MeasureContent(available);
+            return m_fitsRows ? core::Float2{measured.x, ContentTopInset() + ContentHeight()} : measured;
+        }
         /// Returns a row's width in a content box `width` wide; a table's columns may make it wider.
         [[nodiscard]] virtual f32 RowWidth(f32 width) const { return width; }
         /// Called when the model is set or reset; a tree flattens its nodes, a table rebuilds its
@@ -1308,6 +1325,7 @@ export namespace foundation::gui
         core::Function<void(ModelIndex)> m_onActivated;
         f32 m_rowHeight = 24.0f;
         f32 m_estimate = 24.0f;
+        bool m_fitsRows = false; // SetFitsRows
         ItemLayout m_layout = ItemLayout::List;
         core::Function<void(DragPayload&, core::Span<const ItemId>)> m_onDragPayload; // lets the owner fill the payload
         core::Float2 m_cellSize{96.0f, 96.0f};

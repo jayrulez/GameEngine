@@ -513,6 +513,7 @@ export namespace editor::app
                 m_settings->SetObjects(Span<const Instance>(&target, 1u));
                 RefPtr<gui::PropertyGrid> grid = MakeRef<gui::PropertyGrid>(m_allocator);
                 grid->AddClass(u8"import-settings");
+                grid->SetFitsRows(true); // as tall as its settings: what the file makes follows right under them
                 grid->SetSource(m_settings.Get());
                 detail->AddChild(grid.Get());
                 m_settingsGrid = grid;

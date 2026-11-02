@@ -173,6 +173,14 @@ export namespace pipeline
         String reason; ///< why it cannot apply, shown beside it disabled ("It is mono already")
     };
 
+    /// One fact about a part a file would make, read from the file (IFileImporter::DescribePart):
+    /// "Triangles", "4,992".
+    struct ImportPartFact
+    {
+        String label;
+        String value;
+    };
+
     /// An importer's options for one import, shown in the import window before it runs: its
     /// settings (a subclass's reflected properties, Settings) and the plan's per-resource choices
     /// (selection). The base has no settings.
@@ -453,6 +461,17 @@ export namespace pipeline
         /// Fresh options for one import (defaults set). Null means this importer has no options
         /// and the import runs immediately on drop, no dialog.
         [[nodiscard]] virtual RefPtr<ImportOptions> CreateOptions(IAllocator&) const
+        {
+            return {};
+        }
+
+        /// What part `part` (an entry of this file's plan) holds, as the file has it, a fact each: a
+        /// material's colour and roughness, a mesh's triangles. Read-only: changing them is the
+        /// asset's page after import. `prepared` is PrepareOnWorker's payload when the two-phase path
+        /// ran; without it an importer that would have to read the file again says nothing. Default:
+        /// nothing.
+        [[nodiscard]] virtual Array<ImportPartFact> DescribePart(StringView /*sourcePath*/, const ImportOptions* /*options*/, Object* /*prepared*/,
+                                                                  const ImportPlanEntry& /*part*/) const
         {
             return {};
         }

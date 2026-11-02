@@ -276,6 +276,196 @@ export namespace pipeline
             return RefPtr<pipeline::ImportOptions>(MakeRef<ModelImportOptions>(allocator).Get());
         }
 
+        /// What a part holds, read from the model the worker read: a mesh's triangles and its parts
+        /// by material; a material's shading, colour, metallic, roughness, textures and the parts
+        /// that draw with it; a texture's size and the materials using it; the skeleton's bones; a
+        /// clip's length; a collision shape's mesh and kind. Nothing without that read.
+        [[nodiscard]] Array<pipeline::ImportPartFact> DescribePart(StringView, const pipeline::ImportOptions* options, Object* prepared,
+                                                                    const pipeline::ImportPlanEntry& part) const override
+        {
+            Array<pipeline::ImportPartFact> facts;
+            const LoadedModel* loaded = Cast<LoadedModel>(prepared);
+            if (loaded == nullptr)
+                return facts;
+            const foundation::model::Model& model = loaded->model;
+            const auto fact = [&facts](StringView label, String value) { facts.PushBack(pipeline::ImportPartFact{String(label), Move(value)}); };
+            const auto grouped = [](u64 n)
+            {
+                String digits = Format(u8"{}", n);
+                String out;
+                for (usize i = 0; i < digits.Size(); ++i)
+                {
+                    if (i > 0 && (digits.Size() - i) % 3 == 0)
+                        out.Append(u8',');
+                    out.Append(digits[i]);
+                }
+                return out;
+            };
+            const auto materialName = [&model](i32 index) -> String
+            {
+                return index >= 0 && static_cast<usize>(index) < model.materials().Size() ? String(model.materials()[static_cast<usize>(index)]->name())
+                                                                                          : String(u8"No material");
+            };
+            const auto partTriangles = [](const foundation::model::ModelMeshPart& p) { return static_cast<u64>(Max(p.indexCount, 0)) / 3u; };
+            const auto meshTriangles = [](const foundation::model::ModelMesh& mesh)
+            {
+                const i32 corners = mesh.indexCount() > 0 ? mesh.indexCount() : mesh.vertexCount();
+                return static_cast<u64>(Max(corners, 0)) / 3u;
+            };
+            const StringView name = part.sourceName.AsView();
+            switch (part.kind)
+            {
+            case pipeline::ImportResourceKind::Mesh:
+            case pipeline::ImportResourceKind::Collision:
+            {
+                const bool collision = part.kind == pipeline::ImportResourceKind::Collision;
+                const Span<foundation::model::ModelMesh* const> meshes = model.meshes();
+                for (usize i = 0; i < meshes.Size(); ++i)
+                {
+                    String key = ImportedAssetName(meshes[i]->name(), u8"mesh", i);
+                    if (collision)
+                        key.Append(u8".collision");
+                    if (key.AsView() != name)
+                        continue;
+                    const foundation::model::ModelMesh& mesh = *meshes[i];
+                    if (collision)
+                    {
+                        const auto* modelOptions = Cast<ModelImportOptions>(options);
+                        fact(u8"From the mesh", ImportedAssetName(mesh.name(), u8"mesh", i));
+                        fact(u8"Shape", String(modelOptions != nullptr && modelOptions->collisionConvex ? StringView(u8"Convex hull") : StringView(u8"Triangle mesh")));
+                        fact(u8"Triangles", grouped(meshTriangles(mesh)));
+                        break;
+                    }
+                    fact(u8"Triangles", grouped(meshTriangles(mesh)));
+                    fact(u8"Skinned", String(IsSkinnedMesh(mesh) ? StringView(u8"Yes") : StringView(u8"No")));
+                    fact(u8"Parts", grouped(mesh.parts().Size()));
+                    for (usize pi = 0; pi < mesh.parts().Size(); ++pi)
+                    {
+                        const foundation::model::ModelMeshPart& p = mesh.parts()[pi];
+                        fact(Format(u8"Part {}", pi + 1).AsView(), Format(u8"{}, {} triangles", materialName(p.materialIndex), grouped(partTriangles(p))));
+                    }
+                    break;
+                }
+                break;
+            }
+            case pipeline::ImportResourceKind::Material:
+            {
+                const Span<foundation::model::ModelMaterial* const> materials = model.materials();
+                for (usize i = 0; i < materials.Size(); ++i)
+                {
+                    if (ImportedAssetName(materials[i]->name(), u8"mat", i).AsView() != name)
+                        continue;
+                    const foundation::model::ModelMaterial& m = *materials[i];
+                    using Shading = foundation::model::ShadingModel;
+                    fact(u8"Shading", String(m.shadingModel == Shading::Phong     ? StringView(u8"Phong")
+                                             : m.shadingModel == Shading::Lambert ? StringView(u8"Lambert")
+                                             : m.shadingModel == Shading::Unlit   ? StringView(u8"Unlit")
+                                                                                  : StringView(u8"PBR, metallic and roughness")));
+                    fact(u8"Base colour", Format(u8"R {} G {} B {}", FormatFixed(m.baseColorFactor.x, 2), FormatFixed(m.baseColorFactor.y, 2), FormatFixed(m.baseColorFactor.z, 2)));
+                    fact(u8"Metallic", FormatFixed(m.metallicFactor, 2));
+                    fact(u8"Roughness", FormatFixed(m.roughnessFactor, 2));
+                    String textures;
+                    const struct
+                    {
+                        StringView slot;
+                        i32 index;
+                    } slots[] = {{u8"base colour", m.baseColorTextureIndex}, {u8"normal", m.normalTextureIndex},
+                                 {u8"metal rough", m.metallicRoughnessTextureIndex}, {u8"occlusion", m.occlusionTextureIndex},
+                                 {u8"emissive", m.emissiveTextureIndex}};
+                    for (const auto& slot : slots)
+                        if (slot.index >= 0 && static_cast<usize>(slot.index) < model.textures().Size())
+                        {
+                            if (!textures.IsEmpty())
+                                textures.Append(u8", ");
+                            textures.Append(Format(u8"{} ({})", ImportedTextureName(*model.textures()[static_cast<usize>(slot.index)], static_cast<usize>(slot.index)), slot.slot).AsView());
+                        }
+                    fact(u8"Textures", textures.IsEmpty() ? String(u8"None") : Move(textures));
+                    String users;
+                    usize count = 0;
+                    const Span<foundation::model::ModelMesh* const> meshes = model.meshes();
+                    for (usize mi = 0; mi < meshes.Size(); ++mi)
+                        for (usize pi = 0; pi < meshes[mi]->parts().Size(); ++pi)
+                            if (meshes[mi]->parts()[pi].materialIndex == static_cast<i32>(i))
+                            {
+                                if (count < 3)
+                                {
+                                    if (!users.IsEmpty())
+                                        users.Append(u8", ");
+                                    users.Append(Format(u8"{}, part {}", ImportedAssetName(meshes[mi]->name(), u8"mesh", mi), pi + 1).AsView());
+                                }
+                                ++count;
+                            }
+                    if (count > 3)
+                        users.Append(Format(u8", and {} more", count - 3).AsView());
+                    fact(u8"Used by", count == 0 ? String(u8"No part") : Move(users));
+                    break;
+                }
+                break;
+            }
+            case pipeline::ImportResourceKind::Texture:
+            {
+                const Span<foundation::model::ModelTexture* const> textures = model.textures();
+                for (usize i = 0; i < textures.Size(); ++i)
+                {
+                    if (ImportedTextureName(*textures[i], i).AsView() != name)
+                        continue;
+                    fact(u8"Size", Format(u8"{} × {}", textures[i]->width, textures[i]->height));
+                    String users;
+                    for (const foundation::model::ModelMaterial* m : model.materials())
+                    {
+                        if (m == nullptr)
+                            continue;
+                        StringView slot;
+                        if (m->baseColorTextureIndex == static_cast<i32>(i))
+                            slot = u8"base colour";
+                        else if (m->normalTextureIndex == static_cast<i32>(i))
+                            slot = u8"normal";
+                        else if (m->metallicRoughnessTextureIndex == static_cast<i32>(i))
+                            slot = u8"metal rough";
+                        else if (m->occlusionTextureIndex == static_cast<i32>(i))
+                            slot = u8"occlusion";
+                        else if (m->emissiveTextureIndex == static_cast<i32>(i))
+                            slot = u8"emissive";
+                        if (slot.IsEmpty())
+                            continue;
+                        if (!users.IsEmpty())
+                            users.Append(u8", ");
+                        users.Append(Format(u8"{} ({})", m->name(), slot).AsView());
+                    }
+                    fact(u8"Used by", users.IsEmpty() ? String(u8"No material") : Move(users));
+                    break;
+                }
+                break;
+            }
+            case pipeline::ImportResourceKind::Skeleton:
+            {
+                if (model.skins().Size() == 0)
+                    break;
+                const foundation::model::ModelSkin& skin = *model.skins()[0];
+                fact(u8"Bones", grouped(skin.joints().Size()));
+                if (!skin.joints().IsEmpty() && skin.joints()[0] >= 0 && static_cast<usize>(skin.joints()[0]) < model.bones().Size())
+                    fact(u8"Root bone", String(model.bones()[static_cast<usize>(skin.joints()[0])]->name()));
+                break;
+            }
+            case pipeline::ImportResourceKind::AnimationClip:
+            {
+                const Span<foundation::model::ModelAnimation* const> animations = model.animations();
+                for (usize a = 0; a < animations.Size(); ++a)
+                {
+                    if (ImportedAssetName(animations[a]->name(), u8"anim", a).AsView() != name)
+                        continue;
+                    fact(u8"Length", Format(u8"{} s", FormatFixed(animations[a]->duration, 2)));
+                    fact(u8"Channels", grouped(animations[a]->channels().Size()));
+                    break;
+                }
+                break;
+            }
+            case pipeline::ImportResourceKind::Asset:
+                break;
+            }
+            return facts;
+        }
+
         // The import makes the model's folder group, named after the file.
         [[nodiscard]] bool ImportsIntoItsOwnGroup() const override { return true; }
 

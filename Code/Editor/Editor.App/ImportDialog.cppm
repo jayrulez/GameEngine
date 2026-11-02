@@ -709,6 +709,22 @@ export namespace editor::app
                                  self->Later([self]() { self->ShowFiles(); self->ShowWhy(); });
                              });
             detail.AddChild(on.Get());
+            // What the part holds, as the file has it: read-only, from the importer's read.
+            const AssetImport::File& file = m_session->files[index];
+            const pipeline::IFileImporter* importer = file.Importer();
+            if (importer == nullptr)
+                return;
+            const Array<pipeline::ImportPartFact> facts = importer->DescribePart(file.path.AsView(), file.options.Get(), file.prepared.Get(), entry);
+            if (facts.IsEmpty())
+                return;
+            detail.AddChild(Text(u8"As the file has it", u8"import-part-kind").Get());
+            for (const pipeline::ImportPartFact& fact : facts)
+            {
+                RefPtr<gui::Panel> row = Row(u8"import-part-fact");
+                row->AddChild(Text(fact.label.AsView(), u8"form-label").Get());
+                row->AddChild(Text(fact.value.AsView(), u8"import-part-fact-value").Get());
+                detail.AddChild(row.Get());
+            }
         }
 
         // Shows what the file's name clashes with (AssetImport::ClashOf): nothing when the name is

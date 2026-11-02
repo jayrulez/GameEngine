@@ -2688,3 +2688,60 @@ TEST_CASE("import options: the settings as text, a line each, read back into fre
     CHECK(kept.upAxis == ModelUpAxis::Y);
     CHECK_FALSE(kept.generatePrefab);
 }
+
+namespace
+{
+    String FactOf(const Array<ImportPartFact>& facts, StringView label)
+    {
+        for (const ImportPartFact& fact : facts)
+            if (fact.label.AsView() == label)
+                return fact.value;
+        return {};
+    }
+}
+
+TEST_CASE("model importer: a part's facts come from the importer's read of the file")
+{
+    ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(MiFoxNested().AsView(), DefaultAllocator());
+    REQUIRE(prepared.Get() != nullptr);
+    RefPtr<ImportOptions> options = importer.CreateOptions(DefaultAllocator());
+    const ImportPlan plan = importer.DescribeImport(MiFoxNested().AsView(), options.Get(), prepared.Get());
+    const auto entryOf = [&plan](ImportResourceKind kind) -> const ImportPlanEntry*
+    {
+        for (const ImportPlanEntry& entry : plan.entries)
+            if (entry.kind == kind)
+                return &entry;
+        return nullptr;
+    };
+    const ImportPlanEntry* texture = entryOf(ImportResourceKind::Texture);
+    const ImportPlanEntry* material = entryOf(ImportResourceKind::Material);
+    const ImportPlanEntry* mesh = entryOf(ImportResourceKind::Mesh);
+    const ImportPlanEntry* skeleton = entryOf(ImportResourceKind::Skeleton);
+    const ImportPlanEntry* clip = entryOf(ImportResourceKind::AnimationClip);
+    REQUIRE((texture && material && mesh && skeleton && clip));
+
+    const Array<ImportPartFact> textureFacts = importer.DescribePart(MiFoxNested().AsView(), options.Get(), prepared.Get(), *texture);
+    CHECK(FactOf(textureFacts, u8"Size") == StringView(u8"1024 × 1024"));
+    CHECK(FactOf(textureFacts, u8"Used by") == Format(u8"{} (base colour)", material->sourceName));
+
+    const Array<ImportPartFact> materialFacts = importer.DescribePart(MiFoxNested().AsView(), options.Get(), prepared.Get(), *material);
+    CHECK(FactOf(materialFacts, u8"Shading") == StringView(u8"PBR, metallic and roughness"));
+    CHECK(FactOf(materialFacts, u8"Textures") == Format(u8"{} (base colour)", texture->sourceName));
+    CHECK(FactOf(materialFacts, u8"Used by") == Format(u8"{}, part 1", mesh->sourceName));
+
+    const Array<ImportPartFact> meshFacts = importer.DescribePart(MiFoxNested().AsView(), options.Get(), prepared.Get(), *mesh);
+    CHECK(FactOf(meshFacts, u8"Skinned") == StringView(u8"Yes"));
+    CHECK(FactOf(meshFacts, u8"Parts") == StringView(u8"1"));
+    CHECK(FactOf(meshFacts, u8"Part 1") == Format(u8"{}, 576 triangles", material->sourceName));
+    CHECK(FactOf(meshFacts, u8"Triangles") == StringView(u8"576")); // 1,728 corners, no index buffer
+
+    const Array<ImportPartFact> skeletonFacts = importer.DescribePart(MiFoxNested().AsView(), options.Get(), prepared.Get(), *skeleton);
+    CHECK(FactOf(skeletonFacts, u8"Bones") == StringView(u8"24"));
+
+    const Array<ImportPartFact> clipFacts = importer.DescribePart(MiFoxNested().AsView(), options.Get(), prepared.Get(), *clip);
+    CHECK(FactOf(clipFacts, u8"Length").AsView().EndsWith(u8" s"));
+
+    // Without the read there is nothing to say, rather than a second read of the file.
+    CHECK(importer.DescribePart(MiFoxNested().AsView(), options.Get(), nullptr, *mesh).IsEmpty());
+}

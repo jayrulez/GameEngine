@@ -49,6 +49,14 @@ namespace
             plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Texture, String(u8"Rust"), String(u8"Rust"), true});
             return plan;
         }
+        // A texture tells its size; the rest say nothing.
+        [[nodiscard]] Array<pipeline::ImportPartFact> DescribePart(StringView, const pipeline::ImportOptions*, Object*, const pipeline::ImportPlanEntry& part) const override
+        {
+            Array<pipeline::ImportPartFact> facts;
+            if (part.kind == pipeline::ImportResourceKind::Texture)
+                facts.PushBack(pipeline::ImportPartFact{String(u8"Size"), Format(u8"{} is 64 × 64", part.sourceName)});
+            return facts;
+        }
         [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions* options, Object*,
                                                         Array<pipeline::DeferredImportWrite>*) override
         {
@@ -211,7 +219,7 @@ REFLECT_MEMBERS(CrateOptions, "rtti::tests::importwindow")
     builder.Property<&CrateOptions::hollow>("hollow").PropAttribute("displayName", String(u8"Hollow"));
 }
 
-TEST_CASE("import window: a file's parts in a tree under it, by kind, each kept; a part selected shows its name to give it; Import makes what is kept and closes")
+TEST_CASE("import window: a file's parts in a tree under it, by kind, each kept; a part selected shows its name to give it and what the file says of it; Import makes what is kept and closes")
 {
     Bed bed;
     const String box[] = {String(u8"/somewhere/crate.box")};
@@ -231,6 +239,9 @@ TEST_CASE("import window: a file's parts in a tree under it, by kind, each kept;
     CHECK(bed.window->SelectedPart() == 1);
     CHECK(Count<gui::TextField>(*bed.window->Detail()) == 1u);
     CHECK(Texts(*bed.window->Detail()).AsView().Contains(u8"Texture"));
+    CHECK(Texts(*bed.window->Detail()).AsView().Contains(u8"Wood is 64 × 64")); // its facts, as the importer tells them
+    bed.window->SelectPart(0, 0); // Box: a mesh, nothing to tell
+    CHECK_FALSE(Texts(*bed.window->Detail()).AsView().Contains(u8"As the file has it"));
     bed.window->Select(0);
     CHECK(bed.window->SelectedPart() == -1);
     CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"Box · 1"));

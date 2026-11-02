@@ -187,7 +187,7 @@ export namespace foundation::gui
 
     /// A property's row, indented by its depth. It holds a group's chevron, the property's name (with
     /// its description as the tooltip), the split, and its editor (none for a group). A row whose
-    /// info has a Note shows it after its editor, which then takes only its own width.
+    /// info has a Note shows it after its editor, which then leaves the note its own width.
     class PropertyRowContent : public UIWidget
     {
         RTTI_OBJECT(PropertyRowContent, UIWidget)
@@ -791,8 +791,15 @@ namespace foundation::gui
         {
             const f32 room = core::Max(0.0f, box.width - split - 2.0f);
             const f32 height = core::Max(0.0f, box.height - 2.0f);
-            // With a note the editor takes its own width and the note the rest; otherwise all of it.
-            const f32 width = m_note->IsDisplayed() ? core::Min(room, m_editor->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{room, height}}).x) : room;
+            // With a note, the note takes its own width (up to most of the column) and the editor at
+            // most its own of the rest, the note after it; without one, the editor takes it all.
+            f32 width = room;
+            if (m_note->IsDisplayed())
+            {
+                const LayoutConstraints within{core::Float2{0.0f, 0.0f}, core::Float2{room, height}};
+                const f32 note = core::Min(m_note->Measure(within).x, room * 0.6f);
+                width = core::Max(0.0f, core::Min(m_editor->Measure(within).x, room - note - 8.0f));
+            }
             m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, width, height}, box, rtl));
             if (m_note->IsDisplayed())
                 m_note->Arrange(MirroredIn(Rect{box.x + split + 2.0f + width + 8.0f, box.y, core::Max(0.0f, room - width - 8.0f), box.height}, box, rtl));

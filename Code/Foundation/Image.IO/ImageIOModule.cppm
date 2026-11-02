@@ -156,6 +156,34 @@ export namespace foundation::image::io
         return ErrorCode::Ok;
     }
 
+    /// What an image file holds, read from its header without decoding it: its size, its
+    /// channels as stored (1 grey, 2 grey and alpha, 3 RGB, 4 RGBA), and whether each is 16-bit or
+    /// floating point (HDR). The loaders above widen every file to RGBA, so this is how to say
+    /// what the file itself is.
+    struct ImageFileInfo
+    {
+        u32 width = 0;
+        u32 height = 0;
+        u32 channels = 0;
+        bool sixteenBit = false;
+        bool hdr = false;
+    };
+
+    /// Reads `path`'s header into `out`; false when stb does not read it (a DDS among them).
+    [[nodiscard]] inline bool ReadImageFileInfo(StringView path, ImageFileInfo& out)
+    {
+        const std::string cPath(reinterpret_cast<const char*>(path.Data()), path.Size());
+        int x = 0, y = 0, channels = 0;
+        if (stbi_info(cPath.c_str(), &x, &y, &channels) == 0)
+            return false;
+        out.width = static_cast<u32>(x);
+        out.height = static_cast<u32>(y);
+        out.channels = static_cast<u32>(channels);
+        out.sixteenBit = stbi_is_16_bit(cPath.c_str()) != 0;
+        out.hdr = stbi_is_hdr(cPath.c_str()) != 0;
+        return true;
+    }
+
     /// Save an image to a file. Only supports 8-bit formats (R8, RG8, RGB8, RGBA8).
     [[nodiscard]] inline Status SaveImage(const Image& image, StringView path,
                                           ImageFileFormat format, i32 jpgQuality = 90)

@@ -39,6 +39,25 @@ TEST_CASE("image: save PNG and reload via stb")
     CHECK(loaded.Format() == PixelFormat::RGBA8); // stb loads as RGBA8
 }
 
+TEST_CASE("image.io: a file's header says its size, channels and depth without decoding it")
+{
+    const u8 grey[6] = {0, 40, 80, 120, 160, 200};
+    const Image img(3, 2, PixelFormat::R8, Span<const u8>(grey, sizeof(grey)));
+    const StringView path = u8"scratch_image_info.png";
+    REQUIRE(io::SaveImage(img, path, io::ImageFileFormat::PNG).IsOk());
+
+    io::ImageFileInfo info;
+    REQUIRE(io::ReadImageFileInfo(path, info));
+    CHECK(info.width == 3u);
+    CHECK(info.height == 2u);
+    CHECK(info.channels == 1u); // as stored, though the loader widens it to RGBA
+    CHECK_FALSE(info.sixteenBit);
+    CHECK_FALSE(info.hdr);
+    FileDelete(path);
+
+    CHECK_FALSE(io::ReadImageFileInfo(u8"scratch_image_info_missing.png", info));
+}
+
 TEST_CASE("image.io: a DDS buffer loads through the generic loader as its decoded level 0")
 {
     // Every image consumer (thumbnails, model loaders) reads DDS without knowing it: the

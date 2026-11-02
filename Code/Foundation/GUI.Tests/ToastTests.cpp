@@ -9,6 +9,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.fonts;
+import foundation.vg;
 import foundation.gui;
 
 using namespace foundation::gui;
@@ -325,6 +326,43 @@ TEST_CASE("toast: posted from another thread, it waits for the host's frame, its
     CHECK(card->GetContent() != nullptr);
     CHECK(madeOn == gui);
     CHECK(card->HasClass(SV(u8"warning")));
+}
+
+TEST_CASE("toast: an idle host asks for no frames; a post asks for one, from another thread too, and none once it has gone")
+{
+    Bed bed;
+    foundation::vg::VGContext canvas;
+    // A host's frame: tick, lay out, ask whether a frame is needed, draw.
+    const auto frame = [&bed, &canvas](f32 seconds)
+    {
+        bed.Frame(seconds);
+        const bool needed = bed.root->NeedsFrame();
+        canvas.Clear();
+        DrawContext context{canvas};
+        bed.root->DrawFrame(context);
+        return needed;
+    };
+    for (int i = 0; i < 3; ++i)
+        (void)frame(0.016f);
+    CHECK_FALSE(frame(0.016f)); // its clock runs, but nothing shows, so nothing is drawn
+    CHECK_FALSE(frame(0.016f));
+
+    ToastId id = 0;
+    core::Thread worker([&]()
+    {
+        ToastRequest request = Bed::Text(u8"Saved");
+        request.Duration = 0.1f;
+        request.Classes = core::String(u8"still"); // leaves at once when its time is up
+        id = bed.host->PostFromAnyThread(core::Move(request));
+    });
+    worker.Join();
+    CHECK(frame(0.016f)); // the post shows at the next update and asks for the frame
+    CHECK(bed.host->IsShown(id));
+    for (int i = 0; i < 20 && bed.host->ChildCount() != 0; ++i)
+        (void)frame(0.05f);
+    CHECK_FALSE(bed.host->IsShown(id));
+    (void)frame(0.016f);
+    CHECK_FALSE(frame(0.016f));
 }
 
 TEST_CASE("toast: under the theme, its text wraps at the card's width, a path longer than a line broken inside it")

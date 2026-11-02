@@ -367,11 +367,14 @@ export namespace foundation::gui
                 return;
             m_ticking = true;
             ToastHost* self = this;
+            // The host's clock runs for as long as the host, so it must ask for no frames itself, or
+            // its window would draw every frame with nothing changed. What it does (a card shown or
+            // removed) invalidates as any change does.
             RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
                                                 {
                                                     self->Tick(static_cast<f32>(elapsed.AsSeconds()));
                                                     return true;
-                                                }));
+                                                }, false));
         }
         struct Incoming
         {

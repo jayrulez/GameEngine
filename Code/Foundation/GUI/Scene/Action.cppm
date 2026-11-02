@@ -50,6 +50,11 @@ export namespace foundation::gui
         /// frames while its target is out of view; it still runs, so it is up to date when the
         /// target shows. Returns true unless an action overrides it.
         [[nodiscard]] virtual bool CanMoveTarget() const { return true; }
+        /// Whether running asks for frames. An action that only keeps time, and changes what shows
+        /// through the usual paths (adding a node, setting a class), returns false: what it changes
+        /// invalidates, and a frame with no change is skipped. Returns true unless an action
+        /// overrides it.
+        [[nodiscard]] virtual bool AsksForFrames() const { return true; }
         /// How much of the time given to the last Update ran past the action's end. A group starts
         /// its next step with this overrun, so a sequence keeps time whatever the frame lengths.
         [[nodiscard]] virtual core::Duration GetOverrun() const { return core::Duration{}; }

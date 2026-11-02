@@ -29,6 +29,9 @@ export namespace foundation::gui
     public:
         using Tick = core::Function<bool(core::Duration)>;
         explicit TickAction(Tick tick) noexcept : m_tick(core::Move(tick)) {}
+        /// A clock (`asksForFrames` false) runs every GUI update but asks for no frames itself, as
+        /// for timers whose effects invalidate what they change.
+        TickAction(Tick tick, bool asksForFrames) noexcept : m_tick(core::Move(tick)), m_asksForFrames(asksForFrames) {}
 
         void Start() override { m_done = false; }
         void Stop() override { m_done = true; }
@@ -43,10 +46,12 @@ export namespace foundation::gui
         [[nodiscard]] bool IsDone() override { return m_done; }
         [[nodiscard]] f32 GetCurrentProgress() override { return m_done ? 1.0f : 0.0f; }
         [[nodiscard]] core::Duration GetTotalTime() override { return core::Duration{}; }
+        [[nodiscard]] bool AsksForFrames() const override { return m_asksForFrames; }
 
     private:
         Tick m_tick;
         bool m_done = false;
+        bool m_asksForFrames = true;
     };
     RTTI_DEFINE_OBJECT(TickAction, "rtti::gui")
 }

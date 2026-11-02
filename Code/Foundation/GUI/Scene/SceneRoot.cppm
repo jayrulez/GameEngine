@@ -401,7 +401,7 @@ export namespace foundation::gui
             if (!IsPaused())
                 (void)m_context->m_actionManager.AnyAction([this, &animated](const Action& action, Node& target)
                 {
-                    if (target.GetSceneRoot() != this || !target.IsTreeVisible())
+                    if (target.GetSceneRoot() != this || !target.IsTreeVisible() || !action.AsksForFrames())
                         return false;
                     // When the target was out of view at the last frame (culled, or under something
                     // culled), an animation that cannot bring it into view changes nothing visible.

@@ -60,7 +60,7 @@ export namespace editor
 
     private:
         // The preview bake runs off the UI thread (msdfgen over the full codepoint range
-        // takes long enough to hitch a mode switch), on the EditorJobService light lane
+        // takes long enough to hitch a mode switch), on the editor task pool's light lane
         // (concurrent with the build lane, so it never trips the cook mutation lock). The work
         // closure writes a heap slot; the completion fires on the main thread and applies it.
         // The latest request wins: edits during a bake stash the newest request, a stale
@@ -87,13 +87,12 @@ export namespace editor
             f32 size = 0.0f;
             u64 generation = 0;
         };
-        // Owned by the in-flight submission's closures; `pageAlive` is the page-lifetime
-        // guard (page dtor clears it; both dtor and completion run on the main thread, so
-        // this is ordering, not a race). The completion closure always deletes the slot.
-        struct BakeSlot
+        // What the bake writes and its completion reads, held by both closures: freed with them,
+        // whether the bake ran or was dropped. The page cancels its bake as it closes, so the
+        // completion never runs after it.
+        struct BakeSlot final : RefCounted
         {
             BakeOutcome outcome;
-            bool pageAlive = true;
         };
 
         void RebakePreview();
@@ -114,7 +113,7 @@ export namespace editor
         u64 m_bakeGeneration = 0;
         BakeRequest m_pendingRequest; // newest request stashed while a bake is in flight
         bool m_pendingValid = false;
-        BakeSlot* m_activeSlot = nullptr; // borrowed view of the in-flight slot
+        RefPtr<TaskHandle> m_bake; // the bake in flight, cancelled when the page closes
     };
 
     class FontEditorPageFactory final : public IEditorPageFactory

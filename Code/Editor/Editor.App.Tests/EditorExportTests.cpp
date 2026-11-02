@@ -23,14 +23,14 @@ TEST_CASE("export: one asked for with no project says to open one; the templates
     String said;
     context.OnNotice = [&said](NoticeKind, StringView message) { said = String(message); };
     EditorCookService cook;
-    EditorJobService jobs{DefaultAllocator()};
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     foundation::settings::Settings user(DefaultAllocator());
 
     app::EditorExport::Services services;
     services.context = &context;
     services.cook = &cook;
-    services.jobs = &jobs;
+    services.tasks = &context.Tasks();
+    services.lane = context.BuildLane();
     services.builders = &builders;
     services.userSettings = &user;
     app::EditorExport exporter(DefaultAllocator(), Move(services));
@@ -43,7 +43,7 @@ TEST_CASE("export: one asked for with no project says to open one; the templates
     CHECK(exporter.TemplatesRoot() == String(u8"/shared/templates"));
 
     app::EditorExport::ReportResourceMemory(nullptr); // no project: said in the log
-    jobs.Shutdown();
+    context.Tasks().Finish();
 }
 
 TEST_CASE("export: a project's presets are read back when it opens again")
@@ -56,14 +56,14 @@ TEST_CASE("export: a project's presets are read back when it opens again")
     REQUIRE(static_cast<bool>(project));
     EditorContext context{DefaultAllocator()};
     EditorCookService cook;
-    EditorJobService jobs{DefaultAllocator()};
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     const auto make = [&]()
     {
         app::EditorExport::Services services;
         services.context = &context;
         services.cook = &cook;
-        services.jobs = &jobs;
+        services.tasks = &context.Tasks();
+        services.lane = context.BuildLane();
         services.builders = &builders;
         return MakeUnique<app::EditorExport>(DefaultAllocator(), DefaultAllocator(), Move(services));
     };
@@ -86,6 +86,6 @@ TEST_CASE("export: a project's presets are read back when it opens again")
         found = found || preset.name == StringView(u8"Steam Deck");
     CHECK(found);
     project.Reset();
-    jobs.Shutdown();
+    context.Tasks().Finish();
     (void)RemoveDirectoryRecursive(dir.AsView());
 }

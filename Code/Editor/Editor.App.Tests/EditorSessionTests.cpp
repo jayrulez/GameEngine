@@ -28,7 +28,6 @@ TEST_CASE("editor session: a project closed with a page open writes that page; a
     EditorContext context{DefaultAllocator()};
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     EditorCookService cook;
-    EditorJobService jobs{DefaultAllocator()};
     ThumbnailService thumbnails;
     Random rng(7);
     const Guid page = Guid::Generate(rng);
@@ -37,7 +36,6 @@ TEST_CASE("editor session: a project closed with a page open writes that page; a
     app::EditorSession::Services services;
     services.context = &context;
     services.cook = &cook;
-    services.jobs = &jobs;
     services.builders = &builders;
     services.thumbnails = &thumbnails;
     // The views' state: the page while it is up, and nothing once it has closed.
@@ -59,7 +57,7 @@ TEST_CASE("editor session: a project closed with a page open writes that page; a
         REQUIRE(session.Open(dir.AsView(), app::EditorSession::OpenOptions{}));
         session.Close();
     }
-    jobs.Shutdown();
+    context.Tasks().Finish();
 
     // Opened again: the page is there to reopen.
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir.AsView());

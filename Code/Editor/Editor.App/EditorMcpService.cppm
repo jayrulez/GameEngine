@@ -53,7 +53,6 @@ export namespace editor::app
         {
             editor::EditorContext* context = nullptr;
             editor::EditorCookService* cook = nullptr;
-            editor::EditorJobService* jobs = nullptr;
             pipeline::BuilderRegistry* builders = nullptr;
             foundation::settings::Settings* userSettings = nullptr; // EditorMcpSettings: enabled, port, token
             editor::EditorLogBuffer* log = nullptr;                 // what log_read serves
@@ -131,7 +130,8 @@ export namespace editor::app
             operations.project = project; // null without a project: the tools that use it refuse first
             operations.context = m_services.context;
             operations.cook = m_services.cook;
-            operations.jobs = m_services.jobs;
+            operations.tasks = &m_services.context->Tasks(); // each step on the build lane
+            operations.lane = m_services.context->BuildLane();
             operations.builders = m_services.builders;
             operations.hostToolDir = GetExecutableDirectory();
             operations.templatesRoot = m_services.templatesRoot ? m_services.templatesRoot() : String{};

@@ -133,11 +133,8 @@ namespace editor
 
     FontEditorPage::~FontEditorPage()
     {
-        if (m_activeSlot != nullptr)
-        {
-            m_activeSlot->pageAlive = false; // the completion closure still owns and deletes it
-            m_activeSlot = nullptr;
-        }
+        if (m_bake)
+            m_bake->Cancel(); // its completion, which reaches this page, never runs now
     }
 
     bool FontEditorPage::SetSizes(StringView text)
@@ -310,15 +307,6 @@ namespace editor
         BakeRequest request = CaptureBakeRequest();
         request.generation = ++m_bakeGeneration;
 
-        EditorJobService* jobs = Context().Jobs();
-        if (jobs == nullptr)
-        {
-            // Headless/tests: no job pump, bake in place.
-            BakeOutcome outcome;
-            RunBake(request, outcome);
-            ApplyBakeOutcome(Move(outcome));
-            return;
-        }
         if (m_bakeBusy)
         {
             m_pendingRequest = Move(request); // the latest wins; submitted when the bake in flight completes
@@ -330,34 +318,32 @@ namespace editor
 
     void FontEditorPage::StartBake(BakeRequest request)
     {
-        EditorJobService* jobs = Context().Jobs();
-        auto* slot = Allocator().New<BakeSlot>();
-        m_activeSlot = slot;
+        RefPtr<BakeSlot> slot = MakeRef<BakeSlot>(Allocator());
         m_bakeBusy = true;
         SetFact(u8"Atlas", u8"Baking...");
 
         FontEditorPage* self = this;
-        jobs->SubmitLight(
-            Function<void()>{[slot, bakeRequest = Move(request)]()
-                             { RunBake(bakeRequest, slot->outcome); }},
-            Function<void()>{
-                [self, slot]()
+        m_bake = Context().Tasks().Submit(
+            u8"Font atlas",
+            Function<Status(TaskContext&)>{[slot, bakeRequest = Move(request)](TaskContext&)
+                                           {
+                                               RunBake(bakeRequest, slot->outcome);
+                                               return Status{};
+                                           }},
+            Function<void(Status)>{
+                [self, slot](Status)
                 {
-                    // Main thread. The page may have closed mid-flight; the slot's flag is
-                    // the guard (set/read on the main thread only).
-                    if (slot->pageAlive)
+                    // Main thread, the page still open (it cancels its bake as it closes).
+                    self->m_bake = {};
+                    self->m_bakeBusy = false;
+                    self->ApplyBakeOutcome(Move(slot->outcome));
+                    if (self->m_pendingValid)
                     {
-                        self->m_activeSlot = nullptr;
-                        self->m_bakeBusy = false;
-                        self->ApplyBakeOutcome(Move(slot->outcome));
-                        if (self->m_pendingValid)
-                        {
-                            self->m_pendingValid = false;
-                            self->StartBake(Move(self->m_pendingRequest));
-                        }
+                        self->m_pendingValid = false;
+                        self->StartBake(Move(self->m_pendingRequest));
                     }
-                    self->Allocator().Delete(slot);
-                }});
+                }},
+            Context().LightLane());
     }
 
     void FontEditorPage::ApplyBakeOutcome(BakeOutcome outcome)

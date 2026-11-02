@@ -37,7 +37,8 @@ export namespace editor::app
         {
             editor::EditorContext* context = nullptr;
             editor::EditorCookService* cook = nullptr;
-            editor::EditorJobService* jobs = nullptr;
+            TaskPool* tasks = nullptr;        // the editor's pool
+            TaskLane lane = TaskLane::Shared; // its build lane: an export never races the content databases
             pipeline::BuilderRegistry* builders = nullptr;
             foundation::settings::Settings* userSettings = nullptr;
             String dataRoot;
@@ -69,7 +70,7 @@ export namespace editor::app
                 context.Notify(editor::NoticeKind::Info, u8"Open a project first.");
                 return;
             }
-            if (m_services.jobs->IsBusy() || m_pending.active)
+            if (m_services.tasks->IsLaneBusy(m_services.lane) || m_pending.active)
             {
                 context.Notify(editor::NoticeKind::Info, u8"An export is already in progress.");
                 return;
@@ -217,10 +218,10 @@ export namespace editor::app
             const String outRoot = Absolutize(PathJoin(project->Directory(), u8"Dist").AsView());
             const String title(all ? StringView(u8"Export All") : StringView(u8"Export"));
             EditorExport* self = this;
-            m_services.jobs->Submit(
+            (void)m_services.tasks->Submit(
                 title.AsView(),
                 [project, builders, toolDir, templatesRoot, dataRoot, presetName, all, outRoot, sceneStreams, reachableRoots,
-                 presetsPtr](editor::JobContext& ctx) -> Status
+                 presetsPtr](TaskContext& ctx) -> Status
                 {
                     foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), editor::EditorRootAllocator());
                     foundation::vfs::NativeFileSystem rootFs(templatesRoot.AsView(), editor::EditorRootAllocator());
@@ -255,7 +256,8 @@ export namespace editor::app
                     self->m_services.context->SetStatus(u8"Export complete.");
                     if (self->m_services.onExported)
                         self->m_services.onExported(outRoot.AsView());
-                });
+                },
+                m_services.lane);
         }
 
         IAllocator& m_allocator;

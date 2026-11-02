@@ -41,7 +41,8 @@ export namespace editor::app
         {
             editor::EditorContext* context = nullptr;
             editor::EditorCookService* cook = nullptr; // null: nothing waits (a test)
-            editor::EditorJobService* jobs = nullptr;  // null: everything on this thread (a test)
+            TaskPool* tasks = nullptr;                 // null: everything on this thread (a test)
+            TaskLane lane = TaskLane::Shared;          // the editor's build lane, where reads and writes queue
         };
 
         /// One file of an import.
@@ -302,7 +303,7 @@ export namespace editor::app
             file.prepared = {};
             file.plan = {};
             const u64 generation = ++file.generation;
-            if (!importer->WantsWorkerPrepare() || m_services.jobs == nullptr)
+            if (!importer->WantsWorkerPrepare() || m_services.tasks == nullptr)
             {
                 file.plan = importer->DescribeImport(file.path.AsView(), file.options.Get(), nullptr);
                 pipeline::MergeStoredSelection(file.plan, importer->StoredSelection(*session.group, file.path.AsView()));
@@ -313,8 +314,8 @@ export namespace editor::app
             RefPtr<Session> keep(&session);
             auto* holder = Context().Importers().Allocator().New<RefPtr<Object>>();
             IAllocator* allocator = &Context().Importers().Allocator();
-            m_services.jobs->Submit(Format(u8"Reading {}", file.Name()).AsView(),
-                                    [importer, path = file.path, holder, allocator](editor::JobContext& job) -> Status
+            (void)m_services.tasks->Submit(Format(u8"Reading {}", file.Name()).AsView(),
+                                    [importer, path = file.path, holder, allocator](TaskContext& job) -> Status
                                     {
                                         job.SetStep(u8"loading and decoding", 1, 2);
                                         *holder = importer->PrepareOnWorker(path.AsView(), *allocator);
@@ -342,7 +343,8 @@ export namespace editor::app
                                         }
                                         if (keep->onChanged)
                                             keep->onChanged(index);
-                                    });
+                                    },
+                                    m_services.lane);
         }
 
         // Imports one file into the group, waiting for a running cook; its bulk writes are flushed
@@ -369,7 +371,7 @@ export namespace editor::app
             context.ledgerPath = ledgerPath;
             Result<content::Instance*> imported =
                 importer->Import(path.AsView(), context, group, options.Get(), prepared.Get(),
-                                 m_services.jobs != nullptr ? deferred.Get() : nullptr);
+                                 m_services.tasks != nullptr ? deferred.Get() : nullptr);
             LOG_INFO(u8"Import", u8"'{}': {} ms on the main thread, {} deferred write(s)", pipeline::FileNameOf(path.AsView()),
                      static_cast<i64>(clock.Elapsed().AsMilliseconds()), deferred->Size());
             if (!imported.HasValue() || imported.Value() == nullptr)
@@ -378,7 +380,7 @@ export namespace editor::app
                 return;
             }
             content::Instance* primary = imported.Value();
-            if (deferred->IsEmpty() || m_services.jobs == nullptr)
+            if (deferred->IsEmpty() || m_services.tasks == nullptr)
             {
                 Finish(*primary, *importer, options);
                 return;
@@ -387,8 +389,8 @@ export namespace editor::app
             // prepared payload alive for the writes that borrow from it.
             auto* writes = deferred.Release();
             const Guid primaryId = primary->Id();
-            m_services.jobs->Submit(Format(u8"Writing {}", pipeline::FileNameOf(path.AsView())).AsView(),
-                                    [writes, prepared](editor::JobContext& job) -> Status
+            (void)m_services.tasks->Submit(Format(u8"Writing {}", pipeline::FileNameOf(path.AsView())).AsView(),
+                                    [writes, prepared](TaskContext& job) -> Status
                                     {
                                         Status result{};
                                         for (usize i = 0; i < writes->Size(); ++i)
@@ -415,7 +417,8 @@ export namespace editor::app
                                             return;
                                         }
                                         Finish(*written, *importer, options);
-                                    });
+                                    },
+                                    m_services.lane);
         }
         // Reports the import, notifies the editor (its pages, an agent) and cooks the group's
         // assets. A re-import of the same bytes copies nothing a file watcher would notice.

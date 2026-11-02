@@ -33,14 +33,13 @@ TEST_CASE("scene thumbnail: queued with no cook record, and named by the documen
     foundation::settings::Settings store{DefaultAllocator()};
     context.SetProjectEditorSettings(&store);
 
-    EditorJobService jobs{DefaultAllocator()};
     ThumbnailService service;
     RegisterSceneThumbnailGenerators(service, context);
     const Guid id = level->Id();
     foundation::content::Instance* instance = level;
     service.Configure(Format(u8"{}/thumbs", dir).AsView(),
                       Function<foundation::content::Instance*(const Guid&)>{[instance](const Guid& asked) { return asked == instance->Id() ? instance : nullptr; }},
-                      &jobs, Function<u64(const Guid&)>{[](const Guid&) { return u64{0}; }}, project->SourcesRoot().AsView());
+                      &context.Tasks(), context.LightLane(), Function<u64(const Guid&)>{[](const Guid&) { return u64{0}; }}, project->SourcesRoot().AsView());
 
     CHECK(service.Get(id).Get() == nullptr);
     CHECK(service.QueuedSceneJobs() == 1u); // no cook record, still queued

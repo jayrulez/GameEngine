@@ -66,6 +66,8 @@ export namespace editor
         explicit EditorContext(IAllocator& allocator) noexcept
             : m_allocator(&allocator), m_importers(allocator), m_tasks(allocator, TaskPool::DefaultWorkerCount()), m_creators(allocator)
         {
+            m_buildLane = m_tasks.CreateLane(u8"Build");
+            m_lightLane = m_tasks.CreateLane(u8"Light");
             // The argument-less action calls (menus, chords, the palette, the MCP bridge) run over
             // the active page; a page's own toolbar names its page instead.
             m_actions.ActiveSubject = [this]() { return m_activePage; };
@@ -241,10 +243,6 @@ export namespace editor
         /// The application owns the project; the context borrows it (null means no project open).
         void SetProject(EditorProject* project);
 
-        // The application's background job runner (build lane and light lane). May be null in
-        // headless and test contexts, where callers must fall back to synchronous work.
-        [[nodiscard]] EditorJobService* Jobs() const noexcept { return m_jobs; }
-        void SetJobs(EditorJobService* jobs) noexcept { m_jobs = jobs; }
         [[nodiscard]] ThumbnailService* Thumbnails() const noexcept { return m_thumbnails; }
         void SetThumbnails(ThumbnailService* thumbnails) noexcept { m_thumbnails = thumbnails; }
         [[nodiscard]] EditorProject* Project() const noexcept { return m_project; }
@@ -349,6 +347,13 @@ export namespace editor
         /// The editor's long work off the frame (Specs/task-layer.md): the import previews' reads,
         /// cooks, imports, exports. The host pumps it each frame, which runs the completions.
         [[nodiscard]] TaskPool& Tasks() noexcept { return m_tasks; }
+        /// The lane that changes the project, one task at a time so nothing races the content
+        /// databases: imports' reads and writes, project operations, export, the native build.
+        /// The cook gates its own changes on it being idle.
+        [[nodiscard]] TaskLane BuildLane() const noexcept { return m_buildLane; }
+        /// Short side work that must never wait behind the build lane (thumbnails, a font page's
+        /// bake), one at a time.
+        [[nodiscard]] TaskLane LightLane() const noexcept { return m_lightLane; }
 
         /// The editor's actions (see :actions): registered in the composition roots, every
         /// surface built from them, executed through them.
@@ -537,7 +542,6 @@ export namespace editor
         void NotifyPagesChanged();
 
         EditorProject* m_project = nullptr;
-        EditorJobService* m_jobs = nullptr; // borrowed (owned by the application)
         ThumbnailService* m_thumbnails = nullptr; // borrowed (owned by the application)
         foundation::resource::ResourceManager* m_resources = nullptr; // borrowed (owned by the application)
         foundation::settings::Settings* m_projectEditorSettings = nullptr; // borrowed (owned by the application)
@@ -548,6 +552,8 @@ export namespace editor
         EditorPageRegistry m_pageRegistry;
         ImportPreviewRegistry m_importPreviews;
         TaskPool m_tasks;
+        TaskLane m_buildLane = TaskLane::Shared;
+        TaskLane m_lightLane = TaskLane::Shared;
         EditorActionRegistry m_actions;
         pipeline::AssetCreatorRegistry m_creators;
         String m_clipboardKind;

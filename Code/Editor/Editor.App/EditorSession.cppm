@@ -49,7 +49,6 @@ export namespace editor::app
         {
             editor::EditorContext* context = nullptr;
             editor::EditorCookService* cook = nullptr;
-            editor::EditorJobService* jobs = nullptr;
             pipeline::BuilderRegistry* builders = nullptr;
             editor::ThumbnailService* thumbnails = nullptr;
             foundation::settings::Settings* userSettings = nullptr;
@@ -182,6 +181,10 @@ export namespace editor::app
             if (m_services.closing)
                 m_services.closing();
             m_closingViews = false;
+            // The editor's long work reads the project (an export, an import's writes, a preview): what
+            // waits is dropped and what runs is told to stop and waited for, before the project goes.
+            context.Tasks().CancelAll();
+            context.Tasks().Finish();
             m_services.cook->Shutdown(); // joins a cook in flight before the databases go
             m_thumbnailStage.Reset(); // unstages and drops its GPU objects while the renderer lives
             m_services.thumbnails->Reset();
@@ -289,7 +292,8 @@ export namespace editor::app
             m_services.thumbnails->Configure(
                 thumbsDir.AsView(),
                 Function<foundation::content::Instance*(const Guid&)>{[project](const Guid& id) { return project->SourceDb().GetInstance(id); }},
-                m_services.jobs, Function<u64(const Guid&)>{[cook](const Guid& id) { return cook->RecipeHashFor(id); }},
+                &m_services.context->Tasks(), m_services.context->LightLane(),
+                Function<u64(const Guid&)>{[cook](const Guid& id) { return cook->RecipeHashFor(id); }},
                 m_project->SourcesRoot().AsView());
         }
 
@@ -336,16 +340,16 @@ export namespace editor::app
         {
             editor::EditorContext& context = *m_services.context;
             editor::EditorCookService* cook = m_services.cook;
-            editor::EditorJobService* jobs = m_services.jobs;
             pipeline::BuilderRegistry* builders = m_services.builders;
             cook->Initialize(*m_project, *builders);
             context.OnCookRequested = [cook](bool rebuild) { cook->RequestCook(rebuild); };
             // Cook-gated starts (play waits for the cook) wait for anything in flight or a request still waiting.
             context.CookBusy = [cook]() { return cook->IsReady() && !cook->IsIdle(); };
             context.SourceAssetTypesOf = [builders](const TypeInfo& product) { return editor::mcp::SourceAssetTypesFor(*builders, product); };
-            // A background job (an export) reads the databases: mutations and new cooks wait, as during a cook.
-            cook->ExternalMutationLock = [jobs]() { return jobs->IsBusy(); };
-            context.SetJobs(jobs);
+            // The build lane's work (an export, an import's writes) reads the databases: mutations and new
+            // cooks wait while it has any, as during a cook.
+            editor::EditorContext* lanes = &context;
+            cook->ExternalMutationLock = [lanes]() { return lanes->Tasks().IsLaneBusy(lanes->BuildLane()); };
             EditorSession* self = this;
             cook->OnCookFinished = [self]() { self->CookFinished(); };
         }

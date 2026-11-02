@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ThumbnailService tests. A stub generator, a real EditorJobService (Update pumped as in
-// JobServiceTests) and a scratch cache dir exercise the full pipeline headlessly: the icon
+// ThumbnailService tests. A stub generator, a real TaskPool (run to the end as the editor's
+// Pump runs it) and a scratch cache dir exercise the full pipeline headlessly: the icon
 // fallback until ready (Get is empty, then a drawable and a single ready signal), negative
 // caching (an unknown id, an unsupported type or a failed generate never reschedules), the
 // content-hash disk round-trip (a second service instance serves from disk without invoking the
@@ -32,15 +32,11 @@ namespace image = foundation::image;
 
 namespace
 {
-    // Pump the light lane to completion (bounded so a hang fails, not spins).
-    void PumpLight(EditorJobService& jobs)
+    // Runs the pool to completion: every task ends, then its completion runs, as the editor's
+    // Pump does.
+    void PumpLight(TaskPool& tasks)
     {
-        usize guard = 0;
-        while (jobs.IsLightBusy() && guard++ < 2'000'000)
-        {
-            jobs.Update();
-        }
-        jobs.Update(); // drain the completed queue
+        tasks.Finish();
     }
 
     class StubGenerator final : public IThumbnailGenerator
@@ -105,7 +101,7 @@ namespace
     {
         content::ContentDatabase db;
         content::Instance instance;
-        EditorJobService jobs{DefaultAllocator()};
+        TaskPool jobs{DefaultAllocator(), 1u};
         ThumbnailService service;
         Guid known{0x1111, 0x2222};
         int prepares = 0;
@@ -132,7 +128,7 @@ namespace
                 Function<content::Instance*(const Guid&)>{
                     [inst, knownId](const Guid& id)
                     { return id == knownId ? inst : nullptr; }},
-                &jobs, Function<u64(const Guid&)>{[hash](const Guid&) { return hash; }},
+                &jobs, TaskLane::Shared, Function<u64(const Guid&)>{[hash](const Guid&) { return hash; }},
                 u8"thumbs_empty_mount");
         }
 
@@ -345,7 +341,7 @@ namespace
     {
         content::ContentDatabase db;
         content::Instance instance;
-        EditorJobService jobs{DefaultAllocator()};
+        TaskPool jobs{DefaultAllocator(), 1u};
         ThumbnailService service;
         Guid known{0x3333, 0x4444};
         u64 hash; // the content hash the service sees (0: not cooked yet)
@@ -365,7 +361,7 @@ namespace
                 Function<content::Instance*(const Guid&)>{
                     [inst, knownId](const Guid& id)
                     { return id == knownId ? inst : nullptr; }},
-                &jobs, Function<u64(const Guid&)>{[this](const Guid&) { return hash; }},
+                &jobs, TaskLane::Shared, Function<u64(const Guid&)>{[this](const Guid&) { return hash; }},
                 u8"thumbs_empty_mount");
         }
     };
@@ -458,14 +454,14 @@ TEST_CASE("thumbnails: a document the cook keeps no record of is named by its ge
     (void)RemoveDirectoryRecursive(u8"thumbs_gpu_document");
     content::ContentDatabase db(DefaultAllocator(), Fixture::NullMount(), nullptr, u8"asset");
     content::Instance instance(db, *db.RootGroup(), Guid{0x5555, 0x6666}, u8"Doc", u8"tests", u8"StubGpuAsset");
-    EditorJobService jobs{DefaultAllocator()};
+    TaskPool jobs{DefaultAllocator(), 1u};
     ThumbnailService service;
     (void)CreateDirectory(u8"thumbs_gpu_document");
     service.RegisterSceneGenerator(MakeUnique<DocumentSceneGenerator>(DefaultAllocator()));
     content::Instance* inst = &instance;
     const Guid known{0x5555, 0x6666};
     service.Configure(u8"thumbs_gpu_document",
-                      Function<content::Instance*(const Guid&)>{[inst, known](const Guid& id) { return id == known ? inst : nullptr; }}, &jobs,
+                      Function<content::Instance*(const Guid&)>{[inst, known](const Guid& id) { return id == known ? inst : nullptr; }}, &jobs, TaskLane::Shared,
                       Function<u64(const Guid&)>{[](const Guid&) { return u64{0}; }}, u8"thumbs_empty_mount");
 
     CHECK(service.Get(known).Get() == nullptr);

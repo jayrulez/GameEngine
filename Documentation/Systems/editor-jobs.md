@@ -1,60 +1,57 @@
-# Editor background jobs: EditorJobService and its two lanes
+# Editor background work: the editor's task pool and its lanes
 
 > Status: CURRENT
-> Verified: 2026-08-12 @ 7e4ebae7
+> Verified: 2026-11-02
 > Track: [[editor-track]]
 
-`EditorJobService` (`Code/Editor/Editor.Project/JobService.cppm`, module `editor.project`) - owned by the
-editor application, pumped once per frame from the app's update (`m_jobService.Update(...)`), exposed to
-pages through `EditorContext::Jobs()` (may be null in headless/test contexts; callers must fall back to
-synchronous work). It is THE structural way editor code gets work off the UI thread, with two
-deliberately different lanes.
+The editor's long work runs on one `TaskPool` (`Code/Foundation/Core/Threading/TaskPool.cppm`, the task
+layer of `Documentation/Specs/task-layer.md`), owned by the `EditorContext` (`Context().Tasks()`) and
+pumped once a frame by the application, which runs the completions and sends the tasks' log lines to the
+status bar. It is THE structural way editor code gets work off the UI thread. The context makes two lanes
+on it; the pool's shared lane runs the rest side by side.
 
-## Build lane - `Submit(title, work, onDone)`
+Submitting: `Context().Tasks().Submit(name, work, done, lane)`. `work` is `Status(TaskContext&)` and runs
+on a worker; `done(Status)` runs on the MAIN thread in the pool's Pump, never for a cancelled task. The
+returned `TaskHandle` gives the task's state and progress and `Cancel()`.
 
-For work that touches the content databases or the filesystem the cook reads (export, batch import,
-reimport-all):
-- One at a time - a submit while busy queues behind the running job (the editor build-lock: a cook/
-  export/import never races the DBs).
-- `IsBusy()` while running or queued, folded into the cook service's `MutationLocked`
-  (`m_cookService.ExternalMutationLock`), so DB mutations and new cooks hold off until the job finishes.
-- Progress through `JobContext` (fraction, named steps, log lines) rendered in the status bar;
-  cooperative cancel via `CancelActive()`.
-- `work` runs on a worker thread and returns a `Status`; `onDone(Status)` fires on the MAIN thread from
-  `Update()`.
+## Build lane - `Context().BuildLane()`
 
-## Light lane - `SubmitLight(work, onDone)`
+For work that touches the content databases or the filesystem the cook reads (export, an import's reads
+and writes, the project operations the MCP tools run, the native build):
+- One at a time, in the order submitted: the editor build lock, so a cook, an export or an import never
+  races the databases.
+- `Tasks().IsLaneBusy(BuildLane())` while one runs or waits, folded into the cook service's
+  `ExternalMutationLock`, so database mutations and new cooks hold off until the lane is idle.
+- Progress through `TaskContext` (`SetFraction`, `SetStep(label, index, count)`, `Log`), which the status
+  bar reads from `Tasks().RunningIn(BuildLane())`.
 
-For short CPU-only side work whose results feed the UI (the FontEditorPage preview bake is the first
-user; texture/mesh thumbnails, preview decodes, search indexing fit):
-- Its OWN worker, concurrent with the build lane, deliberately OUTSIDE `IsBusy()` - that flag gates cook
-  mutations, and a preview must never lock the build.
-- No progress UI, no cancellation (light work finishes in fractions of a second; if it needs progress or
-  cancel, it is not light - use the build lane). Queued lights run one at a time in submit order;
-  `onDone` may chain another submit.
-- `work()` runs on the light worker; `onDone()` fires on the MAIN thread from `Update()`. Results travel
-  through state captured by both closures - the completion flag publishes the worker's writes, so no
-  extra locking.
+## Light lane - `Context().LightLane()`
 
-## Rules for light-lane users (learned from the font page)
+For short CPU-only side work whose results feed the UI (thumbnails and their files, the font page's
+preview bake):
+- One at a time, as it always ran, so no generator or bake runs beside another; never behind the build
+  lane, and outside the cook's lock (a preview must never hold the build).
 
-1. **Never capture `this` without a lifetime guard.** The completion fires on the main thread, possibly
-   AFTER the submitting page closed. Pattern: heap-allocate a slot owned by the closures; the object's
-   dtor sets `slot->pageAlive = false`; the completion checks the flag before touching the object and
-   always deletes the slot. Dtor and completion both run on the main thread, so this is ordering, not a
-   race.
-2. **Latest-wins for re-entrant requests.** If a new request arrives while one is in flight, stash it
-   (one pending slot, overwritten freely) and submit it from the completion; tag outcomes with a
-   generation and drop stale ones. Do NOT submit every edit - the FIFO queue would replay stale work.
-3. **The work closure must be self-contained** - it may touch only the request data it captured and its
-   own slot. No UI objects, no databases, no page members. Anything registry-like it needs (e.g.
-   `DistanceFieldFonts::Initialize()`) must be initialized on the main thread BEFORE submitting.
-4. **Headless fallback**: `EditorContext::Jobs()` can be null (tests construct pages without an app) -
-   run the work synchronously then.
+## Rules
+
+1. **Never let a completion reach a closed owner.** Keep the `TaskHandle` and `Cancel()` it as the owner
+   goes: a cancelled task's completion never runs, so the completion may use the owner freely. Whatever
+   the work writes and the completion reads goes in a reference-counted slot both closures hold, freed
+   with them whether the task ran or was dropped.
+2. **Latest-wins for re-entrant requests.** If a new request arrives while one is in flight, stash it (one
+   pending slot, overwritten freely) and submit it from the completion; tag outcomes with a generation
+   and drop stale ones. Do NOT submit every edit: the lane would replay stale work.
+3. **The work closure is self-contained**: it touches only what it captured and its slot. No UI objects,
+   no databases outside the build lane, no owner members. Anything registry-like it needs (such as
+   `DistanceFieldFonts::Initialize()`) is initialized on the main thread BEFORE submitting.
+4. **Closing the project cancels the pool's work** (`EditorSession::Close`: `CancelAll`, then `Finish`),
+   so nothing reads a project that is going; long work should check `IsCancelled()` between its steps.
+5. **Tests** run the pool themselves: `Tasks().Finish()` waits for every task and runs the completions.
 
 ## Reference implementation
 
-`FontEditorPage` (`Code/Editor/Editor.Fonts/`): `CaptureBakeRequest()` snapshots the asset options on
-the UI thread, `RunBake(request, outcome)` is the pure worker, `StartBake` submits with a `BakeSlot`
-lifetime guard, and `ApplyBakeOutcome` applies on the main thread with a generation check. The old
-preview stays on screen until its replacement lands.
+`FontEditorPage` (`Code/Editor/Editor.Fonts/`): `CaptureBakeRequest()` snapshots the asset options on the
+UI thread, `RunBake(request, outcome)` is the pure work, `StartBake` submits it to the light lane with a
+reference-counted `BakeSlot` and keeps the handle (cancelled as the page closes), and `ApplyBakeOutcome`
+applies on the main thread with a generation check. The old preview stays on screen until its
+replacement lands.

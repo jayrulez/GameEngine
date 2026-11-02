@@ -35,7 +35,8 @@ export namespace editor::app
         editor::EditorProject* project = nullptr;
         editor::EditorContext* context = nullptr; ///< SceneStreamStager / SceneRefScanner, if wired
         editor::EditorCookService* cook = nullptr;
-        editor::EditorJobService* jobs = nullptr;
+        TaskPool* tasks = nullptr;        ///< the editor's pool
+        TaskLane lane = TaskLane::Shared; ///< its build lane, where each step queues
         pipeline::BuilderRegistry* builders = nullptr;
         String hostToolDir;   ///< the player and sidecars beside the executable (the host template)
         String templatesRoot; ///< the resolved templates root (resolving reads settings, so main thread only)

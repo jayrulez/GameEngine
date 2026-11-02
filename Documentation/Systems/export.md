@@ -61,7 +61,7 @@ dist renders with no external dependency (engine shaders are cooked `.hlsl`, not
 - **Editor**: `Project > Export...` (`ExportDialog`) lists the project's presets beside the selected
   one's settings in tabs (General, Content, Display) under a card naming the template it resolves to
   here; edits save as they go. An export runs NON-BLOCKING (cook via `EditorCookService`, then
-  pack/stage on `EditorJobService`), with status-bar progress and a sticky success toast + Open Folder
+  pack/stage on the editor task pool's build lane), with status-bar progress and a sticky success toast + Open Folder
   (native reveal). `Edit > Export Templates...` (`TemplatesDialog`; the templates are the editor's,
   shared by every project) lists the registry's templates by the icon each carries, with their details,
   Install from Folder, Create from Build, Reveal and Remove. The editor mutation lock covers background

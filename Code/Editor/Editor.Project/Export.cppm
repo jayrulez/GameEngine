@@ -515,7 +515,7 @@ export namespace editor
     }
 
     // A step and progress sink: `onProgress(stepLabel, fraction[0..1])`. Optional: the CLI passes
-    // none, and the editor's background job wires it to a JobContext for the status-bar progress bar.
+    // none, and the editor's build-lane task wires it to its TaskContext for the status-bar progress bar.
     using ExportProgress = Function<void(StringView, f32)>;
 
     // === Reachability pruning helpers ===

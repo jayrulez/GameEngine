@@ -91,7 +91,6 @@ namespace
         EditorContext context{DefaultAllocator()};
         pipeline::BuilderRegistry builders{DefaultAllocator()};
         EditorCookService cook;
-        EditorJobService jobs{DefaultAllocator()};
         String dir;
 
         explicit Bench(StringView leaf) : dir(leaf)
@@ -101,14 +100,15 @@ namespace
             project = EditorProject::Open(DefaultAllocator(), dir.AsView());
             REQUIRE(project);
             cook.Initialize(*project, builders);
-            // Wired as the application does: a running job holds the databases, as a cook does.
-            EditorJobService* jobsPtr = &jobs;
-            cook.ExternalMutationLock = [jobsPtr]() { return jobsPtr->IsBusy(); };
+            // Wired as the application does: the build lane's work holds the databases, as a cook does.
+            EditorContext* lanes = &context;
+            cook.ExternalMutationLock = [lanes]() { return lanes->Tasks().IsLaneBusy(lanes->BuildLane()); };
         }
         ~Bench()
         {
             cook.Shutdown();
-            jobs.Shutdown();
+            context.Tasks().CancelAll();
+            context.Tasks().Finish();
             project = nullptr;
             (void)RemoveDirectoryRecursive(dir.AsView());
         }
@@ -119,7 +119,8 @@ namespace
             seams.project = project.Get();
             seams.context = &context;
             seams.cook = &cook;
-            seams.jobs = &jobs;
+            seams.tasks = &context.Tasks();
+            seams.lane = context.BuildLane();
             seams.builders = &builders;
             seams.timeoutSeconds = timeoutSeconds;
             return seams;
@@ -128,7 +129,7 @@ namespace
         void Pump()
         {
             cook.Update({});
-            jobs.Update({});
+            context.Tasks().Pump();
             SleepMilliseconds(1);
         }
     };
@@ -320,7 +321,7 @@ TEST_CASE("editor-operations: an export cooks first, then runs the export job, a
     CHECK(step.Error().AsView().StartsWith(u8"export of preset '"));
     CHECK(waited >= 2u);
     CHECK(bench.cook.Revision() == 1u); // the export's cook went through the cook service
-    CHECK_FALSE(bench.jobs.IsBusy());
+    CHECK_FALSE(bench.context.Tasks().IsLaneBusy(bench.context.BuildLane()));
 }
 
 // asset_create on the editor waits while a cook or an export holds the databases, then creates the

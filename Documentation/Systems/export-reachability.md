@@ -18,7 +18,7 @@ roots + reasons, dropped list) is written beside the dist. Proven on a real proj
 
 The CLI (`Tools.Export`) supplies the scanner (`MakeSceneScanner`: loads a scene over the manager set,
 `CollectUnresolved`, reads parked prefab instances). The EDITOR prunes too, via a main-thread pre-scan:
-the scanner must LOAD scenes to enumerate refs, but the editor runs export on the `EditorJobService`
+the scanner must LOAD scenes to enumerate refs, but the editor runs export on the editor task pool's build lane
 background thread where scene loading is not safe; so a `SceneRefScanner` hook on `EditorContext` (set by
 the scene editor plugin, loading through the SceneSubsystem's full manager set) is driven on the MAIN
 thread up front, and the precomputed reachable-root guid set is passed into the background job.

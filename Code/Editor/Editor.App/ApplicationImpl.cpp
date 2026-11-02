@@ -74,7 +74,6 @@ namespace editor::app
         EditorSession::Services services;
         services.context = &m_context;
         services.cook = &m_cookService;
-        services.jobs = &m_jobService;
         services.builders = &m_builders;
         services.thumbnails = &m_thumbnailService;
         services.userSettings = &m_editorSettings;
@@ -222,7 +221,8 @@ namespace editor::app
             AssetImport::Services imports;
             imports.context = &m_context;
             imports.cook = &m_cookService;
-            imports.jobs = &m_jobService;
+            imports.tasks = &m_context.Tasks();
+            imports.lane = m_context.BuildLane();
             m_assetImport = MakeUnique<AssetImport>(m_editorAllocator, Move(imports));
         }
 
@@ -247,7 +247,8 @@ namespace editor::app
         EditorExport::Services exportServices;
         exportServices.context = &m_context;
         exportServices.cook = &m_cookService;
-        exportServices.jobs = &m_jobService;
+        exportServices.tasks = &m_context.Tasks();
+        exportServices.lane = m_context.BuildLane();
         exportServices.builders = &m_builders;
         exportServices.userSettings = &m_editorSettings;
         exportServices.dataRoot = m_config.dataRoot;
@@ -266,7 +267,6 @@ namespace editor::app
         EditorMcpService::Services mcp;
         mcp.context = &m_context;
         mcp.cook = &m_cookService;
-        mcp.jobs = &m_jobService;
         mcp.builders = &m_builders;
         mcp.userSettings = &m_editorSettings;
         mcp.log = m_config.logBuffer;
@@ -1143,16 +1143,16 @@ namespace editor::app
             return;
         }
         editor::EditorContext* context = &m_context;
-        m_jobService.Submit(u8"Native Build",
-                            [context, project](editor::JobContext&) -> Status
-                            {
-                                const Status built = editor::BuildDevNativeModule(*project);
-                                if (built.IsOk())
-                                    context->Notify(editor::NoticeKind::Success, u8"Native module built - Project > Reload Native Module to pick it up.");
-                                else
-                                    context->Notify(editor::NoticeKind::Error, u8"Native build failed (see Console).");
-                                return built;
-                            });
+        (void)m_context.Tasks().Submit(
+            u8"Native Build", [project](TaskContext&) -> Status { return editor::BuildDevNativeModule(*project); },
+            [context](Status built) // main thread
+            {
+                if (built.IsOk())
+                    context->Notify(editor::NoticeKind::Success, u8"Native module built - Project > Reload Native Module to pick it up.");
+                else
+                    context->Notify(editor::NoticeKind::Error, u8"Native build failed (see Console).");
+            },
+            m_context.BuildLane());
     }
 
     // Shows the version in a message box over the editor.
@@ -1194,7 +1194,6 @@ namespace editor::app
         // its cook.
         EditorApplication* self = this;
         m_cookService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
-        m_jobService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
         if (m_export)
             m_export->Pump();
         // The editor's long work: the import previews' reads, done off this thread; their
@@ -1246,10 +1245,10 @@ namespace editor::app
         EditorStatusBar* status = m_window.StatusBar();
         if (status == nullptr)
             return;
-        const editor::EditorJobService::ProgressView progress = m_jobService.IsBusy() ? m_jobService.Progress() : editor::EditorJobService::ProgressView{};
-        if (progress.active)
+        if (const RefPtr<TaskHandle> job = m_context.Tasks().RunningIn(m_context.BuildLane()))
         {
-            const String name = progress.step.IsEmpty() ? progress.title : Format(u8"{}: {}", progress.title, progress.step);
+            const TaskProgress progress = job->Progress();
+            const String name = progress.step.IsEmpty() ? String(job->Name()) : Format(u8"{}: {}", job->Name(), progress.step);
             const String count = progress.stepCount > 0 ? Format(u8"{} of {}", progress.stepIndex + 1, progress.stepCount) : String();
             status->SetJob(name.AsView(), progress.fraction, count.AsView());
         }

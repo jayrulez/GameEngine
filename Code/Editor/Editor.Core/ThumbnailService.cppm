@@ -8,7 +8,7 @@
 // thumbnail exists, and OnThumbnailReady signals the swap. Nothing here blocks the UI.
 //
 // Per-asset-type generators (registered by the application; unknown types keep their icon) run on
-// the EditorJobService light lane. Results land in a content-keyed disk cache
+// the editor task pool's light lane. Results land in a content-keyed disk cache
 // (<project>/.cache/thumbs/<guid>-<recipeHash>.png; a stale hash shows as a filename mismatch and
 // the old file is replaced, and deleting the directory is always safe) and in a RAM map of owning
 // drawables. OwnedThumbnailDrawable owns its pixels, so evicting a map entry never leaves a
@@ -16,7 +16,7 @@
 // the pixels live exactly as long as the drawable.
 //
 // Threading: Get, Invalidate and OnThumbnailReady are main thread only; generation and PNG IO run
-// on the light worker; completion fires on the main thread from EditorJobService::Update. In-flight
+// on the light lane; completion fires on the main thread from the pool's Pump. In-flight
 // jobs keep their state in a heap slot, so closing the project or resetting the service mid-flight
 // is safe. A generator's Prepare runs on the main thread and must stay cheap: it reads the small
 // asset envelope and opens the source it needs (a file under Sources/, a sidecar stream), and the
@@ -38,7 +38,7 @@ import foundation.resource; // ResourceManager (scene thumbnail generators bind 
 import foundation.scene;    // Scene (the stage's persistent preview scene, populated by generators)
 import foundation.gui; // ImageDrawable (a thumbnail as the GUI draws it)
 import foundation.vfs;
-import editor.project; // EditorJobService
+import editor.project; // EditorRootAllocator
 
 using namespace foundation::core;
 namespace content = foundation::content;
@@ -228,16 +228,17 @@ export namespace editor
             return m_sceneQueue.Size() + (m_sceneJobActive ? 1u : 0u);
         }
 
-        /// Set up on project open: where the cache lives, how to resolve instances, the job lane,
-        /// and the content hash source. Any previous state is dropped.
+        /// Set up on project open: where the cache lives, how to resolve instances, the pool and lane
+        /// its work runs on, and the content hash source. Any previous state is dropped.
         void Configure(StringView cacheDirectory, Function<content::Instance*(const Guid&)> resolve,
-                       EditorJobService* jobs, Function<u64(const Guid&)> contentHash,
+                       TaskPool* tasks, TaskLane lane, Function<u64(const Guid&)> contentHash,
                        StringView sourcesRoot)
         {
             Reset();
             m_cacheDirectory = String(cacheDirectory);
             m_resolve = Move(resolve);
-            m_jobs = jobs;
+            m_tasks = tasks;
+            m_lane = lane;
             m_contentHash = Move(contentHash);
             m_sources = MakeUnique<foundation::vfs::NativeFileSystem>(foundation::core::DefaultAllocator(),
                                                                       sourcesRoot,
@@ -260,7 +261,7 @@ export namespace editor
             m_cacheDirectory.Clear();
             m_resolve = {};
             m_contentHash = {};
-            m_jobs = nullptr;
+            m_tasks = nullptr;
             m_sources = {};
         }
 
@@ -269,7 +270,7 @@ export namespace editor
         /// the thumbnail is ready. Main thread only.
         [[nodiscard]] RefPtr<gui::Drawable> Get(const Guid& id)
         {
-            if (id.IsNil() || m_jobs == nullptr || !m_resolve)
+            if (id.IsNil() || m_tasks == nullptr || !m_resolve)
             {
                 return {};
             }
@@ -300,6 +301,12 @@ export namespace editor
         // The heap slot both closures share: the service destructor or Reset clears
         // serviceAlive, and the completion always deletes the slot. All flags are main thread
         // only; the worker touches only `pixels` and `ok`.
+        // An image a task writes to disk, owned by the task (freed with it, whether it ran or not).
+        struct SavedImage final : RefCounted
+        {
+            image::Image pixels;
+        };
+
         struct JobSlot
         {
             Guid id{};
@@ -366,7 +373,8 @@ export namespace editor
         UniquePtr<foundation::vfs::NativeFileSystem> m_sources; // the project Sources/ mount
         Function<content::Instance*(const Guid&)> m_resolve;
         Function<u64(const Guid&)> m_contentHash;
-        EditorJobService* m_jobs = nullptr;
+        TaskPool* m_tasks = nullptr;
+        TaskLane m_lane = TaskLane::Shared;
         Array<UniquePtr<IThumbnailGenerator>> m_generators;
         Array<UniquePtr<ISceneThumbnailGenerator>> m_sceneGenerators;
         HashMap<Guid, Entry> m_entries;

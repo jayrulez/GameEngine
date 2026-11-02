@@ -156,8 +156,11 @@ Each its own commit with its tests; each move keeps its users' behaviour.
   preview's cook and waits for the item under way. `CookModel` stops writing the model's bounds
   (a const model it casts to write; the loaders compute them already).
 - **T4.** `EditorJobService` goes: its users submit to the editor's pool directly, the build
-  lane's work to the build lane, the light lane's to the shared lane; whatever shows the running
-  job's progress reads the build lane's task. `CookService`'s private pool goes too.
+  lane's work to the context's build lane, the light lane's to a light lane (one at a time, as the
+  job service's light worker ran it, so no thumbnail generator or bake is run beside another);
+  the status bar reads the build lane's running task. `CookService` keeps its job system: it is the
+  data-parallel fan-out inside a build (texture compression's `ParallelFor`, through `ctx.jobs`),
+  the job system's own purpose, not long work.
 - **T5.** The model viewer's `FileLoads` onto a pool of its own.
 - **T6.** The resource manager's async decodes off the frame pool and onto a task pool, its
   finalize staying in its `Pump`; the application host owns that pool beside the job system.

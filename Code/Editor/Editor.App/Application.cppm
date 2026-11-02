@@ -253,7 +253,6 @@ export namespace editor::app
         editor::EditorContext m_context{m_editorAllocator};
         pipeline::BuilderRegistry m_builders{m_editorAllocator}; // filled by the executable (registerEditors)
         editor::EditorCookService m_cookService;
-        editor::EditorJobService m_jobService{m_editorAllocator}; // background jobs (export, ...)
         editor::ThumbnailService m_thumbnailService;               // per-project state
         foundation::settings::Settings m_editorSettings{editor::EditorRootAllocator()}; // per-user (<userdata>/editor.settings.xml)
         editor::ProjectManagerController m_projectManager{m_editorSettings}; // the registry of projects

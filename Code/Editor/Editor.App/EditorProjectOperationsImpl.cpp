@@ -99,10 +99,10 @@ namespace editor::app
         RefPtr<ImportShared> shared = job.shared;
         shared->jobDone = false;
         const String source = request.source;
-        m_seams.jobs->Submit(
+        (void)m_seams.tasks->Submit(
             Format(u8"Writing {}", pipeline::FileNameOf(source.AsView())).AsView(),
-            Function<Status(editor::JobContext&)>{
-                [shared, source](editor::JobContext& job) -> Status
+            Function<Status(TaskContext&)>{
+                [shared, source](TaskContext& job) -> Status
                 {
                     // Pure mount IO on the worker; the job lock keeps cooks out meanwhile.
                     Status result{};
@@ -127,7 +127,7 @@ namespace editor::app
                                    {
                                        shared->jobStatus = status;
                                        shared->jobDone = true;
-                                   }});
+                                   }}, m_seams.lane);
     }
 
     OperationStep<ImportOutcome> EditorProjectOperations::Import(
@@ -163,10 +163,10 @@ namespace editor::app
                 pipeline::IFileImporter* importer = request.importer;
                 const String source = request.source;
                 IAllocator* allocator = m_seams.allocator;
-                m_seams.jobs->Submit(
+                (void)m_seams.tasks->Submit(
                     Format(u8"Reading {}", pipeline::FileNameOf(source.AsView())).AsView(),
-                    Function<Status(editor::JobContext&)>{
-                        [shared, importer, source, allocator](editor::JobContext& job) -> Status
+                    Function<Status(TaskContext&)>{
+                        [shared, importer, source, allocator](TaskContext& job) -> Status
                         {
                             job.SetStep(u8"loading + decoding", 1, 2);
                             const Stopwatch clock = Stopwatch::StartNew();
@@ -180,7 +180,7 @@ namespace editor::app
                                            {
                                                shared->jobStatus = status;
                                                shared->jobDone = true;
-                                           }});
+                                           }}, m_seams.lane);
                 return Optional<ImportOutcome>{};
             }
             job.phase = ImportJob::Phase::Placing;
@@ -287,11 +287,11 @@ namespace editor::app
         const String toolDir = m_seams.hostToolDir;
         const String templatesRoot = m_seams.templatesRoot;
         const String dataRoot = m_seams.dataRoot;
-        m_seams.jobs->Submit(
+        (void)m_seams.tasks->Submit(
             Format(u8"Export {}", shared->preset.name.AsView()).AsView(),
-            Function<Status(editor::JobContext&)>{
+            Function<Status(TaskContext&)>{
                 [shared, project, builders, toolDir, templatesRoot, dataRoot](
-                    editor::JobContext& ctx) -> Status
+                    TaskContext& ctx) -> Status
                 {
                     foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(),
                                                              editor::EditorRootAllocator());
@@ -316,7 +316,7 @@ namespace editor::app
                                    {
                                        shared->jobStatus = status;
                                        shared->jobDone = true;
-                                   }});
+                                   }}, m_seams.lane);
     }
 
     OperationStep<ExportOutcome> EditorProjectOperations::Export(

@@ -120,8 +120,9 @@ namespace editor
 
         m_inFlight.PushBack(InFlight{id, slot});
         ThumbnailService* self = this;
-        m_jobs->SubmitLight(
-            Function<void()>{[slot]()
+        (void)m_tasks->Submit(
+            u8"Thumbnail",
+            Function<Status(TaskContext&)>{[slot](TaskContext&)
                              {
                                  // Light worker: disk cache first, else generate and persist.
                                  if (!slot->diskPath.IsEmpty() &&
@@ -129,7 +130,7 @@ namespace editor
                                          .IsOk())
                                  {
                                      slot->ok = true;
-                                     return;
+                                     return Status{};
                                  }
                                  if (slot->generator == nullptr ||
                                      (!slot->prepared.HasInput() && !slot->diskPath.IsEmpty()))
@@ -139,7 +140,7 @@ namespace editor
                                      // time (so Prepare was skipped) but is stale or corrupt.
                                      // Delete it and retry the full path on the next Get.
                                      slot->staleDiskFile = true;
-                                     return;
+                                     return Status{};
                                  }
                                  // The read happens here, on the worker: the header the
                                  // generator composed, then the stream it opened.
@@ -151,7 +152,7 @@ namespace editor
                                      if (size <= 0)
                                      {
                                          slot->negative = true;
-                                         return;
+                                         return Status{};
                                      }
                                      const usize start = slot->payload.Size();
                                      slot->payload.Resize(start + static_cast<usize>(size));
@@ -161,7 +162,7 @@ namespace editor
                                      if (read != static_cast<u64>(size))
                                      {
                                          slot->negative = true;
-                                         return;
+                                         return Status{};
                                      }
                                  }
                                  const Status generated =
@@ -171,7 +172,7 @@ namespace editor
                                  if (!generated.IsOk())
                                  {
                                      slot->negative = true;
-                                     return;
+                                     return Status{};
                                  }
                                  slot->ok = true;
                                  if (!slot->diskPath.IsEmpty())
@@ -180,8 +181,9 @@ namespace editor
                                                                 slot->diskPath.AsView(),
                                                                 image::io::ImageFileFormat::PNG);
                                  }
+                                 return Status{};
                              }},
-            Function<void()>{[self, slot]() { self->CompleteLoad(slot); }});
+            Function<void(Status)>{[self, slot](Status) { self->CompleteLoad(slot); }}, m_lane);
     }
 
     void ThumbnailService::CompleteLoad(JobSlot* slot)
@@ -260,17 +262,20 @@ namespace editor
         // Persist on the light lane (PNG encoding off the main thread) and publish immediately:
         // the drawable owns its pixels, so the UI can swap it in before the file lands.
         const u64 hash = HashFor(id);
-        if (hash != 0 && m_jobs != nullptr)
+        if (hash != 0 && m_tasks != nullptr)
         {
-            auto* file = editor::EditorRootAllocator().New<image::Image>(pixels); // copy: publish keeps the original
+            // A copy (publish keeps the original), owned by the task: freed with it, run or dropped.
+            RefPtr<SavedImage> file = MakeRef<SavedImage>(editor::EditorRootAllocator());
+            file->pixels = pixels;
             String path = CachePathFor(id, hash);
-            m_jobs->SubmitLight(
-                Function<void()>{[file, path]()
-                                 {
-                                     (void)image::io::SaveImage(*file, path.AsView(),
-                                                                image::io::ImageFileFormat::PNG);
-                                 }},
-                Function<void()>{[file]() { editor::EditorRootAllocator().Delete(file); }});
+            (void)m_tasks->Submit(u8"Thumbnail file",
+                                  Function<Status(TaskContext&)>{[file, path](TaskContext&)
+                                                                 {
+                                                                     (void)image::io::SaveImage(file->pixels, path.AsView(),
+                                                                                                image::io::ImageFileFormat::PNG);
+                                                                     return Status{};
+                                                                 }},
+                                  {}, m_lane);
         }
 
         Entry entry;

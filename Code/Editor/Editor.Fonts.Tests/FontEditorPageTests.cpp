@@ -83,7 +83,9 @@ namespace
             app::AssetPageServices services;
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
             services.pick = [this](app::PickerRequest request) { picked = Move(request); };
-            return MakeUnique<FontEditorPage>(DefaultAllocator(), context, Move(services), *roboto);
+            UniquePtr<FontEditorPage> page = MakeUnique<FontEditorPage>(DefaultAllocator(), context, Move(services), *roboto);
+            context.Tasks().Finish(); // its atlas bakes on the light lane; this runs the bake and hands it back
+            return page;
         }
     };
 }

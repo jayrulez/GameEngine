@@ -41,7 +41,6 @@ target_sources(Editor.Project
             ProjectManager.cppm
             Export.cppm
             LogBuffer.cppm
-            JobService.cppm
             ExportPreset.cppm
             ExportRoots.cppm
             TemplateIcons.cppm

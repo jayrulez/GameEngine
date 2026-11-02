@@ -1,6 +1,6 @@
 # Tasks: long work off the frame, handed back on the main thread
 
-Status: APPROVED 2026-11-02, the open questions decided (user): the names as proposed; the
+Status: DONE 2026-11-02 (T0 to T6, T6 before T4 at the user's word). APPROVED 2026-11-02, the open questions decided (user): the names as proposed; the
 resource manager's decodes are part of this work (T6); the job service's users move to the pool
 directly, the service going. Designed on request (user: "design the task layer first, survey the
 references"). Started

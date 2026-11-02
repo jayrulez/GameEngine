@@ -31,6 +31,9 @@ import :asset_drag_data;
 import :layout; // EditorAssetBrowserSettings
 import :asset_operations;
 import pipeline.core; // AssetCreator (New)
+import :name_prompt;         // NameRequest (a new group's or asset's name, asked up front)
+import :asset_create_dialog; // AssetNames (the names a group or an asset may take)
+import :group_picker_dialog; // GroupPicker::ShownName
 
 using namespace foundation::core;
 
@@ -251,8 +254,12 @@ export namespace editor::app
             Function<RefPtr<gui::Drawable>(const Guid&)> picture;
             /// Asks for files to import into a group (the OS's picker); unset: no Import... item.
             Function<void(content::Group&)> import;
-            /// Runs a creator into a group (File > New's create-and-open); unset: no New menu.
-            Function<void(const pipeline::AssetCreator&, content::Group*)> create;
+            /// Runs a creator into a group under a name (empty: the creator's own), as File > New's
+            /// create-and-open does; unset: no New menu.
+            Function<void(const pipeline::AssetCreator&, content::Group*, StringView name)> create;
+            /// Asks for a name (the name prompt) before something new is made; unset: what is made
+            /// takes a name of its own ("Group", "Group.2"), as in a test.
+            Function<void(NameRequest)> askName;
         };
 
         AssetsView(IAllocator& allocator, Services services, RefPtr<gui::Node> content)
@@ -1163,11 +1170,7 @@ export namespace editor::app
             if (shown)
             {
                 AddNewMenu(*m_menu, group);
-                (void)m_menu->AddItem(u8"New Group", [self, &ops, target]()
-                                      {
-                                          if (content::Group* made = ops.CreateGroup(*target))
-                                              self->Navigate(*made);
-                                      });
+                (void)m_menu->AddItem(u8"New Group...", [self, target]() { self->NewGroup(*target); });
                 if (m_services.import)
                     (void)m_menu->AddItem(u8"Import...", [self, target]() { self->m_services.import(*target); });
                 m_menu->AddSeparator();
@@ -1211,6 +1214,60 @@ export namespace editor::app
             }
             m_menu->Open(owner, at);
         }
+        // A new group in `parent`, its name asked first (the name prompt) when there is one to ask
+        // with; then shown.
+        void NewGroup(content::Group& parent)
+        {
+            AssetsView* self = this;
+            content::Group* in = &parent;
+            AssetOperations* ops = m_services.operations;
+            if (ops == nullptr)
+                return;
+            if (!m_services.askName)
+            {
+                if (content::Group* made = ops->CreateGroup(parent))
+                    Navigate(*made);
+                return;
+            }
+            NameRequest request;
+            request.title = Format(u8"New Group in {}", GroupPicker::ShownName(parent));
+            request.suggested = parent.UniqueGroupName(u8"Group");
+            request.accept = String(u8"Create");
+            request.refusal = [in](StringView name) { return AssetNames::GroupRefusal(*in, name); };
+            request.describe = [in](StringView name) { return Format(u8"Makes the group {} in {}.", name, GroupPicker::ShownName(*in)); };
+            request.accepted = [self, in, ops](StringView name)
+            {
+                if (content::Group* made = ops->CreateGroup(*in, name))
+                    self->Navigate(*made);
+            };
+            m_services.askName(Move(request));
+        }
+        // A new asset by `creator` in `group`, its name asked first (the name prompt) when there is
+        // one to ask with.
+        void NewAsset(const pipeline::AssetCreator& creator, content::Group& group)
+        {
+            if (!m_services.askName)
+            {
+                m_services.create(creator, &group, StringView{});
+                return;
+            }
+            AssetsView* self = this;
+            const pipeline::AssetCreator* entry = &creator;
+            content::Group* in = &group;
+            String base; // the creator's label as a name: "Input Map" suggests InputMap
+            for (const utf8char c : creator.label)
+                if (c != u8' ')
+                    base.Append(c);
+            NameRequest request;
+            request.title = Format(u8"New {} in {}", creator.label, GroupPicker::ShownName(group));
+            request.suggested = group.UniqueInstanceName(base.AsView());
+            request.accept = String(u8"Create");
+            request.refusal = [in](StringView name) { return AssetNames::Refusal(*in, name); };
+            request.describe = [in](StringView name) { return Format(u8"Makes {} in {}.", name, GroupPicker::ShownName(*in)); };
+            request.accepted = [self, entry, in](StringView name) { self->m_services.create(*entry, in, name); };
+            m_services.askName(Move(request));
+        }
+
         // The New menu: every creator, those with no category first, then a submenu per category.
         void AddNewMenu(gui::Menu& menu, content::Group& group)
         {
@@ -1225,7 +1282,7 @@ export namespace editor::app
                 if (creator.category.IsEmpty())
                 {
                     const pipeline::AssetCreator* entry = &creator;
-                    (void)create->AddItem(creator.label.AsView(), [self, entry, into]() { self->m_services.create(*entry, into); });
+                    (void)create->AddItem(creator.label.AsView(), [self, entry, into]() { self->NewAsset(*entry, *into); });
                     continue;
                 }
                 bool seen = false;
@@ -1244,7 +1301,7 @@ export namespace editor::app
                     if (creator.category.AsView() == category)
                     {
                         const pipeline::AssetCreator* entry = &creator;
-                        (void)sub->AddItem(creator.label.AsView(), [self, entry, into]() { self->m_services.create(*entry, into); });
+                        (void)sub->AddItem(creator.label.AsView(), [self, entry, into]() { self->NewAsset(*entry, *into); });
                     }
             }
         }

@@ -148,6 +148,8 @@ export namespace editor::app
         /// Opens Create Asset over the window, titled `title` ("New Clip"), the group `group` (null:
         /// the project's top) and the name `suggested` to start; `create` is told the group and the
         /// name chosen (the caller makes the asset).
+        /// Asks for a name (the name prompt) for `request`.
+        void AskName(NameRequest request);
         void ShowCreateAsset(StringView title, StringView suggested, foundation::content::Group* group,
                              Function<void(foundation::content::Group&, StringView)> create);
         /// Icons for asset types, each asked of its type. Created on first use, with the slots' table.
@@ -270,6 +272,7 @@ export namespace editor::app
         UniquePtr<Picker> m_picker;                 // the one picker (paths, groups, components), made the first time
         UniquePtr<AssetPickerWindow> m_assetPicker; // an asset slot's picker, made the first time
         RefPtr<foundation::gui::Window> m_createAsset; // Create Asset, while open
+        RefPtr<foundation::gui::Window> m_namePrompt;  // the name prompt, while open
         ResourceRefServices m_refs;                 // what an asset slot asks of the editor
         UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
         UniquePtr<TemplatesDialog> m_templates;             // Edit > Export Templates

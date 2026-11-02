@@ -44,6 +44,7 @@ target_sources(Editor.App
             AssetPage.cppm
             ImageInspectView.cppm
             ImageFilePreview.cppm
+            NamePrompt.cppm
             AssetObjectPage.cppm
             PreviewPane.cppm
             EditorStatusBar.cppm

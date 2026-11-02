@@ -66,6 +66,8 @@ namespace
         UniquePtr<editor::app::AssetOperations> ops;
         UniquePtr<AssetsView> view;
         Array<String> created; // what New ran, by its label
+        Array<String> createdNames; // and the name each was given
+        Array<editor::app::NameRequest> asked; // what asked for a name (the name prompt), in order
         Guid pictured;                     // the asset whose thumbnail is ready (none: nil)
         RefPtr<gui::Drawable> picture;     // what it shows
         content::Group* top = nullptr;
@@ -103,7 +105,12 @@ namespace
             operations.context = &context; // no cook and no deferral, so operations run at once
             ops = MakeUnique<editor::app::AssetOperations>(DefaultAllocator(), Move(operations));
             services.operations = ops.Get();
-            services.create = [self](const pipeline::AssetCreator& creator, content::Group*) { self->created.PushBack(creator.label); };
+            services.create = [self](const pipeline::AssetCreator& creator, content::Group*, StringView name)
+            {
+                self->created.PushBack(creator.label);
+                self->createdNames.PushBack(String(name));
+            };
+            services.askName = [self](editor::app::NameRequest request) { self->asked.PushBack(Move(request)); };
             services.picture = [self](const Guid& id) { return id == self->pictured ? self->picture : RefPtr<gui::Drawable>{}; };
             view = MakeUnique<AssetsView>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadAssets());
             RefPtr<gui::Node> panel = view->Content();
@@ -472,13 +479,20 @@ TEST_CASE("assets: an asset's menu, a group's, and the shown group's with New; D
     menu = bed.view->OpenMenu();
     REQUIRE(menu != nullptr);
     CHECK(ItemNamed(*menu, u8"New") != nullptr);
-    gui::MenuItem* newGroup = ItemNamed(*menu, u8"New Group");
+    gui::MenuItem* newGroup = ItemNamed(*menu, u8"New Group...");
     REQUIRE(newGroup != nullptr);
     CHECK(ItemNamed(*menu, u8"Cook All") != nullptr); // on the top group it cooks everything
     CHECK(ItemNamed(*menu, u8"Delete Group...") == nullptr); // Content is not deleted
+    // New Group asks for the name first; a taken one is refused, and the one given is made and shown.
     CHECK(newGroup->HandleActivate());
+    REQUIRE(bed.asked.Size() == 1u);
+    CHECK(bed.asked[0].title == StringView(u8"New Group in Content"));
+    CHECK(bed.asked[0].suggested == StringView(u8"Group"));
+    CHECK_FALSE(bed.asked[0].refusal(u8"Models").IsEmpty());
+    CHECK(bed.asked[0].refusal(u8"Props").IsEmpty());
+    bed.asked[0].accepted(u8"Props");
     CHECK(bed.view->CurrentGroup() != nullptr);
-    CHECK(bed.view->CurrentGroup()->Name() == StringView(u8"Group")); // made and shown
+    CHECK(bed.view->CurrentGroup()->Name() == StringView(u8"Props")); // made and shown
     bed.view->Navigate(*bed.top);
 
     // Delete on the selection asks for confirmation, naming the asset; the Delete button deletes it.

@@ -390,7 +390,9 @@ namespace editor::app
                                                                                }},
                                       {}, {}, true);
             };
-            assets.create = [self](const pipeline::AssetCreator& creator, foundation::content::Group* group) { self->m_creation.CreateAndOpen(creator, group); };
+            assets.create = [self](const pipeline::AssetCreator& creator, foundation::content::Group* group, StringView name)
+            { self->m_creation.CreateAndOpen(creator, group, name); };
+            assets.askName = [self](NameRequest request) { self->AskName(Move(request)); };
             m_assets = MakeUnique<AssetsView>(m_editorAllocator, m_editorAllocator, Move(assets), m_window.LoadMarkup(AssetsView::kPath));
             // Revealing an asset (from a slot or anywhere else) shows it at its location in the
             // Assets panel and brings the panel to the front.
@@ -713,6 +715,14 @@ namespace editor::app
         if (!m_picker)
             m_picker = MakeUnique<Picker>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(Picker::kPath));
         (void)m_picker->Open(*root, Move(request));
+    }
+
+    void EditorApplication::AskName(NameRequest request)
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        m_namePrompt = NamePrompt::Open(m_editorAllocator, *root, m_window.LoadMarkup(NamePrompt::kPath), Move(request));
     }
 
     void EditorApplication::ShowCreateAsset(StringView title, StringView suggested, foundation::content::Group* group,

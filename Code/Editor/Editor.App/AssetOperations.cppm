@@ -115,14 +115,16 @@ export namespace editor::app
                 m_services.cook->RequestCook(false); // makes a builder's copy pickable at once
             return copy;
         }
-        /// Makes a new group in `parent` ("Group", "Group.2") and its folder on disk at once, so
-        /// the group persists while empty; null when it could not be made.
-        content::Group* CreateGroup(content::Group& parent)
+        /// Makes a new group in `parent` named `base` ("Group", "Group.2" when taken) and its folder
+        /// on disk at once, so the group persists while empty; null when it could not be made (or
+        /// waits for a cook, and is made after it).
+        content::Group* CreateGroup(content::Group& parent, StringView base = u8"Group")
         {
             content::Group* in = &parent;
-            if (Project() == nullptr || Waits([this, in]() { (void)CreateGroup(*in); }, u8"New group"))
+            const String wanted(base);
+            if (Project() == nullptr || Waits([this, in, wanted]() { (void)CreateGroup(*in, wanted.AsView()); }, u8"New group"))
                 return nullptr;
-            const String name = parent.UniqueGroupName(u8"Group");
+            const String name = parent.UniqueGroupName(base.IsEmpty() ? StringView(u8"Group") : base);
             content::Group* created = parent.CreateGroup(name.AsView());
             if (created == nullptr)
                 return nullptr;

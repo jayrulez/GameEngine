@@ -37,6 +37,7 @@ export import :resource_ref_editor;
 export import :asset_page;
 export import :image_inspect_view;
 export import :image_file_preview;
+export import :name_prompt;
 export import :asset_object_page;
 export import :preview_pane;
 export import :picker;

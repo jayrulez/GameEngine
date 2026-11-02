@@ -34,6 +34,24 @@ export namespace editor::app
         /// space at an end, taken there); empty when it can.
         [[nodiscard]] static String Refusal(const foundation::content::Group& group, StringView name)
         {
+            String refused = FormRefusal(name);
+            if (refused.IsEmpty() && group.GetInstance(name) != nullptr)
+                refused = Format(u8"{} is already in {}.", name, GroupPicker::ShownName(group));
+            return refused;
+        }
+        /// Why `name` cannot name a new group in `parent` (as Refusal, a group of that name being
+        /// what takes it); empty when it can.
+        [[nodiscard]] static String GroupRefusal(const foundation::content::Group& parent, StringView name)
+        {
+            String refused = FormRefusal(name);
+            if (refused.IsEmpty() && parent.GetGroup(name) != nullptr)
+                refused = Format(u8"{} already has a group named {}.", GroupPicker::ShownName(parent), name);
+            return refused;
+        }
+        /// Why `name` cannot name a file (empty, a character a file cannot hold, space at an end, a
+        /// dot at its end); empty when it can.
+        [[nodiscard]] static String FormRefusal(StringView name)
+        {
             if (name.IsEmpty())
                 return String(u8"Enter a name.");
             for (const utf8char c : name)
@@ -42,8 +60,6 @@ export namespace editor::app
                         return Format(u8"A name cannot hold {}.", StringView(&c, 1));
             if (name[0] == u8' ' || name[name.Size() - 1] == u8' ' || name[name.Size() - 1] == u8'.')
                 return String(u8"A name cannot start or end with a space, or end with a dot.");
-            if (group.GetInstance(name) != nullptr)
-                return Format(u8"{} is already in {}.", name, GroupPicker::ShownName(group));
             return String{};
         }
     };

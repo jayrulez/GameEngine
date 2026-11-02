@@ -41,15 +41,16 @@ export namespace editor::app
         /// Sets the project assets are created in (null between projects).
         void SetProject(editor::EditorProject* project) noexcept { m_project = project; }
 
-        /// Has `creator` write a new asset into `group` (the root when null), then opens its page.
-        void CreateAndOpen(const pipeline::AssetCreator& creator, foundation::content::Group* group = nullptr)
+        /// Has `creator` write a new asset into `group` (the root when null), named `name` (empty:
+        /// the creator's own), then opens its page.
+        void CreateAndOpen(const pipeline::AssetCreator& creator, foundation::content::Group* group = nullptr, StringView name = {})
         {
             editor::EditorContext& context = *m_services.context;
             if (m_services.cook->MutationLocked())
             {
                 const pipeline::AssetCreator* entry = &creator;
                 EditorAssetCreation* self = this;
-                m_services.cook->RunWhenIdle(Function<void()>{[self, entry, group]() { self->CreateAndOpen(*entry, group); }});
+                m_services.cook->RunWhenIdle(Function<void()>{[self, entry, group, wanted = String(name)]() { self->CreateAndOpen(*entry, group, wanted.AsView()); }});
                 context.Notify(editor::NoticeKind::Info, u8"Create queued until the current cook finishes.");
                 return;
             }
@@ -59,7 +60,7 @@ export namespace editor::app
                 return;
             }
             const String sourcesRoot(m_project->SourcesRoot().AsView());
-            foundation::content::Instance* instance = creator.Create(group, m_project->SourceDb().RootGroup(), sourcesRoot.AsView());
+            foundation::content::Instance* instance = creator.Create(group, m_project->SourceDb().RootGroup(), sourcesRoot.AsView(), name);
             if (instance == nullptr)
             {
                 context.Notify(editor::NoticeKind::Error, Format(u8"Create failed: the {} could not be written.", creator.label).AsView());

@@ -195,3 +195,51 @@ TEST_CASE("create asset: the groups a tree in it, a click choosing one; Create w
     CHECK(madeName == String(u8"Lamp"));
     CHECK_FALSE(window->IsOpen());
 }
+
+TEST_CASE("asset names: a group's name refused as an asset's is, and when a group of that name is there")
+{
+    Project bed;
+    CHECK(AssetNames::GroupRefusal(*bed.top, u8"") == String(u8"Enter a name."));
+    CHECK(AssetNames::GroupRefusal(*bed.top, u8"a:b") == String(u8"A name cannot hold :."));
+    CHECK(AssetNames::GroupRefusal(*bed.top, u8"Models") == String(u8"Content already has a group named Models."));
+    CHECK(AssetNames::GroupRefusal(*bed.top, u8"Crate").IsEmpty()); // an asset's name does not take a group's
+    CHECK(AssetNames::GroupRefusal(*bed.town, u8"Models").IsEmpty());
+}
+
+TEST_CASE("name prompt: the name checked as it is typed, the line saying why or what it makes; accepting answers and closes")
+{
+    Project bed;
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{800.0f, 600.0f});
+    String accepted;
+    editor::app::NameRequest request;
+    request.title = String(u8"New Group in Content");
+    request.suggested = String(u8"Models");
+    request.accept = String(u8"Create");
+    content::Group* top = bed.top;
+    request.refusal = [top](StringView name) { return AssetNames::GroupRefusal(*top, name); };
+    request.describe = [](StringView name) { return Format(u8"Makes the group {} in Content.", name); };
+    request.accepted = [&accepted](StringView name) { accepted = String(name); };
+    RefPtr<gui::Window> window = editor::app::NamePrompt::Open(DefaultAllocator(), *root, Load(StringView(editor::app::kNamePromptPath)), Move(request));
+    REQUIRE(window);
+    (void)root->UpdateLayout();
+    CHECK(window->IsOpen());
+    auto* name = FindId<gui::TextField>(*window, u8"name-prompt-name");
+    auto* why = FindId<gui::Label>(*window, u8"name-prompt-why");
+    auto* accept = FindId<gui::Button>(*window, u8"name-prompt-accept");
+    REQUIRE(name != nullptr);
+    REQUIRE(why != nullptr);
+    REQUIRE(accept != nullptr);
+    CHECK(accept->GetText() == StringView(u8"Create"));
+    // The suggestion is taken: Create waits, saying why.
+    CHECK_FALSE(accept->IsEnabled());
+    CHECK(why->GetText() == StringView(u8"Content already has a group named Models."));
+    CHECK(why->HasClass(u8"refused"));
+    // Typed over (the suggestion is selected): free, and the line says what it makes.
+    (void)root->GetEventDispatcher()->InjectText(u8"Props");
+    CHECK(accept->IsEnabled());
+    CHECK(why->GetText() == StringView(u8"Makes the group Props in Content."));
+    CHECK(accept->HandleActivate());
+    CHECK(accepted == StringView(u8"Props"));
+    CHECK_FALSE(window->IsOpen());
+}

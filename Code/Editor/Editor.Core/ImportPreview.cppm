@@ -18,6 +18,7 @@ export module editor.core:import_preview;
 
 import foundation.core;
 import foundation.gui;
+import pipeline.importer; // ImportOptions (the settings a preview may show)
 
 using namespace foundation::core;
 
@@ -143,6 +144,9 @@ export namespace editor
         /// Set by the window: called when the preview's facts change (its read arrived).
         Function<void()> onChanged;
 
+        /// Called by the window when the file's settings changed, for a preview that shows them.
+        virtual void OnSettingsChanged() {}
+
         /// What the preview pane shows.
         [[nodiscard]] virtual foundation::gui::Node& View() = 0;
         /// The line under it, a fact each ("2048 x 2048", "RGBA, 8-bit"); empty while it reads and
@@ -171,8 +175,10 @@ export namespace editor
 
         [[nodiscard]] virtual const TypeInfo* AssetType() const = 0;
         /// A preview of the source file at `path`, its read started on `reader`; null when it
-        /// shows nothing for it.
-        [[nodiscard]] virtual UniquePtr<IImportPreview> Create(StringView path, ImportPreviewReader& reader, IAllocator& allocator) = 0;
+        /// shows nothing for it. `options` are the file's settings (null when its importer has
+        /// none), alive as long as the preview, for one that shows what they will do.
+        [[nodiscard]] virtual UniquePtr<IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
+                                                               IAllocator& allocator) = 0;
     };
 
     class ImportPreviewRegistry

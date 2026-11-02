@@ -25,6 +25,7 @@ import foundation.runtime.client;
 import foundation.graphics;
 import foundation.gui;
 import editor.core;
+import pipeline.importer;
 import editor.app;
 
 using namespace foundation::core;
@@ -68,7 +69,8 @@ export namespace editor
         {
         }
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView path, ImportPreviewReader& reader, IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
+                                                       IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

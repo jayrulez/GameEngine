@@ -237,10 +237,10 @@ export namespace editor::app
         {
             if (!m_session)
                 return;
+            m_preview = {}; // first: it may read the session's files' settings
             m_session->onChanged = {};
             m_session->closed = true;
             m_session = {};
-            m_preview = {};
             m_previewPath = {};
             m_previewType = {};
         }
@@ -373,7 +373,7 @@ export namespace editor::app
                                                              ? m_services.previews->FindByName(type.AsView())
                                                              : nullptr;
                 if (factory != nullptr)
-                    m_preview = factory->Create(file.path.AsView(), *m_services.previewReader, m_allocator);
+                    m_preview = factory->Create(file.path.AsView(), file.options.Get(), *m_services.previewReader, m_allocator);
                 if (m_preview)
                 {
                     ImportWindow* self = this;
@@ -486,6 +486,12 @@ export namespace editor::app
                                               else
                                                   info.Note = note.effect;
                                           });
+                // A change shows in the preview at once (a sound's trim shaded on its waveform).
+                m_settings->SetOnChange([self](const gui::ReflectedChange&)
+                                        {
+                                            if (self->m_preview)
+                                                self->m_preview->OnSettingsChanged();
+                                        });
                 const Instance target(file.options.Get(), file.options->GetType());
                 m_settings->SetObjects(Span<const Instance>(&target, 1u));
                 RefPtr<gui::PropertyGrid> grid = MakeRef<gui::PropertyGrid>(m_allocator);

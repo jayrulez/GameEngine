@@ -14,7 +14,8 @@ import foundation.gui;
 import foundation.gui.toolkit;
 import foundation.runtime.client; // the host, for its audio
 import engine.audio;
-import pipeline.importer; // FileNameOf
+import pipeline.importer; // FileNameOf, ImportOptions
+import audio.pipeline;    // AudioImportOptions, AudioEdits (the cook's own trim and peak)
 import editor.core;
 import editor.app;
 import :waveform_view;
@@ -57,8 +58,9 @@ namespace editor
         return Format(u8"Peak {} dB", FormatFixed(kDecibelsPerLn * Log(peak), 1));
     }
 
-    SoundFilePreview::SoundFilePreview(StringView path, ImportPreviewReader& reader, IAllocator& allocator, engine::audio::AudioSubsystem* audio)
-        : m_allocator(&allocator), m_facts(allocator)
+    SoundFilePreview::SoundFilePreview(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader, IAllocator& allocator,
+                                       engine::audio::AudioSubsystem* audio)
+        : m_allocator(&allocator), m_options(options), m_facts(allocator)
     {
         m_voice = MakeUnique<AuditionVoice>(allocator, audio);
         RefPtr<gui::Panel> root = MakeRef<gui::Panel>(allocator);
@@ -71,11 +73,18 @@ namespace editor
         play->SetOnClick([self]() { (void)self->Play(); });
         RefPtr<gui::ToolButton> stop = Tool(allocator, u8"Editor/Icons/stop.svg", u8"Stop");
         stop->SetOnClick([self]() { self->Stop(); });
+        RefPtr<gui::ToolButton> asImported = Tool(allocator, u8"Editor/Icons/speaker.svg", u8"As imported: play it as its settings will make it (normalized, trimmed)");
+        asImported->SetToggle(true);
+        asImported->SetText(u8"As imported");
+        asImported->SetShowsText(true);
+        asImported->SetOnToggled([self](bool on) { self->SetAsImported(on); });
+        m_asImportedButton = asImported.Get();
         RefPtr<gui::Label> state = MakeRef<gui::Label>(allocator);
         state->AddClass(u8"transport-state");
         m_state = state.Get();
         bar->AddChild(play.Get());
         bar->AddChild(stop.Get());
+        bar->AddChild(asImported.Get());
         bar->AddChild(state.Get());
         RefPtr<gui::Panel> stage = MakeRef<gui::Panel>(allocator);
         stage->AddClass(u8"audio-stage");
@@ -103,6 +112,14 @@ namespace editor
                                  if (!audio::ProbeAudioClipMetadata(encoded, decoded->metadata))
                                      return;
                                  (void)audio::BuildWaveformPeaks(encoded, kPreviewPeakBuckets, decoded->peaks);
+                                 // Where the trim cuts and how loud its peak is, as the cook counts them.
+                                 Array<i16> samples;
+                                 audio::AudioClipMetadata pcm;
+                                 if (audio::DecodeAudioClipToPcm16(encoded, 0u, samples, pcm))
+                                 {
+                                     decoded->audibleFrames = pipeline::AudioEdits::AudibleFrames(Span<const i16>(samples.Data(), samples.Size()), pcm.channels, pcm.sampleRate);
+                                     decoded->peak = pipeline::AudioEdits::Peak(Span<const i16>(samples.Data(), samples.Size()));
+                                 }
                                  decoded->bytes = Move(bytes.Value());
                                  decoded->ok = true;
                              },
@@ -142,8 +159,13 @@ namespace editor
             m_clip->frameCount = metadata.frameCount;
             m_clip->durationSeconds = metadata.durationSeconds;
             m_clip->encodedData = Move(decoded.bytes);
+            m_audibleFraction = metadata.frameCount > 0 && decoded.audibleFrames > 0
+                                    ? Min(static_cast<f32>(static_cast<f64>(decoded.audibleFrames) / static_cast<f64>(metadata.frameCount)), 1.0f)
+                                    : 1.0f;
+            m_normalizeGain = decoded.peak > 0 ? pipeline::AudioEdits::kNormalizeTarget / static_cast<f32>(decoded.peak) : 1.0f;
             m_message->SetText(StringView{});
             m_message->SetDisplayed(false);
+            ShowSettings();
         }
         if (onChanged)
             onChanged();
@@ -154,6 +176,7 @@ namespace editor
         Stop();
         if (m_clip.Get() == nullptr)
             return false;
+        m_clip->gain = m_asImported ? ImportedGain() : 1.0f; // Normalize, heard
         if (!m_voice->Start(m_clip, audio::AudioPlayParams{}))
         {
             ShowTransportState(m_state, u8"faulted", m_voice->HasEngine() ? StringView(u8"No voice: the audio engine did not start one") : StringView(u8"No audio engine"));
@@ -181,7 +204,13 @@ namespace editor
     bool SoundFilePreview::Follow()
     {
         f32 cursor = 0.0f;
-        if (!m_voice->Poll(cursor) || m_clip.Get() == nullptr || m_clip->durationSeconds <= 0.0f)
+        bool playing = m_voice->Poll(cursor) && m_clip.Get() != nullptr && m_clip->durationSeconds > 0.0f;
+        if (playing && m_asImported && cursor >= ImportedEnd() * m_clip->durationSeconds)
+        {
+            m_voice->Stop(); // the trim cuts it here
+            playing = false;
+        }
+        if (!playing)
         {
             m_waveform->SetPlayhead(-1.0f);
             ShowTransportState(m_state, u8"stopped", u8"Stopped");
@@ -192,15 +221,41 @@ namespace editor
         return true;
     }
 
+    void SoundFilePreview::SetAsImported(bool asImported)
+    {
+        m_asImported = asImported;
+        if (m_asImportedButton != nullptr && m_asImportedButton->IsChecked() != asImported)
+            m_asImportedButton->SetChecked(asImported);
+    }
+
+    f32 SoundFilePreview::ImportedGain() const
+    {
+        const auto* settings = Cast<pipeline::AudioImportOptions>(m_options);
+        return settings != nullptr && settings->normalize ? m_normalizeGain : 1.0f;
+    }
+
+    f32 SoundFilePreview::ImportedEnd() const
+    {
+        const auto* settings = Cast<pipeline::AudioImportOptions>(m_options);
+        return settings != nullptr && settings->trimTrailingSilence ? m_audibleFraction : 1.0f;
+    }
+
+    void SoundFilePreview::ShowSettings()
+    {
+        m_waveform->SetGain(ImportedGain());
+        m_waveform->SetCutFrom(ImportedEnd());
+    }
+
     StringView SoundFilePreview::State() const
     {
         return m_state != nullptr ? m_state->GetText() : StringView{};
     }
 
-    UniquePtr<IImportPreview> SoundFilePreviewFactory::Create(StringView path, ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<IImportPreview> SoundFilePreviewFactory::Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
+                                                              IAllocator& allocator)
     {
         const app::AssetPageServices services = m_services->Make();
         engine::audio::AudioSubsystem* audio = services.host != nullptr ? services.host->Subsystems().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr;
-        return UniquePtr<IImportPreview>(allocator.New<SoundFilePreview>(path, reader, allocator, audio), allocator);
+        return UniquePtr<IImportPreview>(allocator.New<SoundFilePreview>(path, options, reader, allocator, audio), allocator);
     }
 }

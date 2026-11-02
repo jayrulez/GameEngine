@@ -91,7 +91,7 @@ namespace
     public:
         explicit NamePreviewFactory(usize& made) : m_made(&made) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return &WindowThing::StaticType(); }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, editor::ImportPreviewReader&, IAllocator& allocator) override
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, const pipeline::ImportOptions*, editor::ImportPreviewReader&, IAllocator& allocator) override
         {
             ++*m_made;
             return UniquePtr<editor::IImportPreview>(allocator.New<NamePreview>(path), allocator);

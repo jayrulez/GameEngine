@@ -4,9 +4,10 @@
 // Editor::Audio - :waveform_view partition.
 //
 // WaveformView: a clip's peak waveform, an editor widget on the GUI. It draws symmetric bars per
-// bucket about the middle line, and a playhead at a fraction of the clip while it plays. Its colours
-// come from the style sheet (tag `waveform`, its own box for the background, and parts `wave` and
-// `playhead`), so it follows the theme.
+// bucket about the middle line, and a playhead at a fraction of the clip while it plays. It can
+// draw the clip as an edit would make it: its bars scaled by a gain (clamped to full scale), and
+// the part from a fraction on shaded as cut. Its colours come from the style sheet (tag `waveform`,
+// its own box for the background, and parts `wave`, `playhead` and `cut`), so it follows the theme.
 
 module;
 #include "Core/Prelude.h"
@@ -49,11 +50,30 @@ export namespace editor
             Invalidate();
         }
         [[nodiscard]] f32 Playhead() const noexcept { return m_playhead; }
+        /// Draws each bar times `gain` (1: as it is), none taller than full scale.
+        void SetGain(f32 gain)
+        {
+            if (gain == m_gain)
+                return;
+            m_gain = gain;
+            Invalidate();
+        }
+        [[nodiscard]] f32 Gain() const noexcept { return m_gain; }
+        /// Shades the clip from `fraction` (0 to 1) to its end as cut; 1 or more shades nothing.
+        void SetCutFrom(f32 fraction)
+        {
+            if (fraction == m_cutFrom)
+                return;
+            m_cutFrom = fraction;
+            Invalidate();
+        }
+        [[nodiscard]] f32 CutFrom() const noexcept { return m_cutFrom; }
 
         void CollectStyleParts(Array<StringView>& out) const override
         {
             out.PushBack(StringView(u8"wave"));
             out.PushBack(StringView(u8"playhead"));
+            out.PushBack(StringView(u8"cut"));
         }
         [[nodiscard]] Float2 MeasureContent(Float2) override { return Float2{240.0f, 120.0f}; }
 
@@ -68,8 +88,14 @@ export namespace editor
             const Color waveColor{0.25f, 0.78f, 0.75f, 0.9f}; // used when no sheet sets the colour
             for (usize i = 0; i < m_peaks.Size(); ++i)
             {
-                const f32 half = Max(1.0f, m_peaks[i] * (bounds.height * 0.5f - 2.0f));
+                const f32 half = Max(1.0f, Min(m_peaks[i] * m_gain, 1.0f) * (bounds.height * 0.5f - 2.0f));
                 wave.Draw(ctx, gui::Rect{bounds.x + static_cast<f32>(i) * bar, mid - half, Max(1.0f, bar - 1.0f), half * 2.0f}, gui::FilledBox(waveColor));
+            }
+            if (m_cutFrom < 1.0f)
+            {
+                const f32 from = bounds.x + Max(m_cutFrom, 0.0f) * bounds.width;
+                GetPartStyle(u8"cut").Draw(ctx, gui::Rect{from, bounds.y, bounds.x + bounds.width - from, bounds.height},
+                                           gui::FilledBox(Color{0.0f, 0.0f, 0.0f, 0.45f}));
             }
             if (m_playhead >= 0.0f && m_playhead <= 1.0f)
                 GetPartStyle(u8"playhead").Draw(ctx, gui::Rect{bounds.x + m_playhead * bounds.width - 1.0f, bounds.y, 2.0f, bounds.height},
@@ -79,5 +105,7 @@ export namespace editor
     private:
         Array<f32> m_peaks;
         f32 m_playhead = -1.0f;
+        f32 m_gain = 1.0f;
+        f32 m_cutFrom = 1.0f;
     };
 }

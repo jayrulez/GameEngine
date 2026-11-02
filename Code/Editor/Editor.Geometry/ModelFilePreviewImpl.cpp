@@ -405,7 +405,7 @@ namespace editor
         return m_impl->clipNames.AsSpan();
     }
 
-    UniquePtr<IImportPreview> ModelFilePreviewFactory::Create(StringView path, ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<IImportPreview> ModelFilePreviewFactory::Create(StringView path, const pipeline::ImportOptions*, ImportPreviewReader& reader, IAllocator& allocator)
     {
         if (m_context->Project() == nullptr)
             return {};

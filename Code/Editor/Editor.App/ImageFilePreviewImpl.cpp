@@ -158,7 +158,8 @@ namespace editor::app
             onChanged();
     }
 
-    UniquePtr<editor::IImportPreview> ImageFilePreviewFactory::Create(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<editor::IImportPreview> ImageFilePreviewFactory::Create(StringView path, const pipeline::ImportOptions*, editor::ImportPreviewReader& reader,
+                                                                      IAllocator& allocator)
     {
         return UniquePtr<editor::IImportPreview>(allocator.New<ImageFilePreview>(path, reader, allocator), allocator);
     }

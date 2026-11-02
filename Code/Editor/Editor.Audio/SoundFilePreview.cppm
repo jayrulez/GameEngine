@@ -3,12 +3,14 @@
 
 // Editor::Audio - :sound_file_preview partition.
 //
-// The import window's preview of a sound file (Specs/import-window.md W3): its waveform, with
+// The import window's preview of a sound file (Specs/import-window.md W3, W6): its waveform, with
 // Play and Stop over it and a playhead while it plays, and the facts the decoder gives: its
-// length, its channels and rate, and its peak. The file is read, probed and reduced to its peaks
-// on the ImportPreviewReader's worker; it plays through the runtime context's audio, as the clip
-// page auditions (nothing plays without an engine, as in a test). The audio domain registers it
-// for audio clips.
+// length, its channels and rate, and its peak. The file's settings show on the waveform as the
+// cook will apply them (the trimmed tail shaded, the bars normalized), and with "As imported" on,
+// Play plays it so (louder or softer by Normalize, stopping where the trim cuts). The file is read,
+// probed and reduced to its peaks on the ImportPreviewReader's worker; it plays through the
+// runtime context's audio, as the clip page auditions (nothing plays without an engine, as in a
+// test). The audio domain registers it for audio clips.
 
 module;
 #include "Core/Prelude.h"
@@ -18,9 +20,11 @@ export module editor.audio:sound_file_preview;
 import foundation.core;
 import foundation.audio;
 import foundation.gui;
+import foundation.gui.toolkit; // ToolButton
 import engine.audio;
 import editor.core;
 import editor.app;
+import pipeline.importer;
 import :waveform_view;
 import :audition;
 
@@ -33,17 +37,22 @@ export namespace editor
     public:
         /// Shows that it is reading `path` and starts the read on `reader`; `audio` is what Play
         /// plays through (null: Play does nothing).
-        SoundFilePreview(StringView path, ImportPreviewReader& reader, IAllocator& allocator, engine::audio::AudioSubsystem* audio);
+        SoundFilePreview(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader, IAllocator& allocator,
+                         engine::audio::AudioSubsystem* audio);
         SoundFilePreview(const SoundFilePreview&) = delete;
         SoundFilePreview& operator=(const SoundFilePreview&) = delete;
         ~SoundFilePreview() override;
 
         [[nodiscard]] foundation::gui::Node& View() override { return *m_root; }
         [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
+        void OnSettingsChanged() override { ShowSettings(); }
 
         /// Plays the sound from its start, the playhead following it; false when nothing plays.
         bool Play();
         void Stop();
+        /// Whether Play plays the sound as the settings will make it.
+        void SetAsImported(bool asImported);
+        [[nodiscard]] bool AsImported() const noexcept { return m_asImported; }
 
         // === For tests ===
         [[nodiscard]] WaveformView& Waveform() noexcept { return *m_waveform; }
@@ -57,9 +66,17 @@ export namespace editor
             Array<byte> bytes;
             foundation::audio::AudioClipMetadata metadata;
             Array<f32> peaks;
+            usize audibleFrames = 0; // what the trim keeps
+            i32 peak = 0;            // the loudest sample, of 32767
             bool ok = false;
         };
         void Show(Decoded& decoded);
+        // The settings on the waveform: the trimmed tail shaded, the bars normalized.
+        void ShowSettings();
+        // The gain Normalize gives it, and where the trim cuts (a fraction of its length); 1 and 1
+        // when the setting is off or the file has none.
+        [[nodiscard]] f32 ImportedGain() const;
+        [[nodiscard]] f32 ImportedEnd() const;
         // Called on the GUI's clock while it plays: the playhead and the state follow the voice.
         bool Follow();
 
@@ -68,6 +85,11 @@ export namespace editor
         RefPtr<WaveformView> m_waveform;
         foundation::gui::Label* m_state = nullptr;
         foundation::gui::Label* m_message = nullptr;
+        foundation::gui::ToolButton* m_asImportedButton = nullptr;
+        const pipeline::ImportOptions* m_options = nullptr; // the file's, the window's to keep alive
+        bool m_asImported = false;
+        f32 m_audibleFraction = 1.0f;
+        f32 m_normalizeGain = 1.0f;
         Array<String> m_facts;
         RefPtr<foundation::audio::AudioClip> m_clip;
         UniquePtr<AuditionVoice> m_voice;
@@ -82,7 +104,8 @@ export namespace editor
     public:
         SoundFilePreviewFactory(const TypeInfo& type, const app::AssetPageServicesSource& services) : m_type(&type), m_services(&services) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView path, ImportPreviewReader& reader, IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader,
+                                                       IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

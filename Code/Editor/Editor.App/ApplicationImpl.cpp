@@ -6,6 +6,7 @@
 // each part does is its own file; what is here is the order and the wiring between them.
 module;
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE (compiles to nothing when disabled)
 #include "Core/Log/Log.h"
 
 module editor.app;
@@ -1155,7 +1156,10 @@ namespace editor::app
         if (m_profiler)
             m_profiler->Update(); // take the frames recorded since the last update, while recording
         if (m_assets)
+        {
+            PROFILE_SCOPE("Editor.Assets");
             m_assets->Refresh();
+        }
         // Files dropped on the window: imported into the group the Assets panel shows.
         if (host.Shell() != nullptr)
         {
@@ -1171,7 +1175,10 @@ namespace editor::app
             }
         }
         m_window.Update(dt);
-        m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
+        {
+            PROFILE_SCOPE("Editor.Pages");
+            m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
+        }
         if (m_importWindow)
             m_importWindow->OnUpdate(host, dt); // the same for the import window's preview (a model's view)
         if (m_home)

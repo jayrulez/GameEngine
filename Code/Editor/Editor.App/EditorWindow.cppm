@@ -13,6 +13,7 @@
 // development loop, or the user's overrides) applies at once.
 module;
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE (compiles to nothing when disabled)
 #include "Core/Log/Log.h"
 
 export module editor.app:editor_window;
@@ -33,6 +34,7 @@ import foundation.gui.hosting;
 import foundation.gui.docking; // its sheet
 import foundation.gui.toolkit; // its sheet and elements
 import foundation.gui.code;    // its sheet and elements
+import foundation.profiler;
 import foundation.profiler.gui; // its sheet and elements
 import editor.core;
 import :status_bar;
@@ -172,7 +174,9 @@ export namespace editor::app
             fonts::HarfBuzzShaping::Install();
             fonts::BidiAlgorithm::Install();
             m_fonts = MakeUnique<fonts::TrueTypeFontService>(m_allocator, m_allocator);
-            m_resources = MakeUnique<editor::EditorResources>(m_allocator, m_allocator, dataRoot);
+            // Only Editor/ is swept for changes: the rest of the data root (the sample projects,
+            // thousands of files) would make each sweep a spike.
+            m_resources = MakeUnique<editor::EditorResources>(m_allocator, m_allocator, dataRoot, StringView(u8"Editor"));
             if (!themeFolder.IsEmpty())
             {
                 (void)CreateDirectories(themeFolder); // a place for the file the user writes
@@ -325,6 +329,7 @@ export namespace editor::app
             m_sinceSweep += deltaTime;
             if (m_sinceSweep >= kSweepSeconds)
             {
+                PROFILE_SCOPE("Editor.Sweep");
                 m_sinceSweep = 0.0f;
                 (void)m_resources->Poll();
                 if (m_theme && m_theme->Poll())

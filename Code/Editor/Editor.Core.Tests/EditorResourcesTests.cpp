@@ -64,11 +64,12 @@ REFLECT_MEMBERS(IconBare, "rtti::editortest")
 {
 }
 
-TEST_CASE("editor resources: text is read fresh; a changed SVG is set aside and loaded anew; a change runs what tracks it")
+TEST_CASE("editor resources: text is read fresh; a changed SVG is set aside and loaded anew; a change runs what tracks it; only the watched folder is swept")
 {
     Write(u8"Editor/editor.css", u8"a { color: red; }");
     Write(u8"Editor/Icons/save.svg", kSquare);
-    EditorResources resources(DefaultAllocator(), kRoot);
+    Write(u8"SampleProjects/Game/notes.txt", u8"a game's file");
+    EditorResources resources(DefaultAllocator(), kRoot, u8"Editor");
 
     String text;
     REQUIRE(resources.LoadText(u8"Editor/editor.css", text));
@@ -83,6 +84,10 @@ TEST_CASE("editor resources: text is read fresh; a changed SVG is set aside and 
     foundation::gui::Effect reload([&]() { resources.TrackChanges(); ++runs; });
     CHECK(runs == 1);
     CHECK_FALSE(resources.Poll()); // nothing changed yet
+    // Only the watched folder is swept: the rest of the root is never walked.
+    Write(u8"SampleProjects/Game/notes.txt", u8"the game's file, changed");
+    CHECK_FALSE(resources.Poll());
+    CHECK(runs == 1);
 
     Write(u8"Editor/editor.css", u8"a { color: blue; text-align: center; }");
     Write(u8"Editor/Icons/save.svg", kCircle);

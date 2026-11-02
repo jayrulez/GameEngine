@@ -9,8 +9,9 @@
 // borrows them; one whose file changed is set aside (still alive for whatever draws it) and loaded
 // afresh when next asked for.
 //
-// Poll sweeps the files for changes (the caller throttles it, since a sweep walks the folder). A
-// change notifies TrackChanges' observable, so a sheet or a page that read through it in a GUI
+// Poll sweeps the watched folder's files for changes (the caller throttles it, since a sweep walks
+// the folder). The editor watches only Editor/ under the data root, so the rest of it (the sample
+// projects, thousands of files) is never walked. A change notifies TrackChanges' observable, so a sheet or a page that read through it in a GUI
 // Effect reloads itself; LastChanged says which files changed.
 module;
 #include "Core/Prelude.h"
@@ -34,14 +35,15 @@ export namespace editor
     class EditorResources final : public gui::IResourceProvider
     {
     public:
+
         /// Over the folder `root` (the data root, which holds Editor/); paths are relative to it
-        /// ("Editor/Icons/save.svg").
-        EditorResources(IAllocator& allocator, StringView root)
+        /// ("Editor/Icons/save.svg"). Poll sweeps `watched`, a folder under it (empty: all of it).
+        EditorResources(IAllocator& allocator, StringView root, StringView watched = {})
             : IResourceProvider(allocator), m_allocator(allocator), m_fs(root, allocator), m_images(allocator), m_svgs(allocator),
               m_setAside(allocator), m_lastChanged(allocator)
         {
             if (foundation::vfs::IChangeSource* source = m_fs.ChangeSource())
-                source->Track(StringView{});
+                source->Track(watched);
         }
 
         // === IResourceProvider ===

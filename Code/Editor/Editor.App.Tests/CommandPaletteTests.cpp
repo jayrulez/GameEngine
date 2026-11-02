@@ -4,7 +4,8 @@
 // The command palette over a registry and its own markup (Data/Editor/CommandPalette.xml): the rows
 // a query yields and their order; the arrow keys moving the lit row (the palette handles them before
 // the search field does); Enter running the lit action and closing the palette, or keeping it open
-// with a message when the action is disabled; a row's chord and dimmed state; and Escape closing it.
+// with a message when the action is disabled; a row's chord and dimmed state; and Escape or its
+// close button closing it.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -151,5 +152,10 @@ TEST_CASE("command-palette: the rows follow the query - label starts first, labe
     CHECK(resets == 1u);
     REQUIRE(palette.Open(*root));
     d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape));
+    CHECK_FALSE(palette.IsOpen());
+    // Its close button at the search's end closes it too.
+    REQUIRE(palette.Open(*root));
+    REQUIRE(palette.CloseButton() != nullptr);
+    CHECK(palette.CloseButton()->HandleActivate());
     CHECK_FALSE(palette.IsOpen());
 }

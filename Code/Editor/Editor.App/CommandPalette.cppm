@@ -9,8 +9,8 @@
 // first, then labels that contain it, then actions whose description or id contains it. A row
 // shows the action's label, its menu path and its chord; an action disabled for the active page is
 // dimmed, and running it shows the reason in the hint. Up and Down move along the rows; Enter or a
-// click runs the highlighted action through the registry and closes the palette; Escape or a press
-// outside closes it. It opens as a modal popup near the top of the window with the field focused.
+// click runs the highlighted action through the registry and closes the palette; Escape, its close
+// button or a press outside closes it. It opens as a modal popup near the top of the window with the field focused.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -91,7 +91,7 @@ export namespace editor::app
     {
     public:
         /// The palette over `actions`, in the frame `content` (from the markup, binding
-        /// `palette-search`, `palette-list` and `palette-hint` by id).
+        /// `palette-search`, `palette-list`, `palette-hint` and `palette-close` by id).
         CommandPalette(IAllocator& allocator, EditorActionRegistry& actions, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_actions(&actions), m_content(Move(content)), m_shown(allocator), m_rows(allocator)
         {
@@ -105,6 +105,8 @@ export namespace editor::app
             CommandPalette* self = this;
             if (m_search != nullptr)
                 m_search->SetOnTextChanging([self](StringView text) { self->Filter(text); });
+            if (auto* close = Cast<gui::Button>(Find(*m_content, u8"palette-close")))
+                close->SetOnClick([self]() { self->Close(); });
             // Handle Up, Down and Enter before the search field takes them.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
@@ -154,6 +156,8 @@ export namespace editor::app
                 m_search->RequestFocus();
             return true;
         }
+        /// The close button at the search's end (for tests).
+        [[nodiscard]] gui::Button* CloseButton() const { return m_content ? Cast<gui::Button>(Find(*m_content, u8"palette-close")) : nullptr; }
         void Close()
         {
             if (IsOpen())

@@ -340,7 +340,7 @@ export namespace editor::app
                 ownFolder->SetChecked(true);
             }
             if (size != nullptr)
-                size->SetText(Format(u8"{} download", SizeText(sample.size)).AsView());
+                size->SetText(Format(u8"{} download", ByteSizeText(sample.size)).AsView());
             parent->SetText(m_services.controller != nullptr && !m_services.controller->LastLocation().IsEmpty() ? m_services.controller->LastLocation()
                                                                                                                   : m_home.AsView());
             const String folder = sample.folder;
@@ -795,15 +795,6 @@ export namespace editor::app
                                                                                                 : u8"Editor/Icons/error.svg"));
         }
 
-        // A size for a person: "7.2 MB".
-        [[nodiscard]] static String SizeText(u64 bytes)
-        {
-            const u64 tenths = (bytes * 10 + 512 * 1024) / (1024 * 1024);
-            if (tenths < 10)
-                return Format(u8"{} KB", Max<u64>(1, (bytes + 512) / 1024));
-            return Format(u8"{}.{} MB", tenths / 10, tenths % 10);
-        }
-
         [[nodiscard]] String ReleaseFile(StringView file) const
         {
             return m_services.releaseFile ? m_services.releaseFile(file) : engine::project::EngineReleaseDownloadUrl(file);
@@ -911,14 +902,14 @@ export namespace editor::app
                         bar->SetValue(static_cast<f64>(d->Progress()));
                     }
                     if (auto* stage = Cast<gui::Label>(FindIn(*m_dialog->GetContent(), u8"download-sample-stage")))
-                        stage->SetText(Format(u8"Downloading {} of {}", SizeText(d->Received()), SizeText(d->Total())).AsView());
+                        stage->SetText(Format(u8"Downloading {} of {}", ByteSizeText(d->Received()), ByteSizeText(d->Total())).AsView());
                 }
             for (const SampleCard& card : m_sampleCards)
                 if (SampleDownload* d = DownloadOf(card.folder.AsView()); d != nullptr && card.bar != nullptr)
                 {
                     card.bar->SetValue(static_cast<f64>(d->Progress()));
                     if (card.stage != nullptr)
-                        card.stage->SetText(Format(u8"Downloading {} of {}", SizeText(d->Received()), SizeText(d->Total())).AsView());
+                        card.stage->SetText(Format(u8"Downloading {} of {}", ByteSizeText(d->Received()), ByteSizeText(d->Total())).AsView());
                 }
         }
 
@@ -984,7 +975,7 @@ export namespace editor::app
             RefPtr<gui::Panel> title = MakeRef<gui::Panel>(m_allocator);
             title->AddClass(u8"manager-sample-title");
             title->AddChild(Text(sample.name.AsView(), u8"manager-sample-name").Get());
-            title->AddChild(Text(SizeText(sample.size).AsView(), u8"manager-count").Get());
+            title->AddChild(Text(ByteSizeText(sample.size).AsView(), u8"manager-count").Get());
             body->AddChild(title.Get());
             body->AddChild(Text(sample.description.AsView(), u8"manager-sample-text").Get());
             SampleCard entry;

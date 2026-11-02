@@ -3,12 +3,16 @@
 
 // Editor App - :import_dialog partition
 //
-// The import window, over its markup (Data/Editor/Import.xml): one window for one file or many.
-// It shows where the files go, in a field that opens the group picker; the files, when there are
-// several, each kept or dropped, with its state (reading, ready, failed) and one selected; and the
-// selected file's importer (a choice when several accept it), its options, and what it would
-// create by kind, each item kept or dropped and named, with a kind's box keeping or dropping all of
-// that kind. A file still being read says so and shows its detail when it is ready. The line under
+// The import window, over its markup (Data/Editor/Import.xml): one window for one file or many, in
+// three panes (Specs/import-window.md). The files, grouped by the importer each resolves to and
+// headed by that importer's Label(), each kept or dropped, with its asset type's icon, its size,
+// its state while it needs attention (reading, failed), and one selected. The selected file's
+// preview, with a line of facts under it. Its settings: its importer (a choice when several
+// accept it), its options, and what it would create by kind, each kind collapsed to its count and
+// opening to its items, each kept or dropped and named, a kind's box keeping or dropping all of it.
+// Under the panes, where the files go, in a field that opens the group picker. A file still being
+// read says so and shows its settings when it is ready. Nothing here names a file type: each part
+// comes from the file's importer. The line under
 // it says what Import will do, or why it waits, and Import is disabled while it waits. A name
 // another asset holds is reported on the file (AssetImport::ClashOf): an asset of another type
 // waits for a rename; one of the same type from another file offers Replace or Keep both, and
@@ -23,6 +27,7 @@ import foundation.core;
 import foundation.content;
 import foundation.gui;
 import pipeline.importer;
+import editor.core; // EditorIcons
 import :asset_import;
 import :group_picker_dialog;
 
@@ -48,6 +53,8 @@ export namespace editor::app
             AssetImport* import = nullptr;
             /// Opens the group picker with `current` checked; `picked` gets the choice.
             Function<void(content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
+            /// The asset types' icons, as the Assets panel shows them (null: the generic one).
+            editor::EditorIcons* icons = nullptr;
         };
 
         ImportWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> body)
@@ -120,14 +127,39 @@ export namespace editor::app
             Close();
             return true;
         }
-        /// Shows file `index`'s detail.
+        /// Shows file `index`'s preview and settings, its kinds closed.
         void Select(usize index)
         {
             if (!m_session || index >= m_session->files.Size())
                 return;
             m_selected = index;
+            m_openKinds.Clear();
             ShowFiles();
+            ShowPreview();
             ShowDetail();
+        }
+        /// Opens or closes a kind of what the selected file would create (its items listed or not).
+        void SetKindOpen(pipeline::ImportResourceKind kind, bool open)
+        {
+            bool already = false;
+            for (usize i = 0; i < m_openKinds.Size(); ++i)
+                if (m_openKinds[i] == kind)
+                {
+                    already = true;
+                    if (!open)
+                        m_openKinds.RemoveAt(i);
+                    break;
+                }
+            if (open && !already)
+                m_openKinds.PushBack(kind);
+            ShowDetail();
+        }
+        [[nodiscard]] bool IsKindOpen(pipeline::ImportResourceKind kind) const
+        {
+            for (const pipeline::ImportResourceKind open : m_openKinds)
+                if (open == kind)
+                    return true;
+            return false;
         }
 
         // For tests: the session, the window, the selected file, the line, the Import button.
@@ -141,10 +173,12 @@ export namespace editor::app
         }
         [[nodiscard]] gui::Button* ImportButton() const { return Find<gui::Button>(u8"import-run"); }
         [[nodiscard]] gui::Node* Detail() const { return Find<gui::Node>(u8"import-detail"); }
+        [[nodiscard]] gui::Node* Files() const { return Find<gui::Node>(u8"import-files"); }
+        [[nodiscard]] gui::Node* Facts() const { return Find<gui::Node>(u8"import-facts"); }
 
     private:
-        static constexpr f32 kWidth = 640.0f;
-        static constexpr f32 kHeight = 520.0f;
+        static constexpr f32 kWidth = 1100.0f;
+        static constexpr f32 kHeight = 680.0f;
 
         void Release()
         {
@@ -159,25 +193,67 @@ export namespace editor::app
             if (auto* group = Find<gui::Button>(u8"import-group"); group != nullptr && m_session)
                 group->SetText(GroupPicker::ShownName(*m_session->group).AsView());
             ShowFiles();
+            ShowPreview();
             ShowDetail();
             ShowWhy();
         }
 
-        // Shows the files when there are several: each kept or not, its state, the selected one marked.
+        [[nodiscard]] static StringView LabelOf(const AssetImport::File& file)
+        {
+            const pipeline::IFileImporter* importer = file.Importer();
+            return importer != nullptr ? importer->Label() : StringView(u8"Other");
+        }
+        // The icon of the asset type the file's importer makes, as the Assets panel shows that type.
+        [[nodiscard]] String IconOf(const AssetImport::File& file) const
+        {
+            const pipeline::IFileImporter* importer = file.Importer();
+            const StringView type = importer != nullptr ? importer->ListedTypeName(file.path.AsView()) : StringView{};
+            if (m_services.icons == nullptr)
+                return String(u8"Editor/Icons/Types/Asset.svg");
+            return m_services.icons->ForTypeName(type, u8"Asset").Source;
+        }
+        // The file's size on disk; empty when it cannot be read.
+        [[nodiscard]] static String SizeOf(const AssetImport::File& file)
+        {
+            u64 size = 0;
+            i64 time = 0;
+            return FileStat(file.path.AsView(), size, time) ? ByteSizeText(size) : String{};
+        }
+
+        // Shows the files, grouped by the importer each resolves to, in the order those first come:
+        // each kept or not, its icon, its size, its state while it needs attention, the selected
+        // one marked.
         void ShowFiles()
         {
-            auto* scroll = Find<gui::UIWidget>(u8"import-files-scroll");
             auto* list = Find<gui::UIWidget>(u8"import-files");
-            if (scroll == nullptr || list == nullptr || !m_session)
+            if (list == nullptr || !m_session)
                 return;
-            const bool several = m_session->files.Size() > 1;
-            scroll->SetDisplayed(several);
             while (list->ChildCount() > 0)
                 list->RemoveChild(list->GetChildAt(list->ChildCount() - 1));
-            if (!several)
-                return;
+            Array<String> labels;
+            for (const AssetImport::File& file : m_session->files)
+            {
+                bool seen = false;
+                for (const String& label : labels)
+                    seen = seen || label.AsView() == LabelOf(file);
+                if (!seen)
+                    labels.PushBack(String(LabelOf(file)));
+            }
+            for (const String& label : labels)
+            {
+                usize count = 0;
+                for (const AssetImport::File& file : m_session->files)
+                    count += LabelOf(file) == label.AsView() ? 1u : 0u;
+                list->AddChild(Text(Format(u8"{} · {}", label, count).AsView(), u8"import-section").Get());
+                for (usize i = 0; i < m_session->files.Size(); ++i)
+                    if (LabelOf(m_session->files[i]) == label.AsView())
+                        list->AddChild(FileRow(i).Get());
+            }
+        }
+
+        [[nodiscard]] RefPtr<gui::Node> FileRow(usize i)
+        {
             ImportWindow* self = this;
-            for (usize i = 0; i < m_session->files.Size(); ++i)
             {
                 const AssetImport::File& file = m_session->files[i];
                 RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
@@ -194,24 +270,51 @@ export namespace editor::app
                                            self->m_session->files[i].kept = on;
                                        self->ShowWhy();
                                    });
+                RefPtr<gui::Image> icon = MakeRef<gui::Image>(m_allocator);
+                icon->AddClass(u8"import-file-icon");
+                icon->SetSource(IconOf(file));
+                icon->SetHitTestVisible(false);
                 RefPtr<gui::Button> name = MakeRef<gui::Button>(m_allocator);
                 name->AddClass(u8"import-file-name");
                 name->SetText(file.Name());
                 name->SetTooltip(file.path.AsView());
                 name->SetOnClick([self, i]() { self->Later([self, i]() { self->Select(i); }); }); // the rows are rebuilt, so not inside the click
-                RefPtr<gui::Label> state = MakeRef<gui::Label>(m_allocator);
-                state->AddClass(u8"badge");
-                state->AddClass(file.state == AssetImport::File::State::Ready    ? StringView(u8"success")
-                                : file.state == AssetImport::File::State::Failed ? StringView(u8"danger")
-                                                                                  : StringView(u8"warning"));
-                state->SetText(file.state == AssetImport::File::State::Ready    ? StringView(u8"Ready")
-                               : file.state == AssetImport::File::State::Failed ? StringView(u8"Failed")
-                                                                                 : StringView(u8"Reading"));
                 row->AddChild(kept.Get());
+                row->AddChild(icon.Get());
                 row->AddChild(name.Get());
-                row->AddChild(state.Get());
-                list->AddChild(row.Get());
+                // Its state only while it needs attention; a ready file shows its size.
+                if (file.state == AssetImport::File::State::Ready)
+                    row->AddChild(Text(SizeOf(file).AsView(), u8"import-file-size").Get());
+                else
+                {
+                    const bool failed = file.state == AssetImport::File::State::Failed;
+                    row->AddChild(Text(failed ? StringView(u8"Failed") : StringView(u8"Reading"), failed ? u8"badge danger" : u8"badge warning").Get());
+                }
+                return RefPtr<gui::Node>(row);
             }
+        }
+
+        // Shows the selected file's preview, and its facts under it. Until a domain registers a
+        // preview for its type (Specs/import-window.md W2), its type's icon and its name.
+        void ShowPreview()
+        {
+            auto* view = Find<gui::UIWidget>(u8"import-preview-view");
+            auto* facts = Find<gui::UIWidget>(u8"import-facts");
+            if (view == nullptr || facts == nullptr || !m_session || m_selected >= m_session->files.Size())
+                return;
+            while (view->ChildCount() > 0)
+                view->RemoveChild(view->GetChildAt(view->ChildCount() - 1));
+            while (facts->ChildCount() > 0)
+                facts->RemoveChild(facts->GetChildAt(facts->ChildCount() - 1));
+            const AssetImport::File& file = m_session->files[m_selected];
+            RefPtr<gui::Image> icon = MakeRef<gui::Image>(m_allocator);
+            icon->AddClass(u8"import-preview-icon");
+            icon->SetSource(IconOf(file));
+            view->AddChild(icon.Get());
+            view->AddChild(Text(file.Name(), u8"import-preview-name").Get());
+            facts->AddChild(Text(LabelOf(file), u8"import-fact").Get());
+            if (const String size = SizeOf(file); !size.IsEmpty())
+                facts->AddChild(Text(size.AsView(), u8"import-fact").Get());
         }
 
         // Shows the selected file: its importer, its options, what it would create by kind.
@@ -295,9 +398,18 @@ export namespace editor::app
                     }
                 if (count == 0)
                     continue;
+                // The kind: open or close it, keep or drop all of it, and how many are kept.
+                const bool open = IsKindOpen(kind);
+                RefPtr<gui::Panel> head = Row(u8"import-kind");
+                RefPtr<gui::Button> toggle = MakeRef<gui::Button>(m_allocator);
+                toggle->AddClass(u8"import-kind-toggle");
+                toggle->AddClass(u8"with-icon");
+                toggle->SetIconSource(String(open ? u8"Editor/Icons/chevron-down.svg" : u8"Editor/Icons/chevron-right.svg"));
+                toggle->SetText(pipeline::ImportResourceKindLabel(kind));
+                toggle->SetTooltip(open ? StringView(u8"Hide them") : StringView(u8"Show them, each with its name"));
+                toggle->SetOnClick([self, kind, open]() { self->Later([self, kind, open]() { self->SetKindOpen(kind, !open); }); });
                 RefPtr<gui::CheckBox> all = MakeRef<gui::CheckBox>(m_allocator);
-                all->AddClass(u8"import-kind");
-                all->SetText(Format(u8"{} ({})", pipeline::ImportResourceKindLabel(kind), count).AsView());
+                all->SetTooltip(u8"Keep or drop all of them");
                 all->SetChecked(kept == count);
                 all->SetIndeterminate(kept > 0 && kept < count);
                 all->SetOnToggled([self, index, kind](bool on)
@@ -309,7 +421,14 @@ export namespace editor::app
                                               entry.enabled = on;
                                       self->Later([self]() { self->ShowDetail(); });
                                   });
-                detail->AddChild(all.Get());
+                head->AddChild(all.Get());
+                head->AddChild(toggle.Get());
+                RefPtr<gui::Spacer> gap = MakeRef<gui::Spacer>(m_allocator);
+                head->AddChild(gap.Get());
+                head->AddChild(Text(Format(u8"{} of {}", kept, count).AsView(), u8"import-kind-count").Get());
+                detail->AddChild(head.Get());
+                if (!open)
+                    continue;
                 for (usize e = 0; e < file.plan.entries.Size(); ++e)
                 {
                     const pipeline::ImportPlanEntry& entry = file.plan.entries[e];
@@ -398,7 +517,13 @@ export namespace editor::app
                     line->AddClass(u8"refused");
             }
             if (gui::Button* run = ImportButton())
+            {
                 run->SetEnabled(can);
+                usize kept = 0;
+                for (const AssetImport::File& file : m_session->files)
+                    kept += file.kept ? 1u : 0u;
+                run->SetText(kept > 1 ? Format(u8"Import {} Files", kept).AsView() : StringView(u8"Import"));
+            }
         }
 
         // Runs `work` after the event that asked for it (a control's own callback rebuilding the
@@ -445,5 +570,6 @@ export namespace editor::app
         RefPtr<gui::Window> m_window;
         RefPtr<AssetImport::Session> m_session;
         usize m_selected = 0;
+        Array<pipeline::ImportResourceKind> m_openKinds; // the selected file's kinds shown item by item
     };
 }

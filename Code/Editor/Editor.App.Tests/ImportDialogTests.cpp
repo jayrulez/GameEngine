@@ -81,6 +81,20 @@ namespace
         return count;
     }
 
+    // Every label's text under `node`, one line each, to look for one in.
+    String Texts(gui::Node& node)
+    {
+        String out;
+        if (auto* label = Cast<gui::Label>(&node))
+        {
+            out += label->GetText();
+            out += u8"\n";
+        }
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            out += Texts(*node.GetChildAt(i));
+        return out;
+    }
+
     struct Bed
     {
         UniquePtr<editor::EditorProject> project;
@@ -134,11 +148,21 @@ TEST_CASE("import window: a file's plan by kind, each kept and named; Import ope
     Bed bed;
     const String box[] = {String(u8"/somewhere/crate.box")};
     RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(box, 1u));
-    // Check boxes for the two kinds and for the three entries, with the entries' names (there are
-    // no option toggles here).
+    // The two kinds, closed: a box each, no names yet (there are no option toggles here).
     gui::Node& detail = *bed.window->Detail();
-    CHECK(Count<gui::CheckBox>(detail) == 5u);
-    CHECK(Count<gui::TextField>(detail) == 3u);
+    CHECK(Count<gui::CheckBox>(detail) == 2u);
+    CHECK(Count<gui::TextField>(detail) == 0u);
+    CHECK_FALSE(bed.window->IsKindOpen(pipeline::ImportResourceKind::Texture));
+    // Opened, each kind lists its items, each kept or dropped and named.
+    bed.window->SetKindOpen(pipeline::ImportResourceKind::Mesh, true);
+    bed.window->SetKindOpen(pipeline::ImportResourceKind::Texture, true);
+    CHECK(Count<gui::CheckBox>(*bed.window->Detail()) == 5u);
+    CHECK(Count<gui::TextField>(*bed.window->Detail()) == 3u);
+    // One file is listed too, under its importer's label, and the preview's facts name it.
+    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 1u);
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"Box · 1"));
+    CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Box"));
+    CHECK(bed.window->ImportButton()->GetText() == StringView(u8"Import"));
     CHECK(bed.window->ImportButton()->IsEnabled()); // enabled once the files are described
     CHECK(bed.window->Why() == StringView(u8"Into Content."));
 
@@ -158,6 +182,8 @@ TEST_CASE("import window: Import waits while a file is read, saying so, and open
     RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(two, 2u));
     CHECK(bed.window->ImportButton()->IsEnabled());
     CHECK(bed.window->Why() == StringView(u8"2 of 2 files into Content."));
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"Box · 2")); // both under their importer's label
+    CHECK(bed.window->ImportButton()->GetText() == StringView(u8"Import 2 Files"));
 
     // Mark a file as a heavy importer's while the worker reads it, then report it ready.
     session->files[1].state = AssetImport::File::State::Reading;

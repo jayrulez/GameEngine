@@ -58,7 +58,7 @@ namespace editor
         return Format(u8"Peak {} dB", FormatFixed(kDecibelsPerLn * Log(peak), 1));
     }
 
-    SoundFilePreview::SoundFilePreview(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader, IAllocator& allocator,
+    SoundFilePreview::SoundFilePreview(StringView path, const pipeline::ImportOptions* options, TaskPool& tasks, IAllocator& allocator,
                                        engine::audio::AudioSubsystem* audio)
         : m_allocator(&allocator), m_options(options), m_facts(allocator)
     {
@@ -103,14 +103,15 @@ namespace editor
 
         RefPtr<Decoded> decoded = MakeRef<Decoded>(allocator);
         // On the worker: only the file and `decoded`, which nothing else touches until it is back.
-        m_read = reader.Read([decoded, file = String(path)]()
+        m_read = tasks.Submit(Format(u8"Reading {}", pipeline::FileNameOf(path)).AsView(),
+                              [decoded, file = String(path)](TaskContext&)
                              {
                                  Result<Array<byte>> bytes = ReadFile(file.AsView());
                                  if (!bytes.HasValue())
-                                     return;
+                                     return Status{}; // Show says it did not read
                                  const Span<const byte> encoded(bytes.Value().Data(), bytes.Value().Size());
                                  if (!audio::ProbeAudioClipMetadata(encoded, decoded->metadata))
-                                     return;
+                                     return Status{};
                                  (void)audio::BuildWaveformPeaks(encoded, kPreviewPeakBuckets, decoded->peaks);
                                  // Where the trim cuts and how loud its peak is, as the cook counts them.
                                  Array<i16> samples;
@@ -122,9 +123,10 @@ namespace editor
                                  }
                                  decoded->bytes = Move(bytes.Value());
                                  decoded->ok = true;
+                                 return Status{};
                              },
                              // On the main thread, and only while this preview lives (it cancels the read as it goes).
-                             [self, decoded]() { self->Show(*decoded); });
+                             [self, decoded](Status) { self->Show(*decoded); });
     }
 
     SoundFilePreview::~SoundFilePreview()
@@ -251,10 +253,10 @@ namespace editor
         return m_state != nullptr ? m_state->GetText() : StringView{};
     }
 
-    UniquePtr<IImportPreview> SoundFilePreviewFactory::Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<IImportPreview> SoundFilePreviewFactory::Create(const ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator)
     {
         const app::AssetPageServices services = m_services->Make();
         engine::audio::AudioSubsystem* audio = services.host != nullptr ? services.host->Subsystems().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr;
-        return UniquePtr<IImportPreview>(allocator.New<SoundFilePreview>(file.path, file.options, reader, allocator, audio), allocator);
+        return UniquePtr<IImportPreview>(allocator.New<SoundFilePreview>(file.path, file.options, tasks, allocator, audio), allocator);
     }
 }

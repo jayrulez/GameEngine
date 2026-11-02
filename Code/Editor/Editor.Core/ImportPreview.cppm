@@ -7,8 +7,8 @@
 // registers a preview factory for the asset types it imports, as it registers pages; the window
 // asks for the one nearest the type the file's importer lists it by, and shows its view with its
 // facts under it. A type with no preview shows its facts alone. A preview reads the source file
-// itself (nothing has been imported yet), off the main thread through the ImportPreviewReader, so
-// a drop of large files never holds the window: it shows that it is reading, then its result.
+// itself (nothing has been imported yet), off the main thread as a task on the editor's TaskPool,
+// so a drop of large files never holds the window: it shows that it is reading, then its result.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -24,100 +24,6 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// One read a preview started. Cancelled when the preview goes, so its result is dropped.
-    class ImportPreviewRead : public RefCounted
-    {
-    public:
-        void Cancel() noexcept { m_cancelled.store(true, MemoryOrder::Release); }
-        [[nodiscard]] bool Cancelled() const noexcept { return m_cancelled.load(MemoryOrder::Acquire); }
-
-    private:
-        Atomic<bool> m_cancelled{false};
-    };
-
-    /// Runs the previews' reads on a worker of their own and hands each result back on the main
-    /// thread. Not the editor's job service: that runs one job at a time so a cook never races the
-    /// databases, and a preview queued behind a cook would wait for it; a preview only reads its
-    /// source file. The worker starts with the first read.
-    class ImportPreviewReader
-    {
-    public:
-        explicit ImportPreviewReader(IAllocator& allocator) : m_allocator(&allocator), m_done(allocator) {}
-        ImportPreviewReader(const ImportPreviewReader&) = delete;
-        ImportPreviewReader& operator=(const ImportPreviewReader&) = delete;
-        ~ImportPreviewReader()
-        {
-            // The reads still running finish (nothing they hold leaks); none is handed back.
-            if (m_jobs)
-                m_jobs->WaitForAll();
-            m_jobs.Reset();
-        }
-
-        /// Runs `read` on the worker, then `done` on the main thread in Pump; each is skipped once
-        /// the returned read is cancelled. `read` must not touch the GUI or anything the main
-        /// thread changes: it fills what `done` shows.
-        RefPtr<ImportPreviewRead> Read(Function<void()> read, Function<void()> done)
-        {
-            if (!m_jobs)
-                m_jobs = MakeUnique<JobSystem>(*m_allocator, *m_allocator, 1u);
-            RefPtr<ImportPreviewRead> ticket = MakeRef<ImportPreviewRead>(*m_allocator);
-            m_inFlight.fetch_add(1, MemoryOrder::Relaxed);
-            ImportPreviewReader* self = this;
-            m_jobs->Submit([self, ticket, read = Move(read), done = Move(done)]() mutable
-                           {
-                               if (!ticket->Cancelled() && read)
-                                   read();
-                               read = {}; // what it captured goes here, on the worker
-                               ScopedLock lock(self->m_lock);
-                               self->m_done.PushBack(Finished{Move(ticket), Move(done)});
-                           });
-            return ticket;
-        }
-
-        /// Hands back the reads finished since the last Pump (the editor's frame calls it).
-        void Pump()
-        {
-            Array<Finished> finished(*m_allocator);
-            {
-                ScopedLock lock(m_lock);
-                if (m_done.IsEmpty())
-                    return;
-                finished = Move(m_done);
-                m_done = Array<Finished>(*m_allocator);
-            }
-            for (Finished& read : finished)
-            {
-                m_inFlight.fetch_sub(1, MemoryOrder::Relaxed);
-                if (!read.ticket->Cancelled() && read.done)
-                    read.done();
-            }
-        }
-
-        /// Reads started and not yet handed back.
-        [[nodiscard]] u32 InFlight() const noexcept { return m_inFlight.load(MemoryOrder::Relaxed); }
-
-        /// Waits for every read, then hands them back (tests; a host closing).
-        void Finish()
-        {
-            if (m_jobs)
-                m_jobs->WaitForAll();
-            Pump();
-        }
-
-    private:
-        struct Finished
-        {
-            RefPtr<ImportPreviewRead> ticket;
-            Function<void()> done;
-        };
-
-        IAllocator* m_allocator;
-        UniquePtr<JobSystem> m_jobs;
-        Mutex m_lock; // guards m_done, which the worker fills
-        Array<Finished> m_done;
-        Atomic<u32> m_inFlight{0};
-    };
-
     /// An interface a preview publishes beyond IImportPreview, which the window asks for by type
     /// (the editor's frame hooks, for a preview that renders), as a page publishes its services.
     class IImportPreviewService
@@ -185,9 +91,9 @@ export namespace editor
         virtual ~IImportPreviewFactory() = default;
 
         [[nodiscard]] virtual const TypeInfo* AssetType() const = 0;
-        /// A preview of `file`, any read it needs started on `reader`; null when it shows nothing
-        /// for it.
-        [[nodiscard]] virtual UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator) = 0;
+        /// A preview of `file`, any read it needs submitted to `tasks` (cancelled when the preview
+        /// goes, so its completion never runs after); null when it shows nothing for it.
+        [[nodiscard]] virtual UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator) = 0;
     };
 
     class ImportPreviewRegistry

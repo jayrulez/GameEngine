@@ -99,7 +99,7 @@ namespace
     public:
         explicit NamePreviewFactory(usize& made) : m_made(&made) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return &WindowThing::StaticType(); }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(const editor::ImportPreviewSource& file, editor::ImportPreviewReader&, IAllocator& allocator) override
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(const editor::ImportPreviewSource& file, TaskPool&, IAllocator& allocator) override
         {
             ++*m_made;
             return UniquePtr<editor::IImportPreview>(allocator.New<NamePreview>(file.path), allocator);
@@ -190,7 +190,7 @@ namespace
             ImportWindow::Services windows;
             windows.import = import.Get();
             windows.previews = &context.ImportPreviews();
-            windows.previewReader = &context.ImportPreviewReads();
+            windows.tasks = &context.Tasks();
             window = MakeUnique<ImportWindow>(DefaultAllocator(), DefaultAllocator(), Move(windows), LoadImport());
             root->SetSize(Float2{1000.0f, 700.0f});
         }

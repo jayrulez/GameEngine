@@ -108,7 +108,7 @@ namespace editor::app
         }
     }
 
-    ImageFilePreview::ImageFilePreview(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator)
+    ImageFilePreview::ImageFilePreview(StringView path, TaskPool& tasks, IAllocator& allocator)
         : m_root(BuildView(allocator)), m_facts(allocator)
     {
         m_picture = MakeUnique<ImagePreview>(allocator, *m_root);
@@ -116,11 +116,12 @@ namespace editor::app
         RefPtr<Decoded> decoded = MakeRef<Decoded>(allocator);
         ImageFilePreview* self = this;
         // On the worker: only the file and `decoded`, which nothing else touches until it is back.
-        m_read = reader.Read([decoded, file = String(path)]()
+        m_read = tasks.Submit(Format(u8"Reading {}", pipeline::FileNameOf(path)).AsView(),
+                              [decoded, file = String(path)](TaskContext&)
                              {
                                  image::Image source;
                                  if (!image::io::LoadImage(file.AsView(), source).IsOk() || source.Width() == 0 || source.Height() == 0)
-                                     return;
+                                     return Status{}; // Show says it did not decode
                                  // The display is 8-bit: converted through the image library (floats clamp).
                                  decoded->pixels = source.Format() == image::PixelFormat::RGBA8 ? Move(source) : source.ConvertFormat(image::PixelFormat::RGBA8);
                                  decoded->facts.PushBack(Format(u8"{} × {}", decoded->pixels.Width(), decoded->pixels.Height()));
@@ -132,9 +133,10 @@ namespace editor::app
                                          decoded->facts.PushBack(String(UsesAlpha(decoded->pixels) ? StringView(u8"Uses alpha") : StringView(u8"Alpha unused")));
                                  }
                                  decoded->ok = true;
+                                 return Status{};
                              },
                              // On the main thread, and only while this preview lives (it cancels the read as it goes).
-                             [self, decoded]() { self->Show(*decoded); });
+                             [self, decoded](Status) { self->Show(*decoded); });
     }
 
     ImageFilePreview::~ImageFilePreview()
@@ -158,9 +160,9 @@ namespace editor::app
             onChanged();
     }
 
-    UniquePtr<editor::IImportPreview> ImageFilePreviewFactory::Create(const editor::ImportPreviewSource& file, editor::ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<editor::IImportPreview> ImageFilePreviewFactory::Create(const editor::ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator)
     {
-        return UniquePtr<editor::IImportPreview>(allocator.New<ImageFilePreview>(file.path, reader, allocator), allocator);
+        return UniquePtr<editor::IImportPreview>(allocator.New<ImageFilePreview>(file.path, tasks, allocator), allocator);
     }
 
     void RegisterImageFilePreview(editor::EditorContext& context, const TypeInfo& type)

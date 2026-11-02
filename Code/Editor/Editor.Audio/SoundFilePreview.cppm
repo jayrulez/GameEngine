@@ -8,7 +8,7 @@
 // length, its channels and rate, and its peak. The file's settings show on the waveform as the
 // cook will apply them (the trimmed tail shaded, the bars normalized), and with "As imported" on,
 // Play plays it so (louder or softer by Normalize, stopping where the trim cuts). The file is read,
-// probed and reduced to its peaks on the ImportPreviewReader's worker; it plays through the
+// probed and reduced to its peaks as a task on the editor's pool; it plays through the
 // runtime context's audio, as the clip page auditions (nothing plays without an engine, as in a
 // test). The audio domain registers it for audio clips.
 
@@ -35,9 +35,9 @@ export namespace editor
     class SoundFilePreview final : public IImportPreview
     {
     public:
-        /// Shows that it is reading `path` and starts the read on `reader`; `audio` is what Play
+        /// Shows that it is reading `path` and starts the read on `tasks`; `audio` is what Play
         /// plays through (null: Play does nothing).
-        SoundFilePreview(StringView path, const pipeline::ImportOptions* options, ImportPreviewReader& reader, IAllocator& allocator,
+        SoundFilePreview(StringView path, const pipeline::ImportOptions* options, TaskPool& tasks, IAllocator& allocator,
                          engine::audio::AudioSubsystem* audio);
         SoundFilePreview(const SoundFilePreview&) = delete;
         SoundFilePreview& operator=(const SoundFilePreview&) = delete;
@@ -94,7 +94,7 @@ export namespace editor
         RefPtr<foundation::audio::AudioClip> m_clip;
         UniquePtr<AuditionVoice> m_voice;
         RefPtr<foundation::gui::TickAction> m_follow;
-        RefPtr<ImportPreviewRead> m_read;
+        RefPtr<TaskHandle> m_read;
     };
 
     /// Previews the sound files an importer lists by one asset type; it plays through the audio of
@@ -104,7 +104,7 @@ export namespace editor
     public:
         SoundFilePreviewFactory(const TypeInfo& type, const app::AssetPageServicesSource& services) : m_type(&type), m_services(&services) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

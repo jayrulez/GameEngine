@@ -139,15 +139,15 @@ TEST_CASE("image file preview: read off the main thread, then the picture with i
 {
     const StringView path = u8"scratch_image_file_preview.png";
     REQUIRE(image::io::SaveImage(Picture(), path, image::io::ImageFileFormat::PNG).IsOk());
-    editor::ImportPreviewReader reader(DefaultAllocator());
+    TaskPool tasks(DefaultAllocator(), 1u);
     {
-        editor::app::ImageFilePreview preview(path, reader, DefaultAllocator());
+        editor::app::ImageFilePreview preview(path, tasks, DefaultAllocator());
         u32 changed = 0;
         preview.onChanged = [&changed]() { ++changed; };
         // Reading: no picture and no facts until the read is handed back.
         CHECK_FALSE(preview.Picture().View().HasImage());
         CHECK(preview.Facts().IsEmpty());
-        reader.Finish();
+        tasks.Finish();
         CHECK(changed == 1u);
         CHECK(preview.Picture().View().HasImage());
         const Span<const String> facts = preview.Facts();
@@ -159,15 +159,15 @@ TEST_CASE("image file preview: read off the main thread, then the picture with i
 
     // A preview gone before its read comes back: the result is dropped.
     {
-        editor::app::ImageFilePreview gone(path, reader, DefaultAllocator());
+        editor::app::ImageFilePreview gone(path, tasks, DefaultAllocator());
     }
-    reader.Finish();
-    CHECK(reader.InFlight() == 0u);
+    tasks.Finish();
+    CHECK(tasks.InFlight() == 0u);
     FileDelete(path);
 
     // A file that does not decode shows why, with no facts.
-    editor::app::ImageFilePreview missing(u8"scratch_image_file_preview_missing.png", reader, DefaultAllocator());
-    reader.Finish();
+    editor::app::ImageFilePreview missing(u8"scratch_image_file_preview_missing.png", tasks, DefaultAllocator());
+    tasks.Finish();
     CHECK_FALSE(missing.Picture().View().HasImage());
     CHECK(missing.Facts().IsEmpty());
 }

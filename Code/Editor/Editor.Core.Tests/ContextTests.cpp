@@ -136,7 +136,7 @@ namespace
     public:
         explicit TestPreviewFactory(const TypeInfo& type) : m_type(&type) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource&, ImportPreviewReader&, IAllocator&) override { return {}; }
+        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource&, TaskPool&, IAllocator&) override { return {}; }
 
     private:
         const TypeInfo* m_type;
@@ -170,20 +170,21 @@ TEST_CASE("editor-import-previews: the nearest type's preview, found by the type
     CHECK(registry.FindByName(u8"NoSuchAssetType") == nullptr);
 }
 
-TEST_CASE("editor-import-previews: a read runs off the main thread and is handed back in Pump; a cancelled one is dropped")
+TEST_CASE("editor-context: the editor's long work runs on the context's pool, its completion in Pump; a cancelled task's never")
 {
-    ImportPreviewReader reader(DefaultAllocator());
+    EditorContext ctx{DefaultAllocator()};
+    TaskPool& tasks = ctx.Tasks();
+    CHECK(tasks.WorkerCount() == TaskPool::DefaultWorkerCount());
     Atomic<u32> read{0};
     u32 handed = 0;
-    RefPtr<ImportPreviewRead> kept = reader.Read([&read]() { read.fetch_add(1); }, [&handed]() { ++handed; });
-    RefPtr<ImportPreviewRead> dropped = reader.Read([&read]() { read.fetch_add(1); }, [&handed]() { handed += 10; });
+    RefPtr<TaskHandle> kept = tasks.Submit(u8"kept", [&read](TaskContext&) { read.fetch_add(1); return Status{}; }, [&handed](Status) { ++handed; });
+    RefPtr<TaskHandle> dropped = tasks.Submit(u8"dropped", [&read](TaskContext&) { read.fetch_add(1); return Status{}; }, [&handed](Status) { handed += 10; });
     dropped->Cancel(); // the preview went before its read came back
-    CHECK(reader.InFlight() == 2u);
     CHECK(handed == 0u); // nothing is handed back outside Pump
-    reader.Finish();
-    CHECK(handed == 1u); // only the kept read's result
-    CHECK(reader.InFlight() == 0u);
-    CHECK(read.load() >= 1u); // the cancelled read may have started before it was cancelled
+    tasks.Finish();
+    CHECK(handed == 1u); // only the kept task's completion
+    CHECK(tasks.InFlight() == 0u);
+    CHECK(read.load() >= 1u); // the cancelled one may have started before it was cancelled
 }
 
 TEST_CASE("editor-context: open, focus, and close pages")

@@ -32,14 +32,14 @@ TEST_CASE("sound file preview: read off the main thread, then the waveform with 
     const StringView path = u8"scratch_sound_file_preview.wav";
     REQUIRE(WriteFile(path, Span<const byte>(wav.Data(), wav.Size())).IsOk());
 
-    editor::ImportPreviewReader reader(DefaultAllocator());
+    TaskPool tasks(DefaultAllocator(), 1u);
     {
-        editor::SoundFilePreview preview(path, nullptr, reader, DefaultAllocator(), nullptr);
+        editor::SoundFilePreview preview(path, nullptr, tasks, DefaultAllocator(), nullptr);
         u32 changed = 0;
         preview.onChanged = [&changed]() { ++changed; };
         CHECK_FALSE(preview.HasSound()); // still reading
         CHECK(preview.Facts().IsEmpty());
-        reader.Finish();
+        tasks.Finish();
         CHECK(changed == 1u);
         REQUIRE(preview.HasSound());
         CHECK_FALSE(preview.Waveform().Peaks().IsEmpty());
@@ -58,8 +58,8 @@ TEST_CASE("sound file preview: read off the main thread, then the waveform with 
     }
     FileDelete(path);
 
-    editor::SoundFilePreview missing(u8"scratch_sound_file_preview_missing.wav", nullptr, reader, DefaultAllocator(), nullptr);
-    reader.Finish();
+    editor::SoundFilePreview missing(u8"scratch_sound_file_preview_missing.wav", nullptr, tasks, DefaultAllocator(), nullptr);
+    tasks.Finish();
     CHECK_FALSE(missing.HasSound());
     CHECK(missing.Facts().IsEmpty());
 }
@@ -85,10 +85,10 @@ TEST_CASE("sound file preview: the trim shades the tail it cuts and Normalize sc
     REQUIRE(WriteFile(path, Span<const byte>(wav.Data(), wav.Size())).IsOk());
 
     pipeline::AudioImportOptions options;
-    editor::ImportPreviewReader reader(DefaultAllocator());
+    TaskPool tasks(DefaultAllocator(), 1u);
     {
-        editor::SoundFilePreview preview(path, &options, reader, DefaultAllocator(), nullptr);
-        reader.Finish();
+        editor::SoundFilePreview preview(path, &options, tasks, DefaultAllocator(), nullptr);
+        tasks.Finish();
         REQUIRE(preview.HasSound());
         // Off: the waveform as it is.
         CHECK(preview.Waveform().CutFrom() == doctest::Approx(1.0f));

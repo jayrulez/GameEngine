@@ -87,7 +87,7 @@ namespace editor
         Array<Float4x4> bonePoses;
         Float3 center{};
         f32 radius = 1.0f;
-        RefPtr<ImportPreviewRead> read;
+        RefPtr<TaskHandle> read;
 
         Impl(IAllocator& alloc, ModelFilePreview& preview, StringView file)
             : allocator(&alloc), owner(&preview), path(file), open(alloc), facts(alloc), clipNames(alloc), bonePoses(alloc)
@@ -177,7 +177,7 @@ namespace editor
             }
         }
 
-        void Start(StringView cacheRoot, ImportPreviewReader& reader, foundation::model::Model* imported)
+        void Start(StringView cacheRoot, TaskPool& tasks, foundation::model::Model* imported)
         {
             message->SetText(Format(u8"Reading {}...", pipeline::FileNameOf(path.AsView())).AsView());
             // As the importer reads it: without the viewer's loose texture rule, which the import
@@ -208,13 +208,15 @@ namespace editor
             RefPtr<Read> result = MakeRef<Read>(*allocator);
             Impl* self = this;
             // On the worker: only the file and `result` (LoadFile makes its own loaders).
-            read = reader.Read([result, file = path]()
+            read = tasks.Submit(Format(u8"Reading {}", pipeline::FileNameOf(path.AsView())).AsView(),
+                                [result, file = path](TaskContext&)
                                {
                                    result->outcome = OpenModel::LoadFile(file.AsView(), false, result->model, result->stats);
+                                   return Status{};
                                },
                                // On the main thread, which owns the cache's database and resources, and
                                // only while this preview lives (it cancels the read as it goes).
-                               [self, result]()
+                               [self, result](Status)
                                {
                                    if (result->outcome != OpenModel::Outcome::Opened)
                                    {
@@ -357,13 +359,13 @@ namespace editor
         }
     };
 
-    ModelFilePreview::ModelFilePreview(StringView path, StringView cacheRoot, ImportPreviewReader& reader, IAllocator& allocator, const app::AssetPageServices& services,
+    ModelFilePreview::ModelFilePreview(StringView path, StringView cacheRoot, TaskPool& tasks, IAllocator& allocator, const app::AssetPageServices& services,
                                        foundation::model::Model* imported)
     {
         m_impl = MakeUnique<Impl>(allocator, allocator, *this, path);
         Provide<app::IImportPreviewFrames>(*this);
         m_impl->BuildView(services);
-        m_impl->Start(cacheRoot, reader, imported);
+        m_impl->Start(cacheRoot, tasks, imported);
     }
 
     ModelFilePreview::~ModelFilePreview()
@@ -419,7 +421,7 @@ namespace editor
         return m_impl->clipNames.AsSpan();
     }
 
-    UniquePtr<IImportPreview> ModelFilePreviewFactory::Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator)
+    UniquePtr<IImportPreview> ModelFilePreviewFactory::Create(const ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator)
     {
         if (m_context->Project() == nullptr)
             return {};
@@ -427,7 +429,7 @@ namespace editor
         const app::AssetPageServices services = m_services->Make();
         auto* loaded = Cast<pipeline::LoadedModel>(file.prepared);
         return UniquePtr<IImportPreview>(
-            allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), reader, allocator, services, loaded != nullptr ? &loaded->model : nullptr), allocator);
+            allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), tasks, allocator, services, loaded != nullptr ? &loaded->model : nullptr), allocator);
     }
 
     void RegisterModelFilePreview(EditorContext& context, const app::AssetPageServicesSource& services)

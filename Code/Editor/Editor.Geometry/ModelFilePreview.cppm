@@ -8,7 +8,7 @@
 // and pause) and its skeleton drawn over it on request; and the facts the file gives (meshes,
 // triangles, materials, textures, bones, clips). It opens through Editor.ModelPreview's OpenModel
 // into a cache folder under the project's cache: a model opened before binds from there, and one
-// that must be read is read on the ImportPreviewReader's worker, then cooked and bound on the main
+// that must be read is read as a task on the editor's pool, then cooked and bound on the main
 // thread, which owns the resources. Without a host (a test) there is no view, but the model still
 // opens and its facts show. The window drives it each frame (IImportPreviewFrames).
 //
@@ -38,8 +38,8 @@ export namespace editor
     public:
         /// Opens `path` with its cooked files under `cacheRoot`: bound at once when opened before,
         /// else cooked from `imported` (the model the importer read, which must outlive this call),
-        /// else read on `reader`. `services` give the host and GUI the view needs (none: no view).
-        ModelFilePreview(StringView path, StringView cacheRoot, ImportPreviewReader& reader, IAllocator& allocator, const app::AssetPageServices& services,
+        /// else read on `tasks`. `services` give the host and GUI the view needs (none: no view).
+        ModelFilePreview(StringView path, StringView cacheRoot, TaskPool& tasks, IAllocator& allocator, const app::AssetPageServices& services,
                          foundation::model::Model* imported = nullptr);
         ModelFilePreview(const ModelFilePreview&) = delete;
         ModelFilePreview& operator=(const ModelFilePreview&) = delete;
@@ -72,7 +72,7 @@ export namespace editor
         {
         }
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, ImportPreviewReader& reader, IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<IImportPreview> Create(const ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

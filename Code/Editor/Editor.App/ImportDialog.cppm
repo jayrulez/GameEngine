@@ -72,10 +72,10 @@ export namespace editor::app
             Function<void(content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
             /// The asset types' icons, as the Assets panel shows them (null: the generic one).
             editor::EditorIcons* icons = nullptr;
-            /// The domains' previews by asset type, and the reader they read their files on (either
+            /// The domains' previews by asset type, and the pool they read their files on (either
             /// null: none, each file shows its icon).
             const editor::ImportPreviewRegistry* previews = nullptr;
-            editor::ImportPreviewReader* previewReader = nullptr;
+            TaskPool* tasks = nullptr;
         };
 
         ImportWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> body)
@@ -390,7 +390,7 @@ export namespace editor::app
                 while (view->ChildCount() > 0)
                     view->RemoveChild(view->GetChildAt(view->ChildCount() - 1));
                 m_preview = {};
-                editor::IImportPreviewFactory* factory = m_services.previews != nullptr && m_services.previewReader != nullptr
+                editor::IImportPreviewFactory* factory = m_services.previews != nullptr && m_services.tasks != nullptr
                                                              ? m_services.previews->FindByName(type.AsView())
                                                              : nullptr;
                 // While the importer reads the file, its preview waits to show that read rather
@@ -406,7 +406,7 @@ export namespace editor::app
                 if (factory != nullptr && !waits)
                 {
                     const editor::ImportPreviewSource source{file.path.AsView(), file.options.Get(), file.prepared.Get()};
-                    m_preview = factory->Create(source, *m_services.previewReader, m_allocator);
+                    m_preview = factory->Create(source, *m_services.tasks, m_allocator);
                 }
                 if (m_preview)
                 {

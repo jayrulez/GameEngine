@@ -686,7 +686,7 @@ namespace editor::app
             services.import = m_assetImport.Get();
             services.icons = &TypeIcons();
             services.previews = &m_context.ImportPreviews();
-            services.previewReader = &m_context.ImportPreviewReads();
+            services.tasks = &m_context.Tasks();
             EditorApplication* self = this;
             services.pickGroup = [self](foundation::content::Group& current, Function<void(foundation::content::Group&)> picked)
             {
@@ -1197,7 +1197,9 @@ namespace editor::app
         m_jobService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
         if (m_export)
             m_export->Pump();
-        m_context.ImportPreviewReads().Pump(); // the import window's previews, read off this thread
+        // The editor's long work: the import previews' reads, done off this thread; their
+        // completions run here, their lines go to the status bar as the job service's do.
+        m_context.Tasks().Pump(Function<void(const TaskHandle&, StringView)>{[self](const TaskHandle&, StringView line) { self->m_context.SetStatus(line); }});
         UpdateStatusBar();
         if (foundation::resource::ResourceManager* resources = m_session.Resources())
         {

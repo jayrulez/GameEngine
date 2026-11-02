@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The import window's preview of a model file, without a host (no view): the file is read on the
-// preview reader, cooked into its cache folder and bound, and its facts and clips show; opened
+// editor's task pool, cooked into its cache folder and bound, and its facts and clips show; opened
 // again it binds from the cache at once. It publishes the frame hooks the window drives. A file
 // the loaders cannot read opens nothing and says so.
 
@@ -34,17 +34,17 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
 {
     const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview");
     (void)RemoveDirectoryRecursive(cache.AsView());
-    editor::ImportPreviewReader reader(DefaultAllocator());
+    TaskPool tasks(DefaultAllocator(), 1u);
     const editor::app::AssetPageServices services{}; // no host: no view
     const String fox = Fox();
     {
-        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), reader, DefaultAllocator(), services);
+        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services);
         CHECK(preview.Service<editor::app::IImportPreviewFrames>() != nullptr); // the window drives its frames
         u32 changed = 0;
         preview.onChanged = [&changed]() { ++changed; };
         CHECK_FALSE(preview.IsOpen()); // still reading
         CHECK(preview.Facts().IsEmpty());
-        reader.Finish();
+        tasks.Finish();
         CHECK(changed == 1u);
         REQUIRE(preview.IsOpen());
         // Fox.gltf: one mesh of 576 triangles, one material and texture, 24 bones, three clips.
@@ -62,9 +62,9 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
 
     // Opened again, it binds what the first open cooked, with no read.
     {
-        editor::ModelFilePreview again(fox.AsView(), cache.AsView(), reader, DefaultAllocator(), services);
+        editor::ModelFilePreview again(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services);
         CHECK(again.IsOpen());
-        CHECK(reader.InFlight() == 0u);
+        CHECK(tasks.InFlight() == 0u);
         CHECK(again.Facts().Size() == 6u);
     }
 
@@ -72,8 +72,8 @@ TEST_CASE("model file preview: read off the main thread, cooked and bound, its f
     const String junk = PathJoin(cache.AsView(), u8"junk.glb");
     const char8_t bytes[] = u8"not a model";
     REQUIRE(WriteFile(junk.AsView(), Span<const byte>(reinterpret_cast<const byte*>(bytes), sizeof(bytes))).IsOk());
-    editor::ModelFilePreview broken(junk.AsView(), cache.AsView(), reader, DefaultAllocator(), services);
-    reader.Finish();
+    editor::ModelFilePreview broken(junk.AsView(), cache.AsView(), tasks, DefaultAllocator(), services);
+    tasks.Finish();
     CHECK_FALSE(broken.IsOpen());
     CHECK(broken.Facts().IsEmpty());
     (void)RemoveDirectoryRecursive(cache.AsView());
@@ -83,16 +83,16 @@ TEST_CASE("model file preview: given the importer's read, it cooks that and read
 {
     const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_read");
     (void)RemoveDirectoryRecursive(cache.AsView());
-    editor::ImportPreviewReader reader(DefaultAllocator());
+    TaskPool tasks(DefaultAllocator(), 1u);
     const editor::app::AssetPageServices services{};
     const String fox = Fox();
     pipeline::ModelFileImporter importer;
     RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
     auto* loaded = Cast<pipeline::LoadedModel>(prepared.Get());
     REQUIRE(loaded != nullptr);
-    editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), reader, DefaultAllocator(), services, &loaded->model);
+    editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, &loaded->model);
     CHECK(preview.IsOpen()); // at once
-    CHECK(reader.InFlight() == 0u); // no read of its own
+    CHECK(tasks.InFlight() == 0u); // no read of its own
     CHECK(preview.Facts().Size() == 6u);
     (void)RemoveDirectoryRecursive(cache.AsView());
 }

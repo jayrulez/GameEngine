@@ -6,7 +6,7 @@
 // The import window's preview of a picture file (Specs/import-window.md W2): the image pages'
 // ImagePreview over a bar of its own (fit, 1:1, the zoom, the channels, the pixel under the
 // pointer), with the facts the file's header gives: its size, its channels and depth as stored,
-// and whether its alpha is used. It decodes the file on the ImportPreviewReader's worker, saying it
+// and whether its alpha is used. It decodes the file as a task on the editor's pool, saying it
 // is reading meanwhile. A domain whose importer makes an asset from a picture registers it for that
 // asset type (RegisterImageFilePreview).
 
@@ -33,9 +33,9 @@ export namespace editor::app
     class ImageFilePreview final : public editor::IImportPreview
     {
     public:
-        /// Shows that it is reading `path`, and starts the read on `reader`; the picture and its
+        /// Shows that it is reading `path`, and starts the read on `tasks`; the picture and its
         /// facts show when it comes back, or why it did not decode.
-        ImageFilePreview(StringView path, editor::ImportPreviewReader& reader, IAllocator& allocator);
+        ImageFilePreview(StringView path, TaskPool& tasks, IAllocator& allocator);
         ImageFilePreview(const ImageFilePreview&) = delete;
         ImageFilePreview& operator=(const ImageFilePreview&) = delete;
         ~ImageFilePreview() override;
@@ -59,7 +59,7 @@ export namespace editor::app
         RefPtr<gui::Node> m_root;
         UniquePtr<ImagePreview> m_picture;
         Array<String> m_facts;
-        RefPtr<editor::ImportPreviewRead> m_read;
+        RefPtr<TaskHandle> m_read;
     };
 
     /// Previews the picture files an importer lists by one asset type.
@@ -68,7 +68,7 @@ export namespace editor::app
     public:
         explicit ImageFilePreviewFactory(const TypeInfo& type) : m_type(&type) {}
         [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
-        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(const editor::ImportPreviewSource& file, editor::ImportPreviewReader& reader, IAllocator& allocator) override;
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(const editor::ImportPreviewSource& file, TaskPool& tasks, IAllocator& allocator) override;
 
     private:
         const TypeInfo* m_type;

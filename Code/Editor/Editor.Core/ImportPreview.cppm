@@ -43,6 +43,9 @@ export namespace editor
         virtual bool ShowPart(const pipeline::ImportPlanEntry& part) = 0;
         /// Shows the whole file again.
         virtual void ShowWhole() = 0;
+        /// A view of `part` for its details in the window (a skeleton's bones in a tree), or null
+        /// when it has none (or not yet: the window asks again when the preview's facts change).
+        [[nodiscard]] virtual RefPtr<foundation::gui::Node> PartView(const pipeline::ImportPlanEntry& /*part*/) { return {}; }
 
     protected:
         ~IImportPartPreview() = default;

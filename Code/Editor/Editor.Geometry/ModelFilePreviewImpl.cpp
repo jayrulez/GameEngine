@@ -21,6 +21,7 @@ import foundation.materials; // a material part shown on a sphere
 import foundation.resource;  // a part found as its resource handle
 import foundation.image;     // a texture part's picture
 import foundation.texture.resource; // a texture left out of the import, drawn without
+import editor.animation;     // DrawSkeletonBones, FillBoneTree: the skeleton page's, shared
 import foundation.image.io;
 import foundation.model;
 import foundation.model.resource;
@@ -91,6 +92,11 @@ namespace editor
         Array<String> facts;
         Array<String> clipNames;
         Array<Float4x4> bonePoses;
+        Array<foundation::animation::BoneTransform> bindPoses; // the bones' rest, when no clip plays
+        // The skeleton's bones in a tree for its details, and the bone chosen there (drawn apart).
+        UniquePtr<gui::TreeModel> boneModel;
+        Array<i32> boneRows;
+        i32 chosenBone = -1;
         Float3 center{};
         f32 radius = 1.0f;
         RefPtr<TaskHandle> read;
@@ -709,31 +715,74 @@ namespace editor
             play->SetIconSource(String(playing ? StringView(u8"Editor/Icons/pause.svg") : StringView(u8"Editor/Icons/play.svg")));
         }
 
-        // The model viewer's skeleton: a line from each bone to its parent, in the current pose.
+        // The skeleton over the model, as the skeleton page draws it (every bone over the mesh), in the
+        // current pose, with the bone chosen in its tree drawn apart.
         void DrawSkeleton()
         {
             if (!skeleton->IsChecked() || !viewport || !viewport->IsValid() || instance.skinned.IsEmpty() || open.Model() == nullptr)
                 return;
-            const foundation::animation::AnimationPlayer* player = playback ? playback->Player() : nullptr;
             foundation::animation::Skeleton* bones = open.Model()->skeleton.Get();
             if (bones == nullptr)
                 return;
             const usize count = static_cast<usize>(bones->BoneCount());
-            bonePoses.Resize(count);
-            bones->ComputeWorldPoses(player != nullptr ? player->GetFinalPoses() : Span<const foundation::animation::BoneTransform>{},
-                                     Span<Float4x4>(bonePoses.Data(), count));
-            const Float4x4 model = viewport->Scene()->ComposeWorldMatrix(instance.skinned[0]);
-            const Color color{0.35f, 0.85f, 1.0f, 1.0f};
-            render::debug::DebugDraw& draw = viewport->SceneDebugDraw();
-            for (usize i = 0; i < count; ++i)
+            const foundation::animation::AnimationPlayer* player = playback ? playback->Player() : nullptr;
+            Span<const foundation::animation::BoneTransform> poses =
+                player != nullptr ? player->GetFinalPoses() : Span<const foundation::animation::BoneTransform>{};
+            if (poses.Size() < count)
             {
-                const i32 parent = bones->GetBone(static_cast<i32>(i))->parentIndex;
-                if (parent < 0 || static_cast<usize>(parent) >= count)
-                    continue;
-                const Float4x4& a = bonePoses[static_cast<usize>(parent)];
-                const Float4x4& b = bonePoses[i];
-                draw.DrawLineOverlay(TransformPoint(Float3{a.m[3][0], a.m[3][1], a.m[3][2]}, model),
-                                     TransformPoint(Float3{b.m[3][0], b.m[3][1], b.m[3][2]}, model), color);
+                bindPoses.Resize(count);
+                for (usize b = 0; b < count; ++b)
+                    bindPoses[b] = bones->GetBone(static_cast<i32>(b))->localBindPose;
+                poses = Span<const foundation::animation::BoneTransform>(bindPoses.Data(), count);
+            }
+            const Float4x4 model = viewport->Scene()->ComposeWorldMatrix(instance.skinned[0]);
+            DrawSkeletonBones(viewport->SceneDebugDraw(), *bones, poses, bonePoses, model, chosenBone, /*overTheModel*/ true);
+        }
+
+        // The skeleton's bones in a tree, for its details: choosing one draws it apart, the bones on.
+        RefPtr<gui::Node> BoneView()
+        {
+            foundation::animation::Skeleton* bones = open.Model() != nullptr ? open.Model()->skeleton.Get() : nullptr;
+            if (bones == nullptr || bones->BoneCount() == 0)
+                return {};
+            if (!boneModel)
+                boneModel = MakeUnique<gui::TreeModel>(*allocator);
+            FillBoneTree(*boneModel, boneRows, *bones);
+            RefPtr<gui::Panel> panel = MakeRef<gui::Panel>(*allocator);
+            panel->AddClass(u8"import-part-view");
+            RefPtr<gui::Label> heading = MakeRef<gui::Label>(*allocator);
+            heading->SetText(u8"Its bones");
+            heading->AddClass(u8"import-part-kind");
+            RefPtr<gui::TreeView> tree = MakeRef<gui::TreeView>(*allocator);
+            tree->AddClass(u8"tree");
+            tree->AddClass(u8"import-bone-tree");
+            tree->SetModel(boneModel.Get());
+            for (usize node = 0; node < boneRows.Size(); ++node)
+                tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
+            for (usize node = 0; node < boneRows.Size(); ++node)
+                if (boneRows[node] == chosenBone)
+                {
+                    const gui::ItemId id = static_cast<gui::ItemId>(node);
+                    tree->SetSelectedIds(Span<const gui::ItemId>(&id, 1u));
+                }
+            Impl* self = this;
+            tree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                        {
+                                            const usize node = index.IsValid() ? static_cast<usize>(index.InternalId) : self->boneRows.Size();
+                                            self->ChooseBone(node < self->boneRows.Size() ? self->boneRows[node] : -1);
+                                        });
+            panel->AddChild(heading.Get());
+            panel->AddChild(tree.Get());
+            return panel;
+        }
+
+        void ChooseBone(i32 bone)
+        {
+            chosenBone = bone;
+            if (bone >= 0 && !skeleton->IsChecked())
+            {
+                skeleton->SetChecked(true); // to see it
+                bonesByPart = true;
             }
         }
     };
@@ -849,6 +898,21 @@ namespace editor
     bool ModelFilePreview::DrawsDefaultMaterial() const
     {
         return m_impl->defaultMaterial;
+    }
+
+    RefPtr<foundation::gui::Node> ModelFilePreview::PartView(const pipeline::ImportPlanEntry& part)
+    {
+        return part.kind == pipeline::ImportResourceKind::Skeleton ? m_impl->BoneView() : RefPtr<foundation::gui::Node>{};
+    }
+
+    i32 ModelFilePreview::ChosenBone() const
+    {
+        return m_impl->chosenBone;
+    }
+
+    void ModelFilePreview::ChooseBone(i32 bone)
+    {
+        m_impl->ChooseBone(bone);
     }
 
     bool ModelFilePreview::DrawsWithoutTextures() const

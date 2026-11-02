@@ -7,7 +7,7 @@ target_link_libraries(Editor.Geometry PUBLIC
     Engine::Scene Foundation::Render Engine::Render Foundation::Geometry Pipeline::Geometry
     Foundation::Materials Foundation::GUI Foundation::GUI.Toolkit
     Foundation::Model Foundation::Model.Resource Foundation::Animation Engine::Model Pipeline::ModelImporter
-    Editor::Core Editor::App Editor::Preview Editor::ModelPreview Foundation::Policy)
+    Editor::Core Editor::App Editor::Preview Editor::ModelPreview Editor::Animation Foundation::Policy)
 target_sources(Editor.Geometry
     PRIVATE
         MeshPageImpl.cpp

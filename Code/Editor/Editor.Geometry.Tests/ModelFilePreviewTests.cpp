@@ -218,3 +218,39 @@ TEST_CASE("model file preview: it draws the model as it will import: a material 
     }
     (void)RemoveDirectoryRecursive(cache.AsView());
 }
+
+TEST_CASE("model file preview: the skeleton's details show its bones in a tree; a bone chosen there is the one drawn apart")
+{
+    const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_bones");
+    (void)RemoveDirectoryRecursive(cache.AsView());
+    TaskPool tasks(DefaultAllocator(), 1u);
+    const editor::app::AssetPageServices services{};
+    const String fox = Fox();
+    pipeline::ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
+    RefPtr<pipeline::ImportOptions> options = importer.CreateOptions(DefaultAllocator());
+    const pipeline::ImportPlan plan = importer.DescribeImport(fox.AsView(), options.Get(), prepared.Get());
+    const pipeline::ImportPlanEntry* skeleton = nullptr;
+    const pipeline::ImportPlanEntry* mesh = nullptr;
+    for (const pipeline::ImportPlanEntry& entry : plan.entries)
+    {
+        if (entry.kind == pipeline::ImportResourceKind::Skeleton)
+            skeleton = &entry;
+        if (entry.kind == pipeline::ImportResourceKind::Mesh)
+            mesh = &entry;
+    }
+    REQUIRE((skeleton != nullptr && mesh != nullptr));
+    {
+        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, prepared.Get());
+        CHECK_FALSE(preview.PartView(*skeleton)); // not before the model is in
+        tasks.Finish();
+        preview.FinishLoading();
+        REQUIRE(preview.IsOpen());
+        CHECK(preview.PartView(*skeleton)); // the bones' tree
+        CHECK_FALSE(preview.PartView(*mesh)); // a mesh has no view of its own
+        CHECK(preview.ChosenBone() == -1);
+        preview.ChooseBone(3);
+        CHECK(preview.ChosenBone() == 3);
+    }
+    (void)RemoveDirectoryRecursive(cache.AsView());
+}

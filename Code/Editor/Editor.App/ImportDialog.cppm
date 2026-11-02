@@ -548,7 +548,12 @@ export namespace editor::app
                 if (m_preview)
                 {
                     ImportWindow* self = this;
-                    m_preview->onChanged = [self]() { self->ShowFacts(); };
+                    m_preview->onChanged = [self]()
+                    {
+                        self->ShowFacts();
+                        if (self->m_part >= 0)
+                            self->Later([self]() { self->ShowDetail(); }); // a part's view, now its preview has it
+                    };
                     view->AddChild(&m_preview->View());
                 }
                 else
@@ -884,6 +889,11 @@ export namespace editor::app
                 }
             }
             ShowPartSettings(detail, index, e);
+            // What the preview shows of the part in its details (a skeleton's bones).
+            if (m_preview && index == m_selected)
+                if (editor::IImportPartPreview* parts = m_preview->Service<editor::IImportPartPreview>())
+                    if (RefPtr<gui::Node> view = parts->PartView(m_session->files[index].plan.entries[e]))
+                        detail.AddChild(view.Get());
         }
 
         // The part's own settings (a clip's root motion), as its importer makes them, in a grid; the

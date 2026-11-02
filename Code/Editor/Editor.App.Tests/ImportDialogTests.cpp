@@ -94,6 +94,15 @@ namespace
             return part.kind == pipeline::ImportResourceKind::Mesh;
         }
         void ShowWhole() override { shown = String(u8"whole"); }
+        // A mesh has a view of its own for its details.
+        [[nodiscard]] RefPtr<gui::Node> PartView(const pipeline::ImportPlanEntry& part) override
+        {
+            if (part.kind != pipeline::ImportResourceKind::Mesh)
+                return {};
+            RefPtr<gui::Label> view = MakeRef<gui::Label>(DefaultAllocator());
+            view->SetText(Format(u8"A view of {}", part.sourceName).AsView());
+            return view;
+        }
         String shown;
         [[nodiscard]] gui::Node& View() override { return *m_view; }
         [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
@@ -410,6 +419,7 @@ TEST_CASE("import window: the preview registered for the type a file is listed b
     bed.window->SelectPart(1, 0); // b.box's Box, a mesh
     named = static_cast<NamePreview*>(bed.window->Preview());
     CHECK(named->shown == StringView(u8"part Box"));
+    CHECK(Texts(*bed.window->Detail()).AsView().Contains(u8"A view of Box")); // its view in its details
     bed.window->SelectPart(1, 1); // its Wood, a texture this preview cannot show
     CHECK(named->shown == StringView(u8"whole"));
     bed.window->SelectPart(1, 0);

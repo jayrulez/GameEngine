@@ -62,6 +62,8 @@ export namespace editor
         /// it is.
         bool ShowPart(const pipeline::ImportPlanEntry& part) override;
         void ShowWhole() override;
+        /// The skeleton's bones in a tree; choosing one draws the bones with it apart.
+        [[nodiscard]] RefPtr<foundation::gui::Node> PartView(const pipeline::ImportPlanEntry& part) override;
 
         void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) override;
         void OnRenderWindow(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame) override;
@@ -77,6 +79,9 @@ export namespace editor
         [[nodiscard]] bool DrawsDefaultMaterial() const;
         /// Whether the model draws a material without a texture left out of the import.
         [[nodiscard]] bool DrawsWithoutTextures() const;
+        /// The bone chosen in the skeleton's tree (-1: none), and choosing one as the tree does.
+        [[nodiscard]] i32 ChosenBone() const;
+        void ChooseBone(i32 bone);
         /// Runs its pool and its loading to the end, as frames would, without a host.
         void FinishLoading();
         /// The clips the picker lists, by name.

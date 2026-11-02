@@ -21,10 +21,23 @@ namespace pipeline
         builder.Attribute("displayName", String(u8"Model"));
     }
 
+    REFLECT_ENUM(ModelUpAxis, "rtti::pipeline::modelimporter")
+    {
+        builder.Value("Y", ModelUpAxis::Y);
+        builder.Value("Z", ModelUpAxis::Z);
+    }
+
     // The import's settings, which the import window draws and an agent sets by label.
     REFLECT_MEMBERS(ModelImportOptions, "rtti::pipeline::modelimporter")
     {
-        builder.Property<&ModelImportOptions::importTextures>("importTextures")
+        RttiRegisterEnum_ModelUpAxis(); // its values' names, before a setting of its type is drawn
+        builder.Property<&ModelImportOptions::scale>("scale")
+            .PropAttribute("displayName", String(u8"Scale"))
+            .PropAttribute("description", String(u8"Every length times this: 0.01 for a file in centimetres, 100 for one in metres read as centimetres"))
+            .Property<&ModelImportOptions::upAxis>("upAxis")
+            .PropAttribute("displayName", String(u8"Up axis"))
+            .PropAttribute("description", String(u8"The axis that is up in the model: Z turns a Z-up model upright"))
+            .Property<&ModelImportOptions::importTextures>("importTextures")
             .PropAttribute("displayName", String(u8"Textures"))
             .PropAttribute("description", String(u8"Import the model's images as texture assets"))
             .Property<&ModelImportOptions::importMaterials>("importMaterials")

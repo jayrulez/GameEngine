@@ -978,8 +978,9 @@ TEST_CASE("model-import: options gate textures/materials/animations")
     CHECK_FALSE(options->generateScene); // opt-in
     CHECK_FALSE(options->generateCollision); // opt-in
     CHECK_FALSE(options->collisionConvex);
-    CHECK(options->Settings().Size() == 9u); // including Root motion and Generate LODs
-    CHECK(pipeline::ImportOptions::SettingLabel(*options->Settings()[0]) == StringView(u8"Textures"));
+    CHECK(options->Settings().Size() == 11u); // Scale and Up axis first, then Root motion and Generate LODs among the rest
+    CHECK(pipeline::ImportOptions::SettingLabel(*options->Settings()[0]) == StringView(u8"Scale"));
+    CHECK(pipeline::ImportOptions::SettingLabel(*options->Settings()[2]) == StringView(u8"Textures"));
     CHECK(options->FindSetting(u8"Generate collision") != nullptr);
 
     // Geometry-only import: no textures, no materials, no skeleton or clips in the fan-out.
@@ -2605,4 +2606,58 @@ TEST_CASE("model-import: a model file is listed by its manifest, while it names 
     pipeline::ModelFileImporter importer;
     CHECK(importer.AssetTypeName(u8"rider.glb").IsEmpty()); // several assets: it keeps its own names apart
     CHECK(importer.ListedTypeName(u8"rider.glb") == StringView(u8"ModelManifestAsset"));
+}
+
+TEST_CASE("model import frame: scale and up axis move each root node and the keys that move it; a child keeps its own")
+{
+    foundation::model::Model model;
+    auto* root = new foundation::model::ModelBone();
+    root->setName(u8"Root");
+    root->translation = Float3{0.0f, 0.0f, 1.0f}; // one unit along the file's Z, its up
+    root->index = model.addBone(root);
+    auto* child = new foundation::model::ModelBone();
+    child->setName(u8"Child");
+    child->parentIndex = root->index;
+    child->translation = Float3{0.0f, 0.0f, 1.0f};
+    child->index = model.addBone(child);
+    auto* clip = new foundation::model::ModelAnimation();
+    auto* moves = new foundation::model::AnimationChannel();
+    moves->targetBone = root->index;
+    moves->path = foundation::model::AnimationPath::Translation;
+    moves->addKeyframe(0.0f, Float4{0.0f, 0.0f, 2.0f, 0.0f});
+    clip->addChannel(moves);
+    auto* childMoves = new foundation::model::AnimationChannel();
+    childMoves->targetBone = child->index;
+    childMoves->path = foundation::model::AnimationPath::Translation;
+    childMoves->addKeyframe(0.0f, Float4{0.0f, 0.0f, 2.0f, 0.0f});
+    clip->addChannel(childMoves);
+    model.addAnimation(clip);
+
+    ModelImportFrame::Apply(model, 2.0f, ModelUpAxis::Z);
+    // Z up is turned to Y up, and every root length doubled.
+    CHECK(root->translation.x == doctest::Approx(0.0f).epsilon(1e-5));
+    CHECK(root->translation.y == doctest::Approx(2.0f));
+    CHECK(root->translation.z == doctest::Approx(0.0f).epsilon(1e-5));
+    CHECK(root->scale.x == doctest::Approx(2.0f));
+    CHECK(moves->keyframes()[0].value.y == doctest::Approx(4.0f));
+    // A child sits in its parent's space, so it keeps its own transform and keys.
+    CHECK(child->translation.z == doctest::Approx(1.0f));
+    CHECK(childMoves->keyframes()[0].value.z == doctest::Approx(2.0f));
+
+    // 1 and Y change nothing; a scale of zero is taken as 1.
+    ModelImportFrame::Apply(model, 0.0f, ModelUpAxis::Y);
+    CHECK(root->translation.y == doctest::Approx(2.0f));
+}
+
+TEST_CASE("model importer: the scale's note says how tall the model comes in")
+{
+    ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(MiFoxNested().AsView(), DefaultAllocator());
+    REQUIRE(prepared.Get() != nullptr);
+    RefPtr<ImportOptions> base = importer.CreateOptions(DefaultAllocator());
+    auto* options = static_cast<ModelImportOptions*>(base.Get());
+    options->scale = 0.01f; // the Fox is about 79 units tall
+    const ImportSettingNote note = importer.DescribeSetting(MiFoxNested().AsView(), *options, prepared.Get(), *options->FindSetting(u8"Scale"));
+    CHECK(note.effect == StringView(u8"Makes it 0.790 m tall"));
+    CHECK(importer.DescribeSetting(MiFoxNested().AsView(), *options, prepared.Get(), *options->FindSetting(u8"Textures")).effect.IsEmpty());
 }

@@ -198,8 +198,10 @@ is normal - clear it with `asset_cook`.
 
 **Assets**: `asset_import` (OS file -> Sources/ + typed asset) -> `asset_cook`
 (incremental; `force` for full). `options` sets the importer's settings by label, as the import
-window shows them (`{"Generate collision": true}` gives an imported model's prefab colliders);
-an unknown one is refused with the importer's list, and the result lists every setting's value.
+window shows them: a flag true or false (`{"Generate collision": true}` gives an imported model's
+prefab colliders), a number (a model's `"Scale": 0.01` for a file in centimetres) or a choice by
+its value's name (`"Up axis": "Z"` turns a Z-up model upright); an unknown one is refused with the
+importer's list, and the result lists every setting's value.
 An imported model gets its prefab, the `Prefab` asset beside its manifest, in both hosts (and
 a scene with `Generate scene`). Its materials come in as authored: an FBX Phong or Lambert
 material and a classic OBJ `.mtl` on the built-in Phong, a glTF material with

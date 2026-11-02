@@ -299,7 +299,8 @@ export namespace editor::mcp
             property.Set(u8"description",
                          JsonValue::MakeString(
                              u8"the importer's settings, as the import window shows them: "
-                             u8"{\"<setting>\": true|false}, the setting named by its label, case and "
+                             u8"{\"<setting>\": value}, a flag true or false, a number, or a choice by "
+                             u8"its value's name (a model's \"Up axis\": \"Z\"), the setting named by its label, case and "
                              u8"spaces ignored (a model's \"Generate collision\", say); an unknown "
                              u8"one is refused with the importer's list, unnamed settings keep their "
                              u8"defaults, and the result lists every setting's value"));
@@ -429,16 +430,38 @@ export namespace editor::mcp
                             }
                             return Err(Move(refusal));
                         }
-                        if (found->type != &TypeOf<bool>())
+                        const JsonValue value = asked.Get(key);
+                        void* address = found->address(Instance(request.options.Get(), request.options->GetType()));
+                        if (found->type == &TypeOf<bool>())
+                        {
+                            if (!value.IsBool())
+                            {
+                                return Err(Format(u8"option '{}' takes true or false", key.AsView()));
+                            }
+                            *static_cast<bool*>(address) = value.AsBool();
+                        }
+                        else if (found->type == &TypeOf<f32>())
+                        {
+                            if (!value.IsNumber())
+                            {
+                                return Err(Format(u8"option '{}' takes a number", key.AsView()));
+                            }
+                            *static_cast<f32*>(address) = static_cast<f32>(value.AsNumber());
+                        }
+                        else if (IsEnum(*found->type))
+                        {
+                            const String name = value.AsString();
+                            i64 choice = 0;
+                            if (!EnumValueByName(*found->type, reinterpret_cast<const char*>(name.CStr()), choice))
+                            {
+                                return Err(Format(u8"option '{}' takes {}", key.AsView(), detail::EnumNames(*found->type).AsView()));
+                            }
+                            WriteEnumValue(address, *found->type, choice);
+                        }
+                        else
                         {
                             return Err(Format(u8"option '{}' is not one asset_import sets", key.AsView()));
                         }
-                        const JsonValue value = asked.Get(key);
-                        if (!value.IsBool())
-                        {
-                            return Err(Format(u8"option '{}' takes true or false", key.AsView()));
-                        }
-                        *static_cast<bool*>(found->address(Instance(request.options.Get(), request.options->GetType()))) = value.AsBool();
                     }
                 }
                 // The name asked for, and what to do when another file's asset holds it.
@@ -504,10 +527,21 @@ export namespace editor::mcp
                     const Instance target(request.options.Get(), request.options->GetType());
                     for (const PropertyInfo* setting : settings)
                     {
+                        const String label(pipeline::ImportOptions::SettingLabel(*setting));
+                        const void* address = setting->address(target);
                         if (setting->type == &TypeOf<bool>())
                         {
-                            applied.Set(String(pipeline::ImportOptions::SettingLabel(*setting)),
-                                        JsonValue::MakeBool(*static_cast<const bool*>(setting->address(target))));
+                            applied.Set(label, JsonValue::MakeBool(*static_cast<const bool*>(address)));
+                        }
+                        else if (setting->type == &TypeOf<f32>())
+                        {
+                            applied.Set(label, JsonValue::MakeNumber(static_cast<f64>(*static_cast<const f32*>(address))));
+                        }
+                        else if (IsEnum(*setting->type))
+                        {
+                            const char* name = EnumValueName(*setting->type, ReadEnumValue(address, *setting->type));
+                            applied.Set(label, name != nullptr ? JsonValue::MakeString(String(StringView(reinterpret_cast<const utf8char*>(name))))
+                                                               : JsonValue::MakeNull());
                         }
                     }
                     out.Set(u8"options", Move(applied));

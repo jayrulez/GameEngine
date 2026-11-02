@@ -134,6 +134,14 @@ export namespace pipeline
         }
     };
 
+    /// Which way is up in a model file whose loader reads it as Y up but whose content is not (an
+    /// export whose Z-up axis was not written into the file).
+    enum class ModelUpAxis : u8
+    {
+        Y, ///< as the file is read
+        Z, ///< turned so its Z points up
+    };
+
     /// Options for one model import: its settings, reflected (ModelImporterImpl.cpp), which the
     /// import window draws and an agent sets by label.
     class ModelImportOptions final : public pipeline::ImportOptions
@@ -149,6 +157,8 @@ export namespace pipeline
         bool collisionConvex = false;   // hull (dynamic-capable) instead of exact triangle mesh
         bool generateLods = true;       // auto-LOD chains for big static meshes (authored _LODn wins)
         bool rootMotion = false; // new clips extract their root's travel and turn
+        f32 scale = 1.0f;                     // every length times this (a file in centimetres: 0.01)
+        ModelUpAxis upAxis = ModelUpAxis::Y; // the file's up, turned to the engine's Y
 
         void Serialize(ISerializer& ar) override
         {
@@ -170,6 +180,10 @@ export namespace pipeline
             foundation::core::Serialize(ar, "generateLods", lods);
             u8 motion = rootMotion ? 1u : 0u;
             SerializeAppended(ar, "rootMotion", motion); // options saved before it read as off
+            SerializeAppended(ar, "scale", scale);       // before it: 1
+            u8 up = static_cast<u8>(upAxis);
+            SerializeAppended(ar, "upAxis", up);         // before it: Y
+            upAxis = up == static_cast<u8>(ModelUpAxis::Z) ? ModelUpAxis::Z : ModelUpAxis::Y;
             importTextures = textures != 0;
             importMaterials = materials != 0;
             importAnimations = animations != 0;
@@ -179,6 +193,64 @@ export namespace pipeline
             collisionConvex = convex != 0;
             generateLods = lods != 0;
             rootMotion = motion != 0;
+        }
+    };
+
+    /// Scale and up axis applied to a loaded model before its import fans out: each root node's
+    /// transform, and the keys of the clips that move a root node, so its meshes, skeleton and
+    /// clips all come in scaled and turned. A skinned mesh follows its skeleton's root.
+    struct ModelImportFrame
+    {
+        /// The turn that brings `up` to the engine's Y.
+        [[nodiscard]] static Quaternion TurnFor(ModelUpAxis up)
+        {
+            return up == ModelUpAxis::Z ? Quaternion::FromAxisAngle(Float3{1.0f, 0.0f, 0.0f}, -kPi * 0.5f) : Quaternion::Identity;
+        }
+        /// Applies `scale` and `up` to `model`; nothing when they are 1 and Y. A scale of zero or
+        /// less (a field typed over) is taken as 1: a model scaled to nothing imports nothing useful.
+        static void Apply(foundation::model::Model& model, f32 scale, ModelUpAxis up)
+        {
+            if (!(scale > 0.0f))
+                scale = 1.0f;
+            if (scale == 1.0f && up == ModelUpAxis::Y)
+                return;
+            const Quaternion turn = TurnFor(up);
+            for (foundation::model::ModelBone* bone : model.bones())
+            {
+                if (bone == nullptr || bone->parentIndex >= 0)
+                    continue;
+                bone->translation = RotateVector(turn, bone->translation) * scale;
+                bone->rotation = turn * bone->rotation;
+                bone->scale = bone->scale * scale;
+                bone->updateLocalTransform();
+            }
+            for (foundation::model::ModelAnimation* clip : model.animations())
+            {
+                if (clip == nullptr)
+                    continue;
+                for (foundation::model::AnimationChannel* channel : clip->channels())
+                {
+                    if (channel == nullptr || channel->targetBone < 0 || static_cast<usize>(channel->targetBone) >= model.bones().Size() ||
+                        model.bones()[static_cast<usize>(channel->targetBone)]->parentIndex >= 0)
+                        continue;
+                    for (foundation::model::AnimationKeyframe& key : channel->keyframes())
+                    {
+                        if (channel->path == foundation::model::AnimationPath::Translation)
+                        {
+                            const Float3 moved = RotateVector(turn, Float3{key.value.x, key.value.y, key.value.z}) * scale;
+                            key.value = Float4{moved.x, moved.y, moved.z, key.value.w};
+                        }
+                        else if (channel->path == foundation::model::AnimationPath::Rotation)
+                        {
+                            const Quaternion turned = turn * Quaternion{key.value.x, key.value.y, key.value.z, key.value.w};
+                            key.value = Float4{turned.x, turned.y, turned.z, turned.w};
+                        }
+                        else if (channel->path == foundation::model::AnimationPath::Scale)
+                            key.value = Float4{key.value.x * scale, key.value.y * scale, key.value.z * scale, key.value.w};
+                    }
+                }
+            }
+            model.calculateBounds();
         }
     };
 
@@ -202,6 +274,25 @@ export namespace pipeline
         [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override
         {
             return RefPtr<pipeline::ImportOptions>(MakeRef<ModelImportOptions>(allocator).Get());
+        }
+
+        /// The scale's note: how tall the model comes in with it (and the up axis), from the
+        /// model read on the worker.
+        [[nodiscard]] pipeline::ImportSettingNote DescribeSetting(StringView, const pipeline::ImportOptions& options, Object* prepared,
+                                                                  const PropertyInfo& setting) const override
+        {
+            pipeline::ImportSettingNote note;
+            const LoadedModel* loaded = Cast<LoadedModel>(prepared);
+            const ModelImportOptions* chosen = Cast<ModelImportOptions>(&options);
+            if (loaded == nullptr || chosen == nullptr || StringView(reinterpret_cast<const utf8char*>(setting.name)) != StringView(u8"scale"))
+                return note;
+            const AABB box = loaded->model.bounds();
+            if (!box.IsValid())
+                return note;
+            const f32 scale = chosen->scale > 0.0f ? chosen->scale : 1.0f;
+            const f32 height = (chosen->upAxis == ModelUpAxis::Z ? box.max.z - box.min.z : box.max.y - box.min.y) * scale;
+            note.effect = Format(u8"Makes it {} m tall", FormatFixed(height, height < 1.0f ? 3 : 2));
+            return note;
         }
 
         [[nodiscard]] bool WantsWorkerPrepare() const override { return true; }
@@ -442,6 +533,7 @@ export namespace pipeline
                 modelPtr = &inlineModel;
             }
             foundation::model::Model& model = *modelPtr;
+            ModelImportFrame::Apply(model, opt.scale, opt.upAxis); // before anything reads a length or a direction
 
             // .gltf: copy the referenced sidecars (buffers and images by relative uri) into
             // Sources/ so the imported source set is complete.

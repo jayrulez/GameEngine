@@ -31,6 +31,7 @@ add_executable(Core.Tests
     FramedRegionTests.cpp
     FunctionTests.cpp
     ThreadingTests.cpp
+    TaskPoolTests.cpp
     LibraryTests.cpp
     AllocatorTripwireTests.cpp
     SharedLibTripwireTests.cpp

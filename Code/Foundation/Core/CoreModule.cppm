@@ -92,4 +92,5 @@ export import :semaphore;
 export import :shared_mutex;
 export import :cancel;
 export import :job_system;
+export import :task_pool;
 export import :library;

@@ -110,6 +110,7 @@ target_sources(Core
             Threading/SharedMutex.cppm
             Threading/Cancel.cppm
             Threading/JobSystem.cppm
+            Threading/TaskPool.cppm
             Library/DynamicLibrary.cppm)
 
 # Per-platform backends (classic TUs). Emscripten is POSIX-shaped, so it reuses the Linux

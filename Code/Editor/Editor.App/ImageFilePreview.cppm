@@ -30,6 +30,11 @@ export namespace editor::app
     namespace gui = foundation::gui;
     namespace image = foundation::image;
 
+    /// The picture's view: its bar (Fit, 1:1, the zoom, the channel, the pixel under the pointer)
+    /// and the stage it shows in, with the ids an ImagePreview binds; for a preview that shows a
+    /// picture (a picture file's, a model's texture).
+    [[nodiscard]] RefPtr<gui::Node> BuildImageView(IAllocator& allocator);
+
     class ImageFilePreview final : public editor::IImportPreview
     {
     public:

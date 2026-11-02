@@ -52,64 +52,65 @@ namespace editor::app
             return false;
         }
 
-        // The bar over the picture and the stage it shows in, with the ids ImagePreview binds.
-        [[nodiscard]] RefPtr<gui::Node> BuildView(IAllocator& allocator)
-        {
-            RefPtr<gui::Panel> root = MakeRef<gui::Panel>(allocator);
-            root->AddClass(u8"import-image");
-            RefPtr<gui::Panel> bar = MakeRef<gui::Panel>(allocator);
-            bar->AddClass(u8"panel-toolbar");
-            bar->AddClass(u8"image-bar");
-            RefPtr<gui::ToolButton> fit = MakeRef<gui::ToolButton>(allocator);
-            fit->SetId(u8"image-fit");
-            fit->SetIconSource(String(u8"Editor/Icons/maximize.svg"));
-            fit->SetTooltip(u8"Fit the picture (double click)");
-            RefPtr<gui::ToolButton> actual = MakeRef<gui::ToolButton>(allocator);
-            actual->SetId(u8"image-actual");
-            actual->SetText(u8"1:1");
-            actual->SetTooltip(u8"One pixel to one pixel");
-            RefPtr<gui::Label> zoom = MakeRef<gui::Label>(allocator);
-            zoom->SetId(u8"image-zoom");
-            zoom->AddClass(u8"mono");
-            zoom->AddClass(u8"image-zoom");
-            RefPtr<gui::ComboBox> channel = MakeRef<gui::ComboBox>(allocator);
-            channel->SetId(u8"image-channel");
-            channel->AddClass(u8"image-channel");
-            const char8_t* const channels[] = {u8"RGBA", u8"RGB", u8"Red", u8"Green", u8"Blue", u8"Alpha"}; // ImageChannel's order
-            for (const char8_t* item : channels)
-                channel->AddItem(item);
-            channel->SetSelectedIndex(0);
-            channel->SetTooltip(u8"The channels shown");
-            RefPtr<gui::Label> readout = MakeRef<gui::Label>(allocator);
-            readout->SetId(u8"image-readout");
-            readout->AddClass(u8"mono");
-            readout->AddClass(u8"image-readout");
-            bar->AddChild(fit.Get());
-            bar->AddChild(actual.Get());
-            bar->AddChild(zoom.Get());
-            bar->AddChild(channel.Get());
-            bar->AddChild(MakeRef<gui::Spacer>(allocator).Get());
-            bar->AddChild(readout.Get());
-            RefPtr<gui::Panel> stage = MakeRef<gui::Panel>(allocator);
-            stage->SetId(u8"image-stage");
-            stage->AddClass(u8"image-stage");
-            RefPtr<gui::Panel> empty = MakeRef<gui::Panel>(allocator);
-            empty->SetId(u8"image-empty");
-            empty->AddClass(u8"state-box");
-            empty->AddClass(u8"image-empty");
-            RefPtr<gui::Label> why = MakeRef<gui::Label>(allocator);
-            why->SetId(u8"image-empty-text");
-            why->AddClass(u8"state-text");
-            empty->AddChild(why.Get());
-            root->AddChild(bar.Get());
-            root->AddChild(stage.Get());
-            root->AddChild(empty.Get());
-            return RefPtr<gui::Node>(root);
-        }
     }
 
+    RefPtr<gui::Node> BuildImageView(IAllocator& allocator)
+    {
+        RefPtr<gui::Panel> root = MakeRef<gui::Panel>(allocator);
+        root->AddClass(u8"import-image");
+        RefPtr<gui::Panel> bar = MakeRef<gui::Panel>(allocator);
+        bar->AddClass(u8"panel-toolbar");
+        bar->AddClass(u8"image-bar");
+        RefPtr<gui::ToolButton> fit = MakeRef<gui::ToolButton>(allocator);
+        fit->SetId(u8"image-fit");
+        fit->SetIconSource(String(u8"Editor/Icons/maximize.svg"));
+        fit->SetTooltip(u8"Fit the picture (double click)");
+        RefPtr<gui::ToolButton> actual = MakeRef<gui::ToolButton>(allocator);
+        actual->SetId(u8"image-actual");
+        actual->SetText(u8"1:1");
+        actual->SetTooltip(u8"One pixel to one pixel");
+        RefPtr<gui::Label> zoom = MakeRef<gui::Label>(allocator);
+        zoom->SetId(u8"image-zoom");
+        zoom->AddClass(u8"mono");
+        zoom->AddClass(u8"image-zoom");
+        RefPtr<gui::ComboBox> channel = MakeRef<gui::ComboBox>(allocator);
+        channel->SetId(u8"image-channel");
+        channel->AddClass(u8"image-channel");
+        const char8_t* const channels[] = {u8"RGBA", u8"RGB", u8"Red", u8"Green", u8"Blue", u8"Alpha"}; // ImageChannel's order
+        for (const char8_t* item : channels)
+            channel->AddItem(item);
+        channel->SetSelectedIndex(0);
+        channel->SetTooltip(u8"The channels shown");
+        RefPtr<gui::Label> readout = MakeRef<gui::Label>(allocator);
+        readout->SetId(u8"image-readout");
+        readout->AddClass(u8"mono");
+        readout->AddClass(u8"image-readout");
+        bar->AddChild(fit.Get());
+        bar->AddChild(actual.Get());
+        bar->AddChild(zoom.Get());
+        bar->AddChild(channel.Get());
+        bar->AddChild(MakeRef<gui::Spacer>(allocator).Get());
+        bar->AddChild(readout.Get());
+        RefPtr<gui::Panel> stage = MakeRef<gui::Panel>(allocator);
+        stage->SetId(u8"image-stage");
+        stage->AddClass(u8"image-stage");
+        RefPtr<gui::Panel> empty = MakeRef<gui::Panel>(allocator);
+        empty->SetId(u8"image-empty");
+        empty->AddClass(u8"state-box");
+        empty->AddClass(u8"image-empty");
+        RefPtr<gui::Label> why = MakeRef<gui::Label>(allocator);
+        why->SetId(u8"image-empty-text");
+        why->AddClass(u8"state-text");
+        empty->AddChild(why.Get());
+        root->AddChild(bar.Get());
+        root->AddChild(stage.Get());
+        root->AddChild(empty.Get());
+        return RefPtr<gui::Node>(root);
+    }
+
+
     ImageFilePreview::ImageFilePreview(StringView path, TaskPool& tasks, IAllocator& allocator)
-        : m_root(BuildView(allocator)), m_facts(allocator)
+        : m_root(BuildImageView(allocator)), m_facts(allocator)
     {
         m_picture = MakeUnique<ImagePreview>(allocator, *m_root);
         m_picture->ShowNone(Format(u8"Reading {}...", pipeline::FileNameOf(path)).AsView());

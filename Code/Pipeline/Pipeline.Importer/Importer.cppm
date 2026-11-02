@@ -153,6 +153,14 @@ export namespace pipeline
     /// dialog renders one checkbox per Toggle (each points into the options object), a
     /// declarative description with no reflection required. Subclasses add their fields and
     /// return the toggle list; the base is empty (no options, no dialog).
+    /// What a setting will do to the file being imported, or why it cannot apply (IFileImporter::
+    /// DescribeSetting). Both empty: nothing to say.
+    struct ImportSettingNote
+    {
+        String effect; ///< what it does here, shown beside it ("+3.1 dB")
+        String reason; ///< why it cannot apply, shown beside it disabled ("It is mono already")
+    };
+
     class ImportOptions : public ISerializable
     {
         RTTI_OBJECT(ImportOptions, ISerializable)
@@ -353,6 +361,16 @@ export namespace pipeline
         [[nodiscard]] virtual bool WantsWorkerPrepare() const { return false; }
         [[nodiscard]] virtual RefPtr<Object> PrepareOnWorker(StringView /*sourcePath*/,
                                                              IAllocator& allocator);
+
+        /// What one of the options' settings will do to this file ("Cuts 0.19 s from the end"), or
+        /// why it cannot apply to it ("It is mono already"), which shows the setting disabled.
+        /// `prepared` is PrepareOnWorker's payload when the two-phase path ran. Default: nothing to
+        /// say.
+        [[nodiscard]] virtual ImportSettingNote DescribeSetting(StringView /*sourcePath*/, const ImportOptions& /*options*/, Object* /*prepared*/,
+                                                                const PropertyInfo& /*setting*/) const
+        {
+            return {};
+        }
 
         /// Enumerate everything Import would create (the review dialog's data), without
         /// touching the project or DB. `prepared` is PrepareOnWorker's payload when the

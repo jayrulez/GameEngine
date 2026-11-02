@@ -863,3 +863,38 @@ TEST_CASE("audio.pipeline: sound cue cooks slots -> variants and resolves clip r
 
     RemoveDbTree(u8"scratch_audiopipe_cue");
 }
+
+TEST_CASE("audio importer: each setting says what it does to this sound, or why it cannot apply, from the facts read on a worker")
+{
+    // One second of mono 8 kHz at half scale, then half a second of silence.
+    constexpr u32 kRate = 8000;
+    Array<i16> samples;
+    samples.Resize(kRate + kRate / 2);
+    for (u32 i = 0; i < kRate; ++i)
+        samples[i] = (i % 8 < 4) ? i16{16384} : i16{-16384};
+    Array<byte> wav;
+    REQUIRE(EncodeWavFromPcm16(Span<const i16>(samples.Data(), samples.Size()), 1, kRate, wav));
+    const StringView path = u8"scratch_audiopipe_notes.wav";
+    REQUIRE(WriteFile(path, Span<const byte>(wav.Data(), wav.Size())).IsOk());
+
+    AudioFileImporter importer;
+    CHECK(importer.WantsWorkerPrepare());
+    RefPtr<Object> prepared = importer.PrepareOnWorker(path, DefaultAllocator());
+    REQUIRE(prepared.Get() != nullptr);
+    RefPtr<pipeline::ImportOptions> options = importer.CreateOptions(DefaultAllocator());
+    REQUIRE(options.Get() != nullptr);
+    const auto note = [&](StringView label) { return importer.DescribeSetting(path, *options, prepared.Get(), *options->FindSetting(label)); };
+
+    CHECK(note(u8"Force mono").reason == StringView(u8"It is mono already"));
+    // The trim keeps the last audible frame (8000) and a 10 ms pad: it cuts 3920 of 12000 frames.
+    CHECK(note(u8"Trim trailing silence").effect == StringView(u8"Cuts 0.49 s from the end"));
+    CHECK(note(u8"Trim trailing silence").reason.IsEmpty());
+    // Half scale up to -1 dBFS.
+    CHECK(note(u8"Normalize").effect == StringView(u8"+5.0 dB"));
+    // Short, small and with no loop points of its own: nothing to say.
+    CHECK(note(u8"Stream").reason.IsEmpty());
+    CHECK(note(u8"Loop").reason.IsEmpty());
+    // Without the facts (a headless import), nothing to say either.
+    CHECK(importer.DescribeSetting(path, *options, nullptr, *options->FindSetting(u8"Force mono")).reason.IsEmpty());
+    FileDelete(path);
+}

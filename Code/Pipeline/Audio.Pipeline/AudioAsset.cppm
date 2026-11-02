@@ -125,6 +125,44 @@ export namespace pipeline{
     }
 
     // Cooks an AudioClipAsset into an AudioClipSource and a "data" stream of container bytes.
+    /// The cook's destructive edits' numbers, which the import window's notes say beforehand.
+    struct AudioEdits
+    {
+        /// About -60 dBFS: a sample no louder is silence to the trim.
+        static constexpr i16 kSilenceThreshold = 33;
+        /// Normalize brings the peak to -1 dBFS.
+        static constexpr f32 kNormalizeTarget = 0.891f * 32767.0f;
+
+        /// The frames the trim keeps: up to the last audible one, and a 10 ms pad.
+        [[nodiscard]] static usize AudibleFrames(Span<const i16> samples, u32 channels, u32 sampleRate)
+        {
+            if (channels == 0)
+                return 0;
+            usize lastAudibleFrame = 0;
+            const usize frameCount = samples.Size() / channels;
+            for (usize frame = frameCount; frame > 0 && lastAudibleFrame == 0; --frame)
+                for (u32 channel = 0; channel < channels; ++channel)
+                {
+                    const i16 sample = samples[(frame - 1) * channels + channel];
+                    const i16 magnitude = sample < 0 ? static_cast<i16>(-sample) : sample;
+                    if (magnitude > kSilenceThreshold)
+                    {
+                        lastAudibleFrame = frame;
+                        break;
+                    }
+                }
+            return Min(lastAudibleFrame + sampleRate / 100, frameCount);
+        }
+        /// The loudest sample's magnitude.
+        [[nodiscard]] static i32 Peak(Span<const i16> samples)
+        {
+            i32 peak = 0;
+            for (const i16 sample : samples)
+                peak = Max(peak, sample < 0 ? -static_cast<i32>(sample) : static_cast<i32>(sample));
+            return peak;
+        }
+    };
+
     class AudioClipAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -217,35 +255,8 @@ export namespace pipeline{
 
             if (asset.trimTrailingSilence)
             {
-                // Drop the tail below about -60 dBFS, keeping a 10 ms pad.
-                constexpr i16 kSilenceThreshold = 33;
-                usize lastAudibleFrame = 0;
-                const usize frameCount = samples.Size() / decoded.channels;
-                for (usize frame = frameCount; frame > 0; --frame)
-                {
-                    bool audible = false;
-                    for (u32 channel = 0; channel < decoded.channels; ++channel)
-                    {
-                        const i16 sample = samples[(frame - 1) * decoded.channels + channel];
-                        const i16 magnitude = sample < 0 ? static_cast<i16>(-sample) : sample;
-                        if (magnitude > kSilenceThreshold)
-                        {
-                            audible = true;
-                            break;
-                        }
-                    }
-                    if (audible)
-                    {
-                        lastAudibleFrame = frame;
-                        break;
-                    }
-                }
-                const usize pad = decoded.sampleRate / 100;
-                usize keepFrames = lastAudibleFrame + pad;
-                if (keepFrames > frameCount)
-                {
-                    keepFrames = frameCount;
-                }
+                // Drop the silent tail, keeping a 10 ms pad.
+                const usize keepFrames = AudioEdits::AudibleFrames(Span<const i16>(samples.Data(), samples.Size()), decoded.channels, decoded.sampleRate);
                 samples.Resize(keepFrames * decoded.channels);
                 decoded.frameCount = keepFrames;
                 decoded.durationSeconds =
@@ -256,32 +267,12 @@ export namespace pipeline{
 
             if (asset.normalize && !samples.IsEmpty())
             {
-                i32 peak = 0;
-                for (i16 sample : samples)
-                {
-                    const i32 magnitude = sample < 0 ? -static_cast<i32>(sample) : sample;
-                    if (magnitude > peak)
-                    {
-                        peak = magnitude;
-                    }
-                }
+                const i32 peak = AudioEdits::Peak(Span<const i16>(samples.Data(), samples.Size()));
                 if (peak > 0)
                 {
-                    const f32 target = 0.891f * 32767.0f; // -1 dBFS headroom
-                    const f32 scale = target / static_cast<f32>(peak);
+                    const f32 scale = AudioEdits::kNormalizeTarget / static_cast<f32>(peak);
                     for (i16& sample : samples)
-                    {
-                        f32 scaled = static_cast<f32>(sample) * scale;
-                        if (scaled > 32767.0f)
-                        {
-                            scaled = 32767.0f;
-                        }
-                        if (scaled < -32768.0f)
-                        {
-                            scaled = -32768.0f;
-                        }
-                        sample = static_cast<i16>(scaled);
-                    }
+                        sample = static_cast<i16>(Clamp(static_cast<f32>(sample) * scale, -32768.0f, 32767.0f));
                 }
             }
 
@@ -311,6 +302,19 @@ export namespace pipeline{
         bool normalize = false;
     };
 
+    /// What the importer reads of a sound before it is imported (on a worker), so the import
+    /// window can say what each setting will do to it.
+    class AudioFileFacts final : public Object
+    {
+        RTTI_OBJECT(AudioFileFacts, Object)
+    public:
+        AudioClipMetadata metadata;
+        usize sizeBytes = 0;
+        usize audibleFrames = 0; // what the trim keeps
+        i32 peak = 0;            // the loudest sample's magnitude, of 32767
+        bool loopPoints = false; // a WAV's own loop points, which loop it whatever the setting
+    };
+
     // OS-file importer (editor drag-drop): copies the audio file into Sources/ and
     // creates an AudioClipAsset named after the file stem.
     class AudioFileImporter final : public pipeline::IFileImporter
@@ -335,6 +339,77 @@ export namespace pipeline{
                                                           Object*) override
         {
             return pipeline::SingleAssetPlan(sourcePath); // one asset, named after the stem
+        }
+
+        /// Reads the sound's facts on a worker: what the settings' notes say (DescribeSetting).
+        /// Import reads the file again; it needs none of this.
+        [[nodiscard]] bool WantsWorkerPrepare() const override { return true; }
+        [[nodiscard]] RefPtr<Object> PrepareOnWorker(StringView sourcePath, IAllocator& allocator) override
+        {
+            Result<Array<byte>> bytes = ReadFile(sourcePath);
+            if (!bytes.HasValue())
+                return {};
+            const Span<const byte> encoded(bytes.Value().Data(), bytes.Value().Size());
+            RefPtr<AudioFileFacts> facts = MakeRef<AudioFileFacts>(allocator);
+            Array<i16> samples;
+            if (!DecodeAudioClipToPcm16(encoded, 0u, samples, facts->metadata))
+                return {};
+            facts->sizeBytes = encoded.Size();
+            facts->audibleFrames = AudioEdits::AudibleFrames(Span<const i16>(samples.Data(), samples.Size()), facts->metadata.channels, facts->metadata.sampleRate);
+            facts->peak = AudioEdits::Peak(Span<const i16>(samples.Data(), samples.Size()));
+            u64 loopStart = 0;
+            u64 loopEnd = 0;
+            facts->loopPoints = pipeline::FileExtensionLower(sourcePath) == u8"wav" && ParseWavSampleLoop(encoded, loopStart, loopEnd);
+            return facts;
+        }
+
+        /// What each setting does to this sound, from its facts: Stream and Loop when the sound
+        /// does it anyway, Force mono on a mono sound, how much the trim cuts, how far Normalize
+        /// moves its peak.
+        [[nodiscard]] pipeline::ImportSettingNote DescribeSetting(StringView, const pipeline::ImportOptions&, Object* prepared,
+                                                                  const PropertyInfo& setting) const override
+        {
+            pipeline::ImportSettingNote note;
+            const AudioFileFacts* facts = Cast<AudioFileFacts>(prepared);
+            if (facts == nullptr)
+                return note;
+            const StringView name(reinterpret_cast<const utf8char*>(setting.name));
+            const AudioClipMetadata& metadata = facts->metadata;
+            if (name == StringView(u8"stream"))
+            {
+                if (ShouldStreamAudioByDefault(metadata.durationSeconds, facts->sizeBytes))
+                    note.reason = String(u8"It streams anyway: it is over 10 s or 2 MB");
+            }
+            else if (name == StringView(u8"forceMono"))
+            {
+                if (metadata.channels == 1)
+                    note.reason = String(u8"It is mono already");
+            }
+            else if (name == StringView(u8"loop"))
+            {
+                if (facts->loopPoints)
+                    note.reason = String(u8"It loops anyway, by its own loop points");
+            }
+            else if (name == StringView(u8"trimTrailingSilence"))
+            {
+                const usize cut = metadata.frameCount > facts->audibleFrames ? static_cast<usize>(metadata.frameCount) - facts->audibleFrames : 0;
+                if (cut == 0 || metadata.sampleRate == 0)
+                    note.reason = String(u8"It has no silent tail");
+                else
+                    note.effect = Format(u8"Cuts {} s from the end", FormatFixed(static_cast<f64>(cut) / metadata.sampleRate, 2));
+            }
+            else if (name == StringView(u8"normalize"))
+            {
+                if (facts->peak == 0)
+                    note.reason = String(u8"It is silent");
+                else
+                {
+                    constexpr f32 kDecibelsPerLn = 8.68588964f; // 20 / ln(10): 20 log10(x) through the natural log
+                    const f32 gain = kDecibelsPerLn * Log(AudioEdits::kNormalizeTarget / static_cast<f32>(facts->peak));
+                    note.effect = Format(u8"{}{} dB", gain >= 0.0f ? StringView(u8"+") : StringView{}, FormatFixed(gain, 1));
+                }
+            }
+            return note;
         }
 
         [[nodiscard]] StringView AssetTypeName(StringView) const override { return u8"AudioClipAsset"; }
@@ -757,8 +832,9 @@ export namespace pipeline{
         RegisterSerializable<SoundCueAsset>();
     }
 
-    // The asset classes' StaticType() bodies are defined in AudioAssetImpl.cpp; the import
-    // options stay identity-only.
+    // The asset classes' and the import options' StaticType() bodies are defined in
+    // AudioAssetImpl.cpp; the import's facts are identity-only.
+    RTTI_DEFINE_OBJECT(AudioFileFacts, "rtti::pipeline::audio")
 
     /// File > New's audio creators (pipeline.registration composes every domain's).
     void RegisterAudioCreators(AssetCreatorRegistry& registry);

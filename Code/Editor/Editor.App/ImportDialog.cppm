@@ -446,6 +446,30 @@ export namespace editor::app
             if (file.options && !file.options->Settings().IsEmpty())
             {
                 m_settings = MakeUnique<gui::ReflectedPropertySource>(m_allocator, m_allocator);
+                // Each setting beside what its importer says it does to this file, or disabled
+                // with why it cannot apply.
+                m_settings->SetOnDescribe([self, index](StringView path, gui::PropertyInfo& info)
+                                          {
+                                              if (!self->m_session || index >= self->m_session->files.Size())
+                                                  return;
+                                              const AssetImport::File& described = self->m_session->files[index];
+                                              const pipeline::IFileImporter* importer = described.Importer();
+                                              if (importer == nullptr || !described.options)
+                                                  return;
+                                              const String name(path);
+                                              const PropertyInfo* setting = FindProperty(*described.options->GetType(), reinterpret_cast<const char*>(name.CStr()));
+                                              if (setting == nullptr)
+                                                  return;
+                                              const pipeline::ImportSettingNote note =
+                                                  importer->DescribeSetting(described.path.AsView(), *described.options, described.prepared.Get(), *setting);
+                                              if (!note.reason.IsEmpty())
+                                              {
+                                                  info.ReadOnly = true;
+                                                  info.Note = note.reason;
+                                              }
+                                              else
+                                                  info.Note = note.effect;
+                                          });
                 const Instance target(file.options.Get(), file.options->GetType());
                 m_settings->SetObjects(Span<const Instance>(&target, 1u));
                 RefPtr<gui::PropertyGrid> grid = MakeRef<gui::PropertyGrid>(m_allocator);

@@ -81,3 +81,28 @@ it is handed to the user for the visual check.
   settings at import, with usage guessed from the name; the sound's trim and normalize shown on the
   waveform and in "Hear it as imported".
 - **W7. Reimport.** From an asset's page, the window on its file with what it was imported with.
+
+## A file's parts in the tree (agreed 2026-11-02, over a mockup)
+
+A file that makes several things (a model: its meshes, materials, textures, skeleton, clips,
+collision) shows them in the files pane as a tree under it, not as a list in the settings pane.
+
+- **The tree.** Under the file, its kinds, each with its box (keeps or drops all of it, mixed when
+  some are kept), its count ("12 of 13") and its chevron; an open kind lists its items, each with
+  its box and its name. A file that makes one thing (a sound, a picture) shows no tree.
+- **Selecting.** The file selected: its preview and its settings, as before. A part selected: its
+  preview and its details. The settings pane then shows what the part is ("Material"), its name to
+  give it (the name in the file shown when it differs), its box, and read-only facts the importer
+  reads from the file (a material's shading, base colour, metallic, roughness, textures and the
+  parts using it; a mesh's triangles and its parts by material; a clip's length; a texture's size
+  and the material using it; the skeleton's bones). Editing those values is the asset's page
+  after import.
+- **Previews of parts.** The file's preview shows the part: a mesh alone in its rest pose; a
+  material on a sphere; a texture in the picture view; a clip playing on the model; the skeleton's
+  bones over the model; a collision shape outlined. A part it cannot show leaves the file's view.
+- **Textures** inside a model stay as the model's import reads them (no per-texture settings).
+- **Generic.** Nothing in the window names a kind's meaning: the tree comes from the importer's
+  plan, a part's facts from the importer (DescribePart), its preview from the file's preview.
+
+Phases: W8a the tree and a part's name and box in the settings pane; W8b a part's facts from the
+importer; W8c the previews of parts.

@@ -128,6 +128,47 @@ TEST_CASE("editor-pages: registry nearest-type dispatch")
     CHECK(registry.FindFactory(UnrelatedAsset::StaticType()) == nullptr);
 }
 
+namespace
+{
+    class TestPreviewFactory final : public IImportPreviewFactory
+    {
+    public:
+        explicit TestPreviewFactory(const TypeInfo& type) : m_type(&type) {}
+        [[nodiscard]] const TypeInfo* AssetType() const override { return m_type; }
+        [[nodiscard]] UniquePtr<IImportPreview> Create(StringView, IAllocator&) override { return {}; }
+
+    private:
+        const TypeInfo* m_type;
+    };
+
+    UniquePtr<IImportPreviewFactory> MakePreviewFactory(const TypeInfo& type)
+    {
+        return UniquePtr<IImportPreviewFactory>(DefaultAllocator().New<TestPreviewFactory>(type), DefaultAllocator());
+    }
+}
+
+TEST_CASE("editor-import-previews: the nearest type's preview, found by the type or its name")
+{
+    RegisterTestTypes();
+    EditorContext ctx{DefaultAllocator()};
+    ImportPreviewRegistry& registry = ctx.ImportPreviews();
+    registry.Register(MakePreviewFactory(BaseAsset::StaticType()));
+
+    // The base's preview serves the derived type until a nearer one is registered.
+    REQUIRE(registry.Find(DerivedAsset::StaticType()) != nullptr);
+    CHECK(registry.Find(DerivedAsset::StaticType())->AssetType() == &BaseAsset::StaticType());
+    registry.Register(MakePreviewFactory(DerivedAsset::StaticType()));
+    CHECK(registry.Find(DerivedAsset::StaticType())->AssetType() == &DerivedAsset::StaticType());
+    CHECK(registry.Find(BaseAsset::StaticType())->AssetType() == &BaseAsset::StaticType());
+    CHECK(registry.Find(UnrelatedAsset::StaticType()) == nullptr);
+
+    // By name, as an importer names the type it lists a file by.
+    const StringView derivedName(reinterpret_cast<const utf8char*>(DerivedAsset::StaticType().name));
+    REQUIRE(registry.FindByName(derivedName) != nullptr);
+    CHECK(registry.FindByName(derivedName)->AssetType() == &DerivedAsset::StaticType());
+    CHECK(registry.FindByName(u8"NoSuchAssetType") == nullptr);
+}
+
 TEST_CASE("editor-context: open, focus, and close pages")
 {
     RegisterTestTypes();

@@ -11,6 +11,7 @@ export import :selection;
 export import :search_filter;
 export import :editor_settings;
 export import :page;
+export import :import_preview;   // what the import window shows of a file, by asset type
 export import :actions;
 export import :context;
 export import :thumbnail_service;

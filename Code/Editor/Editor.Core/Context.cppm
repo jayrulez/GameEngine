@@ -25,6 +25,7 @@ import foundation.gui; // IClipboard (CopyText)
 import :command;
 import :selection;
 import :page;
+import :import_preview;
 import :actions;
 import :thumbnail_service;
 import editor.project; // EditorProject, the job service, the root allocator
@@ -343,6 +344,8 @@ export namespace editor
         // === Registries ===
 
         [[nodiscard]] EditorPageRegistry& Pages() noexcept { return m_pageRegistry; }
+        /// The import window's previews, by asset type: a domain registers one beside its page.
+        [[nodiscard]] ImportPreviewRegistry& ImportPreviews() noexcept { return m_importPreviews; }
 
         /// The editor's actions (see :actions): registered in the composition roots, every
         /// surface built from them, executed through them.
@@ -540,6 +543,7 @@ export namespace editor
         Array<McpToolContribution> m_mcpToolContributions;
         pipeline::ImporterRegistry m_importers;                               // borrowed
         EditorPageRegistry m_pageRegistry;
+        ImportPreviewRegistry m_importPreviews;
         EditorActionRegistry m_actions;
         pipeline::AssetCreatorRegistry m_creators;
         String m_clipboardKind;

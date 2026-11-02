@@ -26,4 +26,5 @@ target_sources(Editor.Core
             EditorResources.cppm
             EditorIcons.cppm
             EditorSettings.cppm
+            ImportPreview.cppm
             EditorCoreModule.cppm)

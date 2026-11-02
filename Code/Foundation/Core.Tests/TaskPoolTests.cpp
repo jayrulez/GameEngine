@@ -83,6 +83,19 @@ TEST_CASE("task pool: progress and log lines from the work reach the pumping thr
     pool.Pump([&lines](const TaskHandle& from, StringView line) { lines.PushBack(Format(u8"{}: {}", from.Name(), line)); });
     CHECK(task->Progress().fraction == doctest::Approx(0.5f));
     CHECK(task->Progress().step == StringView(u8"Halfway"));
+
+    RefPtr<TaskHandle> stepped = pool.Submit(u8"stepped", [](TaskContext& context)
+                                             {
+                                                 context.SetFraction(0.25f);
+                                                 context.SetStep(u8"Writing Rider.glb", 2, 12);
+                                                 return Status{};
+                                             });
+    pool.Pump();
+    const TaskProgress progress = stepped->Progress();
+    CHECK(progress.fraction == doctest::Approx(0.25f)); // a step keeps the fraction
+    CHECK(progress.step == StringView(u8"Writing Rider.glb"));
+    CHECK(progress.stepIndex == 2u);
+    CHECK(progress.stepCount == 12u);
     REQUIRE(lines.Size() == 1u);
     CHECK(lines[0] == StringView(u8"reporting: half done"));
 }
@@ -262,5 +275,43 @@ TEST_CASE("task pool: Finish waits for every task, then hands them back; InFligh
         CHECK(ran.load() == 6);
         CHECK(completed == 6);
         CHECK(pool.InFlight() == 0u);
+    }
+}
+
+TEST_CASE("task pool: CancelAll drops what waits and tells what runs; Finish then waits, and no cancelled completion runs")
+{
+    const u32 counts[] = {0u, 2u};
+    for (u32 workers : counts)
+    {
+#if PLATFORM_WEB
+        if (workers > 0u)
+            continue;
+#endif
+        TaskPool pool(DefaultAllocator(), workers);
+        const TaskLane lane = pool.CreateLane(u8"serial");
+        Atomic<bool> started{false};
+        int completed = 0;
+        (void)pool.Submit(u8"long", [&started](TaskContext& context)
+                          {
+                              started.store(true);
+                              while (!context.IsCancelled())
+                                  Thread::YieldThread();
+                              return Status(ErrorCode::Cancelled);
+                          },
+                          [&completed](Status) { ++completed; }, lane);
+        bool queuedRan = false;
+        (void)pool.Submit(u8"behind", [&queuedRan](TaskContext&) { queuedRan = true; return Status{}; }, [&completed](Status) { ++completed; }, lane);
+        if (workers > 0u)
+        {
+            const Stopwatch clock = Stopwatch::StartNew();
+            while (!started.load() && clock.Elapsed() < Duration::FromMilliseconds(2000.0))
+                Thread::YieldThread();
+        }
+        pool.CancelAll();
+        pool.Finish();
+        CHECK_FALSE(queuedRan);
+        CHECK(completed == 0);
+        CHECK(pool.InFlight() == 0u);
+        CHECK_FALSE(pool.IsLaneBusy(lane));
     }
 }

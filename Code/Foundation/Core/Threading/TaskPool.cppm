@@ -73,6 +73,8 @@ export namespace foundation::core
     {
         f32 fraction = -1.0f; ///< 0 to 1; below 0 when the work has not said
         String step;          ///< what it is doing now ("Writing Rider.glb")
+        usize stepIndex = 0;  ///< which step of stepCount (0-based); a count of 0 says none
+        usize stepCount = 0;
     };
 
     /// One submitted task: its state, its progress, and how to cancel it. Reference-counted, so
@@ -140,6 +142,21 @@ export namespace foundation::core
             ScopedLock lock(m_task->m_lock);
             m_task->m_progress.fraction = fraction;
             m_task->m_progress.step = String(step);
+        }
+        /// How far, 0 to 1, keeping the step.
+        void SetFraction(f32 fraction)
+        {
+            ScopedLock lock(m_task->m_lock);
+            m_task->m_progress.fraction = fraction;
+        }
+        /// What it does now, as step `index` (0-based) of `count` ("Writing Rider.glb", 3 of 12),
+        /// keeping the fraction.
+        void SetStep(StringView step, usize index = 0, usize count = 0)
+        {
+            ScopedLock lock(m_task->m_lock);
+            m_task->m_progress.step = String(step);
+            m_task->m_progress.stepIndex = index;
+            m_task->m_progress.stepCount = count;
         }
         /// A line for whoever pumps the pool (the editor's Console).
         void Log(StringView line)
@@ -314,6 +331,21 @@ export namespace foundation::core
                     m_ended.Wait(m_mutex);
             }
             Pump(log);
+        }
+
+        /// Cancels every task, queued and running: what has not started is dropped, what runs is
+        /// told. Never waits; Finish then waits for those running, and runs no cancelled completion
+        /// (an owner closing what the tasks use: a project, a session).
+        void CancelAll()
+        {
+            ScopedLock lock(m_mutex);
+            for (const RefPtr<TaskHandle>& task : m_running)
+                task->Cancel();
+            for (const RefPtr<TaskHandle>& task : m_runnable)
+                task->Cancel();
+            for (const Lane& lane : m_lanes)
+                for (const RefPtr<TaskHandle>& task : lane.queued)
+                    task->Cancel();
         }
 
         /// Tasks submitted and not yet handed back by Pump.

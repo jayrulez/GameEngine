@@ -78,14 +78,23 @@ namespace
         }
     };
 
-    // A preview naming its file, counting how many it has made.
-    class NamePreview final : public editor::IImportPreview
+    // A preview naming its file, counting how many it has made. It shows a mesh part alone and
+    // nothing else, saying what it was last asked to show.
+    class NamePreview final : public editor::IImportPreview, public editor::IImportPartPreview
     {
     public:
         explicit NamePreview(StringView path) : m_view(MakeRef<gui::Label>(DefaultAllocator()))
         {
             m_facts.PushBack(Format(u8"Made for {}", pipeline::FileNameOf(path)));
+            Provide<editor::IImportPartPreview>(*this);
         }
+        bool ShowPart(const pipeline::ImportPlanEntry& part) override
+        {
+            shown = Format(u8"part {}", part.sourceName);
+            return part.kind == pipeline::ImportResourceKind::Mesh;
+        }
+        void ShowWhole() override { shown = String(u8"whole"); }
+        String shown;
         [[nodiscard]] gui::Node& View() override { return *m_view; }
         [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
         void StopReading() override { g_previewStops.fetch_add(1); }
@@ -314,6 +323,19 @@ TEST_CASE("import window: the preview registered for the type a file is listed b
     bed.window->Select(1);
     CHECK(made == 2u);
     CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Made for b.box"));
+
+    // A part selected in the tree is asked of the preview; one it cannot show leaves the whole file,
+    // and selecting the file shows the whole file again.
+    auto* named = static_cast<NamePreview*>(bed.window->Preview());
+    CHECK(named->shown == StringView(u8"whole"));
+    bed.window->SelectPart(1, 0); // b.box's Box, a mesh
+    named = static_cast<NamePreview*>(bed.window->Preview());
+    CHECK(named->shown == StringView(u8"part Box"));
+    bed.window->SelectPart(1, 1); // its Wood, a texture this preview cannot show
+    CHECK(named->shown == StringView(u8"whole"));
+    bed.window->SelectPart(1, 0);
+    bed.window->Select(1);
+    CHECK(named->shown == StringView(u8"whole"));
 
     // A preview's read coming back shows its facts again.
     static_cast<NamePreview*>(bed.window->Preview())->Arrive(u8"Read at last");

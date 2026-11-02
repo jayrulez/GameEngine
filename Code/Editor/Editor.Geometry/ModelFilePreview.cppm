@@ -33,7 +33,7 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    class ModelFilePreview final : public IImportPreview, public app::IImportPreviewFrames
+    class ModelFilePreview final : public IImportPreview, public app::IImportPreviewFrames, public IImportPartPreview
     {
     public:
         /// Opens `path` with its cooked files under `cacheRoot`: bound at once when opened before,
@@ -50,6 +50,13 @@ export namespace editor
         [[nodiscard]] Span<const String> Facts() const override;
         /// Stops the cook, which reads the importer's model, and waits for it.
         void StopReading() override;
+
+        /// A part alone: a mesh by itself, a material on a sphere, the skeleton's bones over the
+        /// model, a clip playing on it. False for a texture or a collision shape (the preview's cook
+        /// makes no collision, and pictures are another page's). Asked before the model is in, it is
+        /// shown once it is.
+        bool ShowPart(const pipeline::ImportPlanEntry& part) override;
+        void ShowWhole() override;
 
         void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) override;
         void OnRenderWindow(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame) override;

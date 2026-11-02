@@ -32,6 +32,22 @@ export namespace editor
         ~IImportPreviewService() = default;
     };
 
+    /// What a preview publishes when it can show one part of its file alone (Specs/import-window.md,
+    /// a file's parts in the tree): the window asks for it when a part is selected in the tree, and
+    /// for the whole file again when the file is.
+    class IImportPartPreview : public IImportPreviewService
+    {
+    public:
+        /// Shows `part` (an entry of the file's plan) in place of the whole file; false when it cannot
+        /// show that part, the whole file then staying in view.
+        virtual bool ShowPart(const pipeline::ImportPlanEntry& part) = 0;
+        /// Shows the whole file again.
+        virtual void ShowWhole() = 0;
+
+    protected:
+        ~IImportPartPreview() = default;
+    };
+
     /// One file's preview, made for the window and dropped when another file is selected.
     class IImportPreview
     {

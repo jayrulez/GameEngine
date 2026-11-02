@@ -382,6 +382,21 @@ export namespace editor::app
             }
         }
 
+        // Asks the preview to show the part selected in the tree, or the whole file when none is (or
+        // when it cannot show that part): a preview that publishes IImportPartPreview.
+        void ShowSelectedPart()
+        {
+            if (!m_preview || !m_session || m_selected >= m_session->files.Size())
+                return;
+            editor::IImportPartPreview* parts = m_preview->Service<editor::IImportPartPreview>();
+            if (parts == nullptr)
+                return;
+            const pipeline::ImportPlan& plan = m_session->files[m_selected].plan;
+            if (m_part >= 0 && static_cast<usize>(m_part) < plan.entries.Size() && parts->ShowPart(plan.entries[static_cast<usize>(m_part)]))
+                return;
+            parts->ShowWhole();
+        }
+
         // Shows the selected file's preview, and its facts under it: the preview a domain registers
         // for the type its importer lists it by, made again only when the file or that type
         // changes; with none, its type's icon and its name. A preview reads its file off the main
@@ -433,6 +448,7 @@ export namespace editor::app
                 }
             }
             ShowFacts();
+            ShowSelectedPart(); // the whole file, or the part selected in the tree
         }
 
         // The selected file's facts: its preview's (its importer's label without one), then its size.

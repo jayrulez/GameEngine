@@ -105,4 +105,7 @@ collision) shows them in the files pane as a tree under it, not as a list in the
   plan, a part's facts from the importer (DescribePart), its preview from the file's preview.
 
 Phases: W8a the tree and a part's name and box in the settings pane (done, bf5e0bc3a); W8b a
-part's facts from the importer (done, 9fac278ba); W8c the previews of parts.
+part's facts from the importer (done, 9fac278ba); W8c the previews of parts (done 2026-11-02: a mesh
+alone, a material on a sphere, the skeleton's bones over the model, a clip playing; a texture and a
+collision shape keep the whole file in view, the preview's cook making no collision and a picture
+view being the image page's).

@@ -17,6 +17,8 @@ import engine.scene;
 import foundation.render;
 import engine.render;
 import foundation.geometry;
+import foundation.materials; // a material part shown on a sphere
+import foundation.resource;  // a part found as its resource handle
 import foundation.model;
 import foundation.model.resource;
 import foundation.animation;
@@ -90,6 +92,13 @@ namespace editor
         f32 radius = 1.0f;
         RefPtr<TaskHandle> read;
         TaskPool* pool = nullptr;
+        // The part the window asked to show alone (shown once the model is in), and what showing it
+        // changed, to undo for the whole file.
+        pipeline::ImportPlanEntry part;
+        bool showsPart = false;
+        scene::EntityHandle sphere = scene::EntityHandle::Invalid();
+        RefPtr<foundation::geometry::StaticMesh> sphereMesh;
+        bool bonesByPart = false; // the skeleton part turned the bones on
 
         Impl(IAllocator& alloc, ModelFilePreview& preview, StringView file)
             : allocator(&alloc), owner(&preview), path(file), open(alloc), facts(alloc), clipNames(alloc), bonePoses(alloc)
@@ -311,6 +320,8 @@ namespace editor
             message->SetDisplayed(false);
             Place();
             ShowClips();
+            if (showsPart)
+                ApplyPart();
             if (owner->onChanged)
                 owner->onChanged();
         }
@@ -360,6 +371,106 @@ namespace editor
             camera.nearZ = Max(radius * 0.05f, 0.0001f);
             camera.farZ = Max(radius * 100.0f, 50.0f);
             viewport->Frame(center, radius);
+        }
+
+        // Undoes what showing a part changed: every mesh drawn, the sphere gone, the bones as they were.
+        void ShowWholeModel()
+        {
+            scene::Scene* level = viewport ? viewport->Scene() : nullptr;
+            if (level != nullptr)
+            {
+                if (auto* meshes = level->GetSystem<engine::render::MeshComponentManager>())
+                    meshes->ForEach([&](engine::render::MeshComponent& component, scene::EntityHandle entity)
+                                    {
+                                        if (instance.root.IsAssigned() && Under(*level, entity, instance.root))
+                                            component.visible = true;
+                                    });
+                if (level->IsValid(sphere))
+                    level->DestroyEntity(sphere);
+            }
+            sphere = scene::EntityHandle::Invalid();
+            if (bonesByPart)
+                skeleton->SetChecked(false);
+            bonesByPart = false;
+        }
+
+        // Draws only the model's meshes `keep` says to.
+        void ShowMeshes(const Function<bool(const foundation::geometry::StaticMesh*)>& keep)
+        {
+            scene::Scene* level = viewport ? viewport->Scene() : nullptr;
+            auto* meshes = level != nullptr ? level->GetSystem<engine::render::MeshComponentManager>() : nullptr;
+            if (meshes == nullptr || !instance.root.IsAssigned())
+                return;
+            meshes->ForEach([&](engine::render::MeshComponent& component, scene::EntityHandle entity)
+                            {
+                                if (Under(*level, entity, instance.root))
+                                    component.visible = keep(component.mesh.Get());
+                            });
+        }
+
+        // Shows `part` in place of the whole model, as far as the bound model has it.
+        void ApplyPart()
+        {
+            ShowWholeModel();
+            scene::Scene* level = viewport ? viewport->Scene() : nullptr;
+            if (!open.IsOpen())
+                return;
+            switch (part.kind)
+            {
+            case pipeline::ImportResourceKind::Mesh:
+                if (RefPtr<foundation::resource::ResourceHandle> found = open.FindPart(part.sourceName.AsView(), foundation::geometry::StaticMesh::StaticType()))
+                {
+                    const Object* mesh = found->Get();
+                    ShowMeshes([mesh](const foundation::geometry::StaticMesh* drawn) { return static_cast<const Object*>(drawn) == mesh; });
+                    if (playback)
+                        playback->SetPlaying(false); // still, as it is
+                    ShowPlay();
+                }
+                break;
+            case pipeline::ImportResourceKind::Material:
+                if (RefPtr<foundation::resource::ResourceHandle> found = open.FindPart(part.sourceName.AsView(), foundation::materials::Material::StaticType()))
+                {
+                    auto* material = Cast<foundation::materials::Material>(found->Get());
+                    auto* meshes = level != nullptr ? level->GetSystem<engine::render::MeshComponentManager>() : nullptr;
+                    if (material == nullptr || meshes == nullptr)
+                        break;
+                    ShowMeshes([](const foundation::geometry::StaticMesh*) { return false; });
+                    if (!sphereMesh)
+                        sphereMesh = foundation::geometry::Primitives::Sphere(*allocator, 0.5f, 48, 24);
+                    sphere = level->CreateEntity(u8"material.sphere");
+                    Transform at;
+                    at.position = center;
+                    at.scale = Float3(radius * 1.2f); // about the model's size, so the framing holds
+                    level->SetLocalTransform(sphere, at);
+                    engine::render::MeshComponent& drawn = meshes->Add(sphere);
+                    drawn.mesh = sphereMesh;
+                    drawn.SetMaterial(RefPtr<foundation::materials::Material>(material));
+                }
+                break;
+            case pipeline::ImportResourceKind::Skeleton:
+                if (!instance.skinned.IsEmpty() && !skeleton->IsChecked())
+                {
+                    skeleton->SetChecked(true);
+                    bonesByPart = true;
+                }
+                break;
+            case pipeline::ImportResourceKind::AnimationClip:
+                for (usize a = 0; a < clipNames.Size(); ++a)
+                    if (pipeline::ImportedAssetName(clipNames[a].AsView(), u8"anim", a) == part.sourceName)
+                    {
+                        if (playback)
+                        {
+                            playback->Select(static_cast<i32>(a));
+                            playback->SetPlaying(true);
+                        }
+                        clips->SetSelectedIndex(static_cast<i32>(a));
+                        ShowPlay();
+                        break;
+                    }
+                break;
+            default:
+                break;
+            }
         }
 
         void ShowClips()
@@ -413,6 +524,7 @@ namespace editor
     {
         m_impl = MakeUnique<Impl>(allocator, allocator, *this, path);
         Provide<app::IImportPreviewFrames>(*this);
+        Provide<IImportPartPreview>(*this);
         m_impl->BuildView(services);
         m_impl->Start(cacheRoot, tasks, prepared);
     }
@@ -440,6 +552,31 @@ namespace editor
     Span<const String> ModelFilePreview::Facts() const
     {
         return m_impl->facts.AsSpan();
+    }
+
+    bool ModelFilePreview::ShowPart(const pipeline::ImportPlanEntry& part)
+    {
+        switch (part.kind)
+        {
+        case pipeline::ImportResourceKind::Mesh:
+        case pipeline::ImportResourceKind::Material:
+        case pipeline::ImportResourceKind::Skeleton:
+        case pipeline::ImportResourceKind::AnimationClip:
+            break;
+        default:
+            ShowWhole();
+            return false; // a picture or a collision shape: the whole model stays
+        }
+        m_impl->part = part;
+        m_impl->showsPart = true;
+        m_impl->ApplyPart(); // or once the model is in (Opened)
+        return true;
+    }
+
+    void ModelFilePreview::ShowWhole()
+    {
+        m_impl->showsPart = false;
+        m_impl->ShowWholeModel();
     }
 
     void ModelFilePreview::StopReading()

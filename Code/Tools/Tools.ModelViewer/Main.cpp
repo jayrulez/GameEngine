@@ -431,8 +431,8 @@ namespace
             m_cacheRoot = PathJoin(cacheBase.AsView(), u8"cache");
             m_thumbnailSize = m_settings.value.thumbnailSize;
             m_thumbnailRoot = PathJoin(PathJoin(cacheBase.AsView(), u8"thumbnails").AsView(), Format(u8"{}", m_thumbnailSize).AsView());
-            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(), m_thumbnailRoot.AsView(),
-                                                                      m_thumbnailSize);
+            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_reads, m_cacheRoot.AsView(),
+                                                                      m_thumbnailRoot.AsView(), m_thumbnailSize);
             ModelViewerApp* self = this;
             m_thumbnails->SetOnDone([self](StringView model, StringView png) { self->ThumbnailDone(model, png); });
             OpenLibrary(m_library, u8"window", m_settings, [self]() { return self->CacheBusy(); });
@@ -1221,7 +1221,7 @@ namespace
                     added->SetTooltip(tab.path.AsView());
                 }
                 if (opened.needsFile)
-                    m_tabLoads.Request(tab.path.AsView(), m_settings.value.looseTextures); // the tab shows "cooking" until the read arrives
+                    m_tabLoads.Request(tab.path.AsView(), m_settings.value.looseTextures, tab.open->Cache()); // read and cooked on the worker; the tab shows "cooking" until then
                 else
                     PlaceModel(tab, opened.outcome);
             }
@@ -3440,7 +3440,10 @@ namespace
         modelviewer_window::GridModel m_libraryGrid;
         RefPtr<gui::Menu> m_gridMenu;
         modelviewer::SettingsStore m_settings;
-        modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' file reads, off the main thread
+        // The model files' reads and cooks, the tabs' and the thumbnails', one at a time: two cooks of
+        // one file never run into its cache folder at once. Declared before both, which it outlives.
+        TaskPool m_reads{m_allocator, 1u};
+        modelviewer::FileLoads m_tabLoads{m_allocator, m_reads}; // the model tabs' file reads, off the main thread
         String m_emptyText; // the empty view's text from the markup
         String m_gridCount; // the browse grid's "n of m models"
         RefPtr<gui::ToastHost> m_toasts;

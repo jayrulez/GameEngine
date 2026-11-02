@@ -47,9 +47,12 @@ export namespace modelviewer
     {
     public:
         /// `size` is a thumbnail's side in pixels (96, 128 or 192 in the settings).
-        ThumbnailRenderer(IAllocator& allocator, foundation::runtime::IApplicationHost& host, StringView cacheRoot, StringView thumbRoot, u32 size = 128)
+        /// `reads` is the pool its model files are read and cooked on (the window's, shared with its
+        /// tabs, so their cooks never overlap); it outlives this.
+        ThumbnailRenderer(IAllocator& allocator, foundation::runtime::IApplicationHost& host, TaskPool& reads, StringView cacheRoot, StringView thumbRoot,
+                          u32 size = 128)
             : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot), m_size(size),
-              m_loads(allocator)
+              m_loads(allocator, reads)
         {
             m_scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             m_render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
@@ -113,7 +116,9 @@ export namespace modelviewer
                 while (m_state == State::Reading && m_loads.Take(read))
                     if (read.path == m_model)
                     {
-                        if (read.outcome == editor::OpenModel::Outcome::Opened && m_open->Finish(read.model, read.stats) == editor::OpenModel::Outcome::Opened)
+                        if (read.outcome == editor::OpenModel::Outcome::Opened &&
+                            (read.cooked.IsNil() ? m_open->Finish(read.model, read.stats) : m_open->Bind(read.cooked, read.stats)) ==
+                                editor::OpenModel::Outcome::Opened)
                             Stage();
                         else
                         {
@@ -226,7 +231,7 @@ export namespace modelviewer
             const editor::OpenModel::Begun begun = m_open->Begin(model, m_cacheRoot.AsView(), m_device, outcome);
             if (begun == editor::OpenModel::Begun::NeedsFile)
             {
-                m_loads.Request(model, m_looseTextures);
+                m_loads.Request(model, m_looseTextures, m_open->Cache()); // read and cooked on the worker
                 m_state = State::Reading;
                 return;
             }

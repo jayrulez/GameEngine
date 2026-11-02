@@ -103,7 +103,8 @@ export namespace modelviewer
             ModelTab& tab = m_tabs[static_cast<usize>(index)];
             if (read.outcome != editor::OpenModel::Outcome::Opened)
                 return read.outcome;
-            const editor::OpenModel::Outcome outcome = tab.open->Finish(read.model, read.stats);
+            // Cooked on the worker (FileLoads given the tab's cache): only the bind is left here.
+            const editor::OpenModel::Outcome outcome = read.cooked.IsNil() ? tab.open->Finish(read.model, read.stats) : tab.open->Bind(read.cooked, read.stats);
             tab.ready = outcome == editor::OpenModel::Outcome::Opened;
             return outcome;
         }

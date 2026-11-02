@@ -615,6 +615,9 @@ export namespace editor
         /// to Bind.
         static Outcome Cook(ModelCache& cache, const foundation::model::Model& model, const ModelStats& stats, Guid& guid, const CancelToken& cancel = {})
         {
+            // The folder again: a cook cancelled before this one on the same cache folder cleared it.
+            if (!CreateDirectories(cache.folder.AsView()))
+                return Outcome::CookFailed;
             const Status cooked = pipeline::CookModel(model, *cache.database, u8"model", guid, cancel);
             if (cooked.Code() == ErrorCode::Cancelled)
             {

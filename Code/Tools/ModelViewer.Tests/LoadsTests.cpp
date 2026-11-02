@@ -178,3 +178,36 @@ TEST_CASE("model viewer loads: a tab added before its model is ready, finished f
     CHECK(failing.Finish(waiting.index, bad) == editor::OpenModel::Outcome::LoadFailed);
     CHECK_FALSE(failing.At(waiting.index).ready);
 }
+
+TEST_CASE("model viewer loads: given the open model's cache, the worker cooks what it read, and only the bind is left; two loads share one pool")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String oozi = TestModel(u8"Tests/Models/KenneyPlatformerCharacters/GLB/character-oozi.glb");
+    const String cache = FreshCache(u8"scratch_viewer_loads_cook");
+    TaskPool reads(DefaultAllocator(), 1u);
+    modelviewer::FileLoads tabs(DefaultAllocator(), reads);
+    modelviewer::FileLoads thumbnails(DefaultAllocator(), reads);
+
+    editor::OpenModel open(DefaultAllocator());
+    editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
+    REQUIRE(open.Begin(fox.AsView(), cache.AsView(), nullptr, outcome) == editor::OpenModel::Begun::NeedsFile);
+    tabs.Request(fox.AsView(), true, open.Cache());
+    thumbnails.Request(oozi.AsView(), true); // read only: no cache given
+    Settle(tabs);
+    Settle(thumbnails);
+
+    modelviewer::FileRead read;
+    REQUIRE(tabs.Take(read));
+    CHECK(read.path == fox);
+    REQUIRE(read.outcome == editor::OpenModel::Outcome::Opened);
+    REQUIRE_FALSE(read.cooked.IsNil()); // cooked on the worker
+    CHECK(FileExists(PathJoin(open.CacheFolder(), StringView(editor::OpenModel::kRecordName)).AsView()));
+    CHECK(open.Bind(read.cooked, read.stats) == editor::OpenModel::Outcome::Opened);
+    CHECK(open.IsOpen());
+    CHECK_FALSE(tabs.Take(read)); // each load hands over only its own
+
+    REQUIRE(thumbnails.Take(read));
+    CHECK(read.path == oozi);
+    CHECK(read.outcome == editor::OpenModel::Outcome::Opened);
+    CHECK(read.cooked.IsNil());
+}

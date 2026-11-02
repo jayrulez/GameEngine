@@ -38,6 +38,7 @@ namespace
     {
     public:
         [[nodiscard]] StringView Label() const override { return u8"Box"; }
+        [[nodiscard]] StringView ListedTypeName(StringView) const override { return StringView(reinterpret_cast<const utf8char*>(WindowThing::StaticType().name)); }
         [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"box"); }
         [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView, const pipeline::ImportOptions*, Object*) override
         {
@@ -60,6 +61,36 @@ namespace
                 }
             return primary;
         }
+    };
+
+    // A preview naming its file, counting how many it has made.
+    class NamePreview final : public editor::IImportPreview
+    {
+    public:
+        explicit NamePreview(StringView path) : m_view(MakeRef<gui::Label>(DefaultAllocator()))
+        {
+            m_facts.PushBack(Format(u8"Made for {}", pipeline::FileNameOf(path)));
+        }
+        [[nodiscard]] gui::Node& View() override { return *m_view; }
+        [[nodiscard]] Span<const String> Facts() const override { return m_facts.AsSpan(); }
+
+    private:
+        RefPtr<gui::Label> m_view;
+        Array<String> m_facts;
+    };
+    class NamePreviewFactory final : public editor::IImportPreviewFactory
+    {
+    public:
+        explicit NamePreviewFactory(usize& made) : m_made(&made) {}
+        [[nodiscard]] const TypeInfo* AssetType() const override { return &WindowThing::StaticType(); }
+        [[nodiscard]] UniquePtr<editor::IImportPreview> Create(StringView path, IAllocator& allocator) override
+        {
+            ++*m_made;
+            return UniquePtr<editor::IImportPreview>(allocator.New<NamePreview>(path), allocator);
+        }
+
+    private:
+        usize* m_made;
     };
 
     RefPtr<gui::Node> LoadImport()
@@ -119,6 +150,7 @@ namespace
             import = MakeUnique<AssetImport>(DefaultAllocator(), Move(services));
             ImportWindow::Services windows;
             windows.import = import.Get();
+            windows.previews = &context.ImportPreviews();
             window = MakeUnique<ImportWindow>(DefaultAllocator(), DefaultAllocator(), Move(windows), LoadImport());
             root->SetSize(Float2{1000.0f, 700.0f});
         }
@@ -203,4 +235,25 @@ TEST_CASE("import window: Import waits while a file is read, saying so, and open
     CHECK(bed.window->Why() == StringView(u8"No file is kept."));
     bed.window->Close();
     CHECK(session->closed);
+}
+
+TEST_CASE("import window: the preview registered for the type a file is listed by, its facts and the size under it, made again only for another file")
+{
+    Bed bed;
+    usize made = 0;
+    bed.context.ImportPreviews().Register(UniquePtr<editor::IImportPreviewFactory>(DefaultAllocator().New<NamePreviewFactory>(made), DefaultAllocator()));
+    const String two[] = {String(u8"/somewhere/a.box"), String(u8"/somewhere/b.box")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(two, 2u));
+    REQUIRE(bed.window->Preview() != nullptr);
+    CHECK(made == 1u);
+    CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Made for a.box"));
+    CHECK_FALSE(Texts(*bed.window->Facts()).AsView().Contains(u8"Box\n")); // the preview's facts replace the label
+
+    // The same file again keeps its preview; another file gets its own.
+    bed.window->Select(0);
+    CHECK(made == 1u);
+    bed.window->Select(1);
+    CHECK(made == 2u);
+    CHECK(Texts(*bed.window->Facts()).AsView().Contains(u8"Made for b.box"));
+    bed.window->Close();
 }

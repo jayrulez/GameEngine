@@ -676,6 +676,7 @@ namespace editor::app
             ImportWindow::Services services;
             services.import = m_assetImport.Get();
             services.icons = &TypeIcons();
+            services.previews = &m_context.ImportPreviews();
             EditorApplication* self = this;
             services.pickGroup = [self](foundation::content::Group& current, Function<void(foundation::content::Group&)> picked)
             {

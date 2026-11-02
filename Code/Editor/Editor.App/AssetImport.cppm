@@ -25,6 +25,7 @@ import foundation.core;
 import foundation.content;
 import editor.core;
 import pipeline.importer;
+import pipeline.core; // Asset (the file an asset came from, for a reimport)
 import :group_picker_dialog; // GroupPicker::ShownName
 
 using namespace foundation::core;
@@ -64,6 +65,7 @@ export namespace editor::app
             pipeline::ImportConflictChoice onConflict = pipeline::ImportConflictChoice::Refuse;
             State state = State::Reading;
             u64 generation = 0;                        ///< a read for an importer that has since been replaced is discarded
+            String settings;                           ///< settings to start from, as an earlier import recorded them (a reimport)
 
             [[nodiscard]] pipeline::IFileImporter* Importer() const { return importer < importers.Size() ? importers[importer] : nullptr; }
             [[nodiscard]] StringView Name() const { return pipeline::FileNameOf(path.AsView()); }
@@ -85,9 +87,10 @@ export namespace editor::app
         explicit AssetImport(Services services) : m_services(Move(services)) {}
 
         /// Starts an import of `paths` into `into`. Each file gets the importers that accept it (a
-        /// file none accepts is reported and left out) and is described or starts being read.
+        /// file none accepts is reported and left out) and is described or starts being read, its
+        /// settings starting from `settings` when given (as an earlier import recorded them).
         /// Null when no file is left.
-        RefPtr<Session> Begin(Span<const String> paths, content::Group& into)
+        RefPtr<Session> Begin(Span<const String> paths, content::Group& into, StringView settings = {})
         {
             RefPtr<Session> session = MakeRef<Session>(Context().Importers().Allocator());
             session->group = &into;
@@ -104,12 +107,74 @@ export namespace editor::app
                 File file;
                 file.path = path;
                 file.importers = Move(importers);
+                file.settings = String(settings);
                 session->files.PushBack(Move(file));
             }
             if (session->files.IsEmpty())
                 return {};
             for (usize i = 0; i < session->files.Size(); ++i)
                 Describe(*session, i);
+            return session;
+        }
+
+        /// What reimporting an asset takes: the file it came from (the OS file the ledger names, while
+        /// it is there, else its copy in Sources/), the group the import goes in, and the settings
+        /// its import recorded.
+        struct Reimport
+        {
+            String path;
+            content::Group* group = nullptr;
+            String settings;
+        };
+        /// Finds what reimporting asset `id` takes; false, with `why`, when it cannot be: no such
+        /// asset, an asset made from no file of its own (a model's mesh: reimport its model), or a
+        /// file nothing imports.
+        bool FindReimport(const Guid& id, Reimport& out, String& why) const
+        {
+            content::Instance* instance = Project() != nullptr ? Project()->SourceDb().GetInstance(id) : nullptr;
+            if (instance == nullptr)
+            {
+                why = String(u8"There is no such asset.");
+                return false;
+            }
+            RefPtr<ISerializable> object = instance->ReadObject();
+            const auto* asset = Cast<pipeline::Asset>(object.Get());
+            if (asset == nullptr || asset->fileName.IsEmpty())
+            {
+                why = Format(u8"{} was not imported from a file of its own.", instance->Name());
+                return false;
+            }
+            const String sourcesName(asset->fileName.View());
+            const String origin = pipeline::ImportOriginOf(pipeline::ImportLedgerPath(Project()->CacheRoot().AsView()).AsView(), sourcesName.AsView());
+            out.path = !origin.IsEmpty() && FileExists(origin.AsView()) ? origin : PathJoin(Project()->SourcesRoot().AsView(), sourcesName.AsView());
+            if (!FileExists(out.path.AsView()))
+            {
+                why = Format(u8"Its file, {}, is missing.", sourcesName.AsView());
+                return false;
+            }
+            Array<pipeline::IFileImporter*> importers = Context().Importers().FindAllFor(pipeline::FileExtensionLower(out.path.AsView()).AsView());
+            if (importers.IsEmpty())
+            {
+                why = Format(u8"Nothing imports {}.", pipeline::FileNameOf(out.path.AsView()));
+                return false;
+            }
+            out.group = &instance->OwningGroup();
+            if (importers[0]->ImportsIntoItsOwnGroup() && out.group->Parent() != nullptr)
+                out.group = out.group->Parent();
+            out.settings = pipeline::RecordedImportSettings(*instance);
+            return true;
+        }
+        /// Starts a reimport of asset `id`: its file, into its group, its settings as its import
+        /// recorded them and its choices as it made them. Null, with `why`, when it cannot be.
+        RefPtr<Session> BeginReimport(const Guid& id, String& why)
+        {
+            Reimport found;
+            if (!FindReimport(id, found, why))
+                return {};
+            const String paths[] = {found.path};
+            RefPtr<Session> session = Begin(Span<const String>(paths, 1u), *found.group, found.settings.AsView());
+            if (!session)
+                why = Format(u8"Nothing imports {}.", pipeline::FileNameOf(found.path.AsView()));
             return session;
         }
 
@@ -216,6 +281,8 @@ export namespace editor::app
             if (!file.options)
                 file.options = MakeRef<pipeline::ImportOptions>(Context().Importers().Allocator()); // a bare one carries the plan's choices
             importer->InitializeOptions(file.path.AsView(), *file.options); // as the importer chooses for this file
+            if (!file.settings.IsEmpty())
+                file.options->ReadSettingsText(file.settings.AsView()); // then as it was imported before
             file.prepared = {};
             file.plan = {};
             const u64 generation = ++file.generation;
@@ -338,6 +405,7 @@ export namespace editor::app
         // assets. A re-import of the same bytes copies nothing a file watcher would notice.
         void Finish(content::Instance& primary, pipeline::IFileImporter& importer, const RefPtr<pipeline::ImportOptions>& options)
         {
+            pipeline::RecordImportSettings(primary, options.Get()); // a reimport starts from them
             Context().Notify(editor::NoticeKind::Success, Format(u8"Imported {} ({}).", primary.Name(), importer.Label()).AsView());
             Context().NotifyImported(primary, options.Get());
             if (m_services.cook == nullptr)

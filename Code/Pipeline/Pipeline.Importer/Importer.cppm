@@ -207,6 +207,81 @@ export namespace pipeline
             return nullptr;
         }
 
+        /// The settings as text, a line each, "name=value": a flag true or false, a number, a choice
+        /// by its value's name. An import records them beside what it made (RecordImportSettings),
+        /// so a reimport starts from them.
+        [[nodiscard]] String SettingsText() const
+        {
+            String text;
+            const Instance self(const_cast<ImportOptions*>(this), GetType());
+            for (const PropertyInfo* setting : Settings())
+            {
+                const void* address = setting->address(self);
+                String value;
+                if (setting->type == &TypeOf<bool>())
+                    value = String(*static_cast<const bool*>(address) ? StringView(u8"true") : StringView(u8"false"));
+                else if (setting->type == &TypeOf<f32>())
+                    value = Format(u8"{}", *static_cast<const f32*>(address));
+                else if (IsEnum(*setting->type))
+                {
+                    const char* name = EnumValueName(*setting->type, ReadEnumValue(address, *setting->type));
+                    if (name == nullptr)
+                        continue;
+                    value = String(StringView(reinterpret_cast<const utf8char*>(name)));
+                }
+                else
+                    continue; // not a kind a setting is yet
+                text += StringView(reinterpret_cast<const utf8char*>(setting->name));
+                text += u8"=";
+                text += value;
+                text += u8"\n";
+            }
+            return text;
+        }
+        /// Takes settings from SettingsText's text. A line naming no setting, or a value that does
+        /// not read, is skipped: what an older import recorded still applies as far as it goes.
+        void ReadSettingsText(StringView text)
+        {
+            const Instance self(this, GetType());
+            usize start = 0;
+            while (start < text.Size())
+            {
+                usize end = start;
+                while (end < text.Size() && text[end] != u8'\n')
+                    ++end;
+                const StringView line = text.SubStr(start, end - start);
+                start = end + 1;
+                usize eq = 0;
+                while (eq < line.Size() && line[eq] != u8'=')
+                    ++eq;
+                if (eq == 0 || eq >= line.Size())
+                    continue;
+                const String name(line.SubStr(0, eq));
+                const StringView value = line.SubStr(eq + 1, line.Size() - eq - 1);
+                const PropertyInfo* setting = FindProperty(*GetType(), reinterpret_cast<const char*>(name.CStr()));
+                if (setting == nullptr)
+                    continue;
+                void* address = setting->address(self);
+                if (setting->type == &TypeOf<bool>())
+                {
+                    if (value == StringView(u8"true") || value == StringView(u8"false"))
+                        *static_cast<bool*>(address) = value == StringView(u8"true");
+                }
+                else if (setting->type == &TypeOf<f32>())
+                {
+                    if (const Optional<f64> number = ParseFloat(value); number.HasValue())
+                        *static_cast<f32*>(address) = static_cast<f32>(number.Value());
+                }
+                else if (IsEnum(*setting->type))
+                {
+                    const String choice(value);
+                    i64 chosen = 0;
+                    if (EnumValueByName(*setting->type, reinterpret_cast<const char*>(choice.CStr()), chosen))
+                        WriteEnumValue(address, *setting->type, chosen);
+                }
+            }
+        }
+
         /// Takes `other`'s settings when it is the same type of options (the import window's "Use
         /// these for every ..."); false, changing nothing, when it is not. The plan's choices stay.
         bool CopySettingsFrom(const ImportOptions& other)
@@ -366,6 +441,10 @@ export namespace pipeline
         {
             return {};
         }
+
+        /// Whether an import makes a group of its own, named after the file, in the group it is
+        /// given (a model's folder), so a reimport goes into that group's parent. Default: no.
+        [[nodiscard]] virtual bool ImportsIntoItsOwnGroup() const { return false; }
 
         /// Sets `options` (CreateOptions') as this importer would choose them for the file at
         /// `sourcePath`, before anyone sees them: a texture's usage guessed from its name, say.
@@ -579,6 +658,35 @@ export namespace pipeline
             return plan;
         }
         return {};
+    }
+
+    // === an import's settings, recorded with what it made ===
+
+    /// The data stream an import's primary asset keeps its settings in (ImportOptions::SettingsText).
+    inline constexpr const char8_t* kImportSettingsStream = u8"importSettings";
+
+    /// Records `options`' settings with `primary` (the asset an import made first), so a reimport
+    /// starts from them; nothing when the importer has no settings.
+    inline void RecordImportSettings(foundation::content::Instance& primary, const ImportOptions* options)
+    {
+        if (options == nullptr || options->Settings().IsEmpty())
+            return;
+        const String text = options->SettingsText();
+        (void)primary.WriteData(StringView(kImportSettingsStream), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()),
+                                foundation::content::StreamEncoding::Text);
+    }
+
+    /// The settings `instance` recorded (RecordImportSettings); empty when it has none.
+    [[nodiscard]] inline String RecordedImportSettings(const foundation::content::Instance& instance)
+    {
+        UniquePtr<IStream> stream = instance.ReadData(StringView(kImportSettingsStream));
+        if (!stream)
+            return {};
+        Array<byte> bytes;
+        bytes.Resize(static_cast<usize>(stream->Size()));
+        if (!bytes.IsEmpty() && stream->Read(bytes.Data(), bytes.Size()) != bytes.Size())
+            return {};
+        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Data()), bytes.Size()));
     }
 
     // === the import ledger ===

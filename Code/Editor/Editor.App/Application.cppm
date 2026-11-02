@@ -212,6 +212,7 @@ export namespace editor::app
         void OpenProjectSettings();
         /// Imports files into a group: at once when nothing needs review, else through the window.
         void ImportFiles(Span<const String> paths, foundation::content::Group& group);
+        void ReviewImport(RefPtr<AssetImport::Session> session);
         /// Files dropped on the main window (from the operating system, or editor_drop): imported into
         /// the group the Assets panel shows. On the project manager, a folder opens its project (or
         /// the status says it holds none). False with `error` when no project is open and the manager

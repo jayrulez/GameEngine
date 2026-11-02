@@ -669,6 +669,12 @@ namespace editor::app
             (void)m_assetImport->Commit(*session);
             return;
         }
+        ReviewImport(Move(session));
+    }
+
+    // Opens the import window on `session` (a drop's, or a reimport's).
+    void EditorApplication::ReviewImport(RefPtr<AssetImport::Session> session)
+    {
         gui::SceneRoot* root = m_window.Root();
         if (root == nullptr)
             return;
@@ -1030,6 +1036,17 @@ namespace editor::app
         };
         build.cookPage = [cookPage](editor::EditorPage& page) { cookPage(page, false); };
         build.rebuildPage = [cookPage](editor::EditorPage& page) { cookPage(page, true); };
+        build.reimportPage = [self](editor::EditorPage& page)
+        {
+            String why;
+            RefPtr<AssetImport::Session> session = self->m_assetImport->BeginReimport(page.InstanceId(), why);
+            if (!session)
+            {
+                self->m_context.Notify(editor::NoticeKind::Warning, why.AsView());
+                return;
+            }
+            self->ReviewImport(Move(session));
+        };
         RegisterBuildActions(actions, Move(build));
 
         GameActions game;

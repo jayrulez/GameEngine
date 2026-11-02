@@ -141,13 +141,11 @@ namespace editor::app
         const auto finish = [this, &job, &request]() -> OperationStep<ImportOutcome>
         {
             ImportOutcome outcome = Move(job.outcome);
-            if (m_seams.onImported)
+            if (content::Instance* primary = m_seams.project->SourceDb().GetInstance(outcome.guid))
             {
-                if (content::Instance* primary =
-                        m_seams.project->SourceDb().GetInstance(outcome.guid))
-                {
+                pipeline::RecordImportSettings(*primary, request.options.Get()); // a reimport starts from them
+                if (m_seams.onImported)
                     m_seams.onImported(*primary, request.options.Get());
-                }
             }
             return Optional<ImportOutcome>(Move(outcome));
         };

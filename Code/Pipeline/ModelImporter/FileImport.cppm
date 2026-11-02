@@ -276,6 +276,9 @@ export namespace pipeline
             return RefPtr<pipeline::ImportOptions>(MakeRef<ModelImportOptions>(allocator).Get());
         }
 
+        // The import makes the model's folder group, named after the file.
+        [[nodiscard]] bool ImportsIntoItsOwnGroup() const override { return true; }
+
         /// The scale's note: how tall the model comes in with it (and the up axis), from the
         /// model read on the worker.
         [[nodiscard]] pipeline::ImportSettingNote DescribeSetting(StringView, const pipeline::ImportOptions& options, Object* prepared,

@@ -678,6 +678,7 @@ export namespace editor::mcp
             outcome.type = String(inst->TypeName());
             outcome.typeNamespace = String(inst->TypeNamespace());
             outcome.importer = String(importer.Label());
+            pipeline::RecordImportSettings(*inst, request.options.Get()); // a reimport starts from them
             if (onImported)
             {
                 onImported(*inst, request.options.Get());

@@ -188,6 +188,8 @@ export namespace editor::app
         /// not), saving its unsaved changes first so the cook reads them.
         Function<void(EditorPage& page)> cookPage;
         Function<void(EditorPage& page)> rebuildPage;
+        /// Opens the import window on the page's asset's file, with the settings it was imported with.
+        Function<void(EditorPage& page)> reimportPage;
     };
     inline void RegisterBuildActions(EditorActionRegistry& actions, BuildActions run)
     {
@@ -226,6 +228,8 @@ export namespace editor::app
                    Move(run.cookPage));
         pageAction(u8"build.rebuildPage", u8"Rebuild This Asset", u8"Save the page's changes, then cook its asset and what it needs again, changed or not",
                    u8"Build/Rebuild This Asset", 201, Move(run.rebuildPage));
+        pageAction(u8"build.reimportPage", u8"Reimport...", u8"Import the asset's file again, in the import window, with the settings it was imported with",
+                   u8"Build/Reimport...", 202, Move(run.reimportPage));
     }
 
     /// What Game's actions run; they need a project open in `context`.

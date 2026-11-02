@@ -2661,3 +2661,30 @@ TEST_CASE("model importer: the scale's note says how tall the model comes in")
     CHECK(note.effect == StringView(u8"Makes it 0.790 m tall"));
     CHECK(importer.DescribeSetting(MiFoxNested().AsView(), *options, prepared.Get(), *options->FindSetting(u8"Textures")).effect.IsEmpty());
 }
+
+TEST_CASE("import options: the settings as text, a line each, read back into fresh options; a line naming nothing is skipped")
+{
+    ModelImportOptions from;
+    from.scale = 0.01f;
+    from.upAxis = ModelUpAxis::Z;
+    from.generateScene = true;
+    from.importTextures = false;
+    const String text = from.SettingsText();
+    CHECK(text.AsView().Contains(u8"scale=0.01\n"));
+    CHECK(text.AsView().Contains(u8"upAxis=Z\n"));
+    CHECK(text.AsView().Contains(u8"generateScene=true\n"));
+
+    ModelImportOptions to;
+    to.ReadSettingsText(text.AsView());
+    CHECK(to.scale == doctest::Approx(0.01f));
+    CHECK(to.upAxis == ModelUpAxis::Z);
+    CHECK(to.generateScene);
+    CHECK_FALSE(to.importTextures);
+
+    // What an older or another importer recorded: unknown names and bad values change nothing.
+    ModelImportOptions kept;
+    kept.ReadSettingsText(u8"noSuchSetting=true\nscale=wide\nupAxis=Sideways\ngeneratePrefab=false\n");
+    CHECK(kept.scale == doctest::Approx(1.0f));
+    CHECK(kept.upAxis == ModelUpAxis::Y);
+    CHECK_FALSE(kept.generatePrefab);
+}

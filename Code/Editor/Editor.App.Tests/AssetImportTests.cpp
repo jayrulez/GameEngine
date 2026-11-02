@@ -16,6 +16,8 @@
 import foundation.core;
 import foundation.content;
 import pipeline.importer;
+import pipeline.core;
+import foundation.vfs; // SourcePath
 import editor.core;
 import editor.app;
 
@@ -110,6 +112,36 @@ namespace
         String m_type;
     };
 
+    // An asset made from a file of its own, as a texture or a sound is.
+    class PaintAsset final : public pipeline::Asset
+    {
+        RTTI_OBJECT(PaintAsset, pipeline::Asset)
+    };
+    class PaintOptions final : public pipeline::ImportOptions
+    {
+        RTTI_OBJECT(PaintOptions, pipeline::ImportOptions)
+    public:
+        bool glossy = false;
+    };
+    // Takes ".paint": one PaintAsset naming its file, with a setting.
+    class PaintImporter final : public pipeline::IFileImporter
+    {
+    public:
+        [[nodiscard]] StringView Label() const override { return u8"Paint"; }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"paint"); }
+        [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override { return MakeRef<PaintOptions>(allocator); }
+        [[nodiscard]] Result<content::Instance*> Import(StringView path, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions*,
+                                                        Object*, Array<pipeline::DeferredImportWrite>*) override
+        {
+            content::Instance* made = group.CreateInstance(pipeline::FileStemOf(pipeline::FileNameOf(path)), PaintAsset::StaticType());
+            PaintAsset asset;
+            asset.fileName = foundation::vfs::SourcePath(pipeline::FileNameOf(path));
+            if (made == nullptr || !made->WriteObject(asset).IsOk())
+                return Err(ErrorCode::InvalidArgument);
+            return made;
+        }
+    };
+
     struct Bed
     {
         UniquePtr<editor::EditorProject> project;
@@ -124,11 +156,14 @@ namespace
             project = editor::EditorProject::Open(DefaultAllocator(), u8"asset_import_project");
             REQUIRE(project);
             GlobalTypeRegistry().Register(ImportedThing::StaticType());
+            GlobalTypeRegistry().Register(PaintAsset::StaticType());
+            RegisterSerializable<PaintAsset>();
             context.SetProject(project.Get());
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<CrateImporter>(u8"Paint"), DefaultAllocator()));
             if (second)
                 context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<CrateImporter>(u8"Varnish"), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<ScriptImporter>(), DefaultAllocator()));
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<PaintImporter>(), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"sheet", u8"SheetThing"), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"thing", u8"ImportedThing"), DefaultAllocator()));
             top = project->SourceDb().RootGroup();
@@ -147,6 +182,11 @@ namespace
 }
 
 RTTI_DEFINE_OBJECT(ImportedThing, "rtti::tests::assetimport")
+RTTI_DEFINE_OBJECT(PaintAsset, "rtti::tests::assetimport")
+REFLECT_MEMBERS(PaintOptions, "rtti::tests::assetimport")
+{
+    builder.Property<&PaintOptions::glossy>("glossy").PropAttribute("displayName", String(u8"Glossy"));
+}
 
 TEST_CASE("asset import: a file nothing takes is left out; each file described; the commit makes what is kept, named as chosen")
 {
@@ -233,4 +273,35 @@ TEST_CASE("asset import: a name another asset holds waits: another type for a re
     CHECK(why.AsView().ContainsIgnoreCase(u8"replace it, or keep both"));
     same->files[0].onConflict = pipeline::ImportConflictChoice::KeepBoth;
     CHECK(AssetImport::CanImport(*same, why));
+}
+
+TEST_CASE("asset import: an import records its settings with its asset; a reimport takes the asset's file, its group and those settings")
+{
+    Bed bed;
+    const String file = PathJoin(bed.project->SourcesRoot().AsView(), u8"wall.paint");
+    const char8_t text[] = u8"paint";
+    REQUIRE(WriteFile(file.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text), sizeof(text))).IsOk());
+    const String paths[] = {file};
+    RefPtr<AssetImport::Session> session = bed.import->Begin(Span<const String>(paths, 1u), *bed.top);
+    REQUIRE(session);
+    static_cast<PaintOptions*>(session->files[0].options.Get())->glossy = true;
+    REQUIRE(bed.import->Commit(*session));
+    content::Instance* wall = bed.top->GetInstance(u8"wall");
+    REQUIRE(wall != nullptr);
+    CHECK(pipeline::RecordedImportSettings(*wall) == StringView(u8"glossy=true\n"));
+
+    // Reimported: the same file into the same group, glossy as before.
+    String why;
+    RefPtr<AssetImport::Session> again = bed.import->BeginReimport(wall->Id(), why);
+    REQUIRE(again);
+    REQUIRE(again->files.Size() == 1u);
+    CHECK(again->files[0].path == file);
+    CHECK(again->group == bed.top);
+    CHECK(static_cast<PaintOptions*>(again->files[0].options.Get())->glossy);
+
+    // An asset made from no file of its own cannot be: it says so.
+    content::Instance* loose = bed.top->CreateInstance(u8"Loose", ImportedThing::StaticType());
+    REQUIRE(loose != nullptr);
+    CHECK_FALSE(bed.import->BeginReimport(loose->Id(), why));
+    CHECK(why.AsView().Contains(u8"was not imported from a file of its own"));
 }

@@ -13,6 +13,24 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-11-02 (user, after profiling the import preview): a time budget for GPU mesh uploads
+
+The renderer puts a mesh on the GPU the first time it draws it, on the main thread inside the frame
+(`GpuMeshCache::GetOrUpload`, `Foundation/Render/GpuMesh.cppm:65`, called from the mesh renderer's
+resolves). A model shown for the first time uploads every mesh in one frame: profiled on BistroInterior
+in a Debug editor (1,186 meshes, about a million triangles), one frame of 2,668 ms, 2,390 ms of it in
+`shadow.resolve` (the shadow pass draws the new model first); every other frame's `shadow.resolve` is
+at most 20 ms. Any scene or model shown for the first time pays it, not only the import preview.
+
+Decided (user): a time budget per frame. The cache uploads at least one mesh a frame and, past the
+budget, returns null for the rest, which draw a frame or two later (every caller already skips a null
+mesh); `MeshRenderer::PrepareFrame` starts each frame's budget. Open when picked up: the default
+budget (4 ms was the lean, configurable). Watch the one-shot captures: the model viewer's
+`ThumbnailRenderer` stages a model, waits two frames and captures one render, so a big model would be
+captured missing meshes; the cache should count the meshes it deferred last frame and such a capture
+wait until that is zero (the editor's `viewport_screenshot` of a just-spawned model likewise). With a
+test that a mesh over budget draws a frame later.
+
 ## Queued 2026-11-02 (user, an outside suggestion): a constant-time IsA by class ranges
 
 To discuss: replacing the chain walk behind `IsA`/`Cast` with a range test. Number the classes in

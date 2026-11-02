@@ -108,6 +108,16 @@ namespace editor
         RefPtr<gui::Node> pictureView;
         UniquePtr<app::ImagePreview> picture;
         gui::Node* bar = nullptr;
+        // The file's import settings, and each mesh's own materials while the import leaves them out
+        // (it draws the default then).
+        const pipeline::ImportOptions* options = nullptr;
+        struct Kept
+        {
+            scene::EntityHandle entity;
+            Array<foundation::resource::Ref<foundation::materials::Material>> materials;
+        };
+        Array<Kept> keptMaterials;
+        bool defaultMaterial = false;
 
         Impl(IAllocator& alloc, ModelFilePreview& preview, StringView file)
             : allocator(&alloc), owner(&preview), path(file), open(alloc), facts(alloc), clipNames(alloc), bonePoses(alloc)
@@ -333,6 +343,7 @@ namespace editor
             message->SetDisplayed(false);
             Place();
             ShowClips();
+            ShowAsImported();
             if (showsPart)
                 ApplyPart();
             if (owner->onChanged)
@@ -384,6 +395,38 @@ namespace editor
             camera.nearZ = Max(radius * 0.05f, 0.0001f);
             camera.farZ = Max(radius * 100.0f, 50.0f);
             viewport->Frame(center, radius);
+        }
+
+        // Draws the model as the import will make it: with the default material while its materials
+        // are left out (the Materials row unticked), its own again when they are not.
+        void ShowAsImported()
+        {
+            const auto* model = Cast<pipeline::ModelImportOptions>(options);
+            const bool leftOut = model != nullptr && !model->importMaterials;
+            if (leftOut == defaultMaterial)
+                return;
+            scene::Scene* level = viewport ? viewport->Scene() : nullptr;
+            auto* meshes = level != nullptr ? level->GetSystem<engine::render::MeshComponentManager>() : nullptr;
+            defaultMaterial = leftOut;
+            if (meshes == nullptr || !instance.root.IsAssigned())
+                return;
+            if (leftOut)
+            {
+                keptMaterials.Clear();
+                meshes->ForEach([&](engine::render::MeshComponent& component, scene::EntityHandle entity)
+                                {
+                                    if (!Under(*level, entity, instance.root))
+                                        return;
+                                    keptMaterials.PushBack(Kept{entity, component.materials});
+                                    component.materials.Clear(); // no material: the renderer's default
+                                    component.materialCache.Clear();
+                                });
+                return;
+            }
+            for (Kept& kept : keptMaterials)
+                if (engine::render::MeshComponent* component = meshes->Get(kept.entity))
+                    component->materials = Move(kept.materials);
+            keptMaterials.Clear();
         }
 
         // The model as read (the importer's, or the preview's own read), or null when neither is here
@@ -597,9 +640,10 @@ namespace editor
     };
 
     ModelFilePreview::ModelFilePreview(StringView path, StringView cacheRoot, TaskPool& tasks, IAllocator& allocator, const app::AssetPageServices& services,
-                                       Object* prepared)
+                                       Object* prepared, const pipeline::ImportOptions* options)
     {
         m_impl = MakeUnique<Impl>(allocator, allocator, *this, path);
+        m_impl->options = options;
         Provide<app::IImportPreviewFrames>(*this);
         Provide<IImportPartPreview>(*this);
         m_impl->BuildView(services);
@@ -698,6 +742,16 @@ namespace editor
         return m_impl->open.IsLoading();
     }
 
+    void ModelFilePreview::OnSettingsChanged()
+    {
+        m_impl->ShowAsImported();
+    }
+
+    bool ModelFilePreview::DrawsDefaultMaterial() const
+    {
+        return m_impl->defaultMaterial;
+    }
+
     bool ModelFilePreview::ShowsPicture() const
     {
         return m_impl->pictureView && m_impl->pictureView->IsDisplayed();
@@ -726,7 +780,7 @@ namespace editor
             return {};
         const String cacheRoot = PathJoin(m_context->Project()->CacheRoot().AsView(), StringView(kModelPreviewCacheFolder));
         const app::AssetPageServices services = m_services->Make();
-        return UniquePtr<IImportPreview>(allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), tasks, allocator, services, file.prepared), allocator);
+        return UniquePtr<IImportPreview>(allocator.New<ModelFilePreview>(file.path, cacheRoot.AsView(), tasks, allocator, services, file.prepared, file.options), allocator);
     }
 
     void RegisterModelFilePreview(EditorContext& context, const app::AssetPageServicesSource& services)

@@ -157,3 +157,32 @@ TEST_CASE("model file preview: a texture part shows its picture in place of the 
     }
     (void)RemoveDirectoryRecursive(cache.AsView());
 }
+
+TEST_CASE("model file preview: with its materials left out of the import it draws the default material, and its own again when they are back")
+{
+    const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_default_material");
+    (void)RemoveDirectoryRecursive(cache.AsView());
+    TaskPool tasks(DefaultAllocator(), 1u);
+    const editor::app::AssetPageServices services{};
+    const String fox = Fox();
+    pipeline::ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
+    RefPtr<pipeline::ImportOptions> options = importer.CreateOptions(DefaultAllocator());
+    auto* model = Cast<pipeline::ModelImportOptions>(options.Get());
+    REQUIRE(model != nullptr);
+    model->importMaterials = false;
+    {
+        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, prepared.Get(), options.Get());
+        tasks.Finish();
+        preview.FinishLoading();
+        REQUIRE(preview.IsOpen());
+        CHECK(preview.DrawsDefaultMaterial()); // as it will import: no materials
+        model->importMaterials = true;
+        preview.OnSettingsChanged();
+        CHECK_FALSE(preview.DrawsDefaultMaterial());
+        model->importMaterials = false;
+        preview.OnSettingsChanged();
+        CHECK(preview.DrawsDefaultMaterial());
+    }
+    (void)RemoveDirectoryRecursive(cache.AsView());
+}

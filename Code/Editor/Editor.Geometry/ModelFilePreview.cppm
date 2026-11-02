@@ -39,9 +39,10 @@ export namespace editor
         /// Opens `path` with its cooked files under `cacheRoot`: bound at once when opened before,
         /// else cooked on `tasks` from `prepared` (the importer's read, a pipeline::LoadedModel,
         /// held by the task while it cooks), else read and cooked there. `services` give the host
-        /// and GUI the view needs (none: no view).
+        /// and GUI the view needs (none: no view). `options` (the file's import settings, which
+        /// outlive this) say what the import leaves out: materials left out draw the default.
         ModelFilePreview(StringView path, StringView cacheRoot, TaskPool& tasks, IAllocator& allocator, const app::AssetPageServices& services,
-                         Object* prepared = nullptr);
+                         Object* prepared = nullptr, const pipeline::ImportOptions* options = nullptr);
         ModelFilePreview(const ModelFilePreview&) = delete;
         ModelFilePreview& operator=(const ModelFilePreview&) = delete;
         ~ModelFilePreview() override;
@@ -50,6 +51,9 @@ export namespace editor
         [[nodiscard]] Span<const String> Facts() const override;
         /// Stops the cook, which reads the importer's model, and waits for it.
         void StopReading() override;
+        /// The file's settings changed: the model drawn as it will import (materials left out draw
+        /// the default material).
+        void OnSettingsChanged() override;
 
         /// A part alone: a mesh by itself, a material on a sphere, the skeleton's bones over the
         /// model, a clip playing on it, a texture's picture in place of the model. False for a
@@ -69,6 +73,8 @@ export namespace editor
         [[nodiscard]] bool IsLoading() const;
         /// Whether a texture's picture shows in place of the model.
         [[nodiscard]] bool ShowsPicture() const;
+        /// Whether the model draws the default material, its own being left out of the import.
+        [[nodiscard]] bool DrawsDefaultMaterial() const;
         /// Runs its pool and its loading to the end, as frames would, without a host.
         void FinishLoading();
         /// The clips the picker lists, by name.

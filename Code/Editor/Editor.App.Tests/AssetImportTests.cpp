@@ -142,6 +142,34 @@ namespace
         }
     };
 
+    // Takes ".kit": a body, and a lid when its setting says so (a plan that follows a setting).
+    class KitOptions final : public pipeline::ImportOptions
+    {
+        RTTI_OBJECT(KitOptions, pipeline::ImportOptions)
+    public:
+        bool withLid = false;
+    };
+    class KitImporter final : public pipeline::IFileImporter
+    {
+    public:
+        [[nodiscard]] StringView Label() const override { return u8"Kit"; }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"kit"); }
+        [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override { return MakeRef<KitOptions>(allocator); }
+        [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView, const pipeline::ImportOptions* options, Object*) override
+        {
+            pipeline::ImportPlan plan;
+            plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Mesh, String(u8"Body"), String(u8"Body"), true});
+            if (const auto* kit = Cast<KitOptions>(options); kit != nullptr && kit->withLid)
+                plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Mesh, String(u8"Lid"), String(u8"Lid"), true});
+            return plan;
+        }
+        [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group&, const pipeline::ImportOptions*, Object*,
+                                                        Array<pipeline::DeferredImportWrite>*) override
+        {
+            return Err(ErrorCode::NotSupported);
+        }
+    };
+
     struct Bed
     {
         UniquePtr<editor::EditorProject> project;
@@ -164,6 +192,7 @@ namespace
                 context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<CrateImporter>(u8"Varnish"), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<ScriptImporter>(), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<PaintImporter>(), DefaultAllocator()));
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<KitImporter>(), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"sheet", u8"SheetThing"), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"thing", u8"ImportedThing"), DefaultAllocator()));
             top = project->SourceDb().RootGroup();
@@ -183,6 +212,10 @@ namespace
 
 RTTI_DEFINE_OBJECT(ImportedThing, "rtti::tests::assetimport")
 RTTI_DEFINE_OBJECT(PaintAsset, "rtti::tests::assetimport")
+REFLECT_MEMBERS(KitOptions, "rtti::tests::assetimport")
+{
+    builder.Property<&KitOptions::withLid>("withLid").PropAttribute("displayName", String(u8"With lid"));
+}
 REFLECT_MEMBERS(PaintOptions, "rtti::tests::assetimport")
 {
     builder.Property<&PaintOptions::glossy>("glossy").PropAttribute("displayName", String(u8"Glossy"));
@@ -304,4 +337,20 @@ TEST_CASE("asset import: an import records its settings with its asset; a reimpo
     REQUIRE(loose != nullptr);
     CHECK_FALSE(bed.import->BeginReimport(loose->Id(), why));
     CHECK(why.AsView().Contains(u8"was not imported from a file of its own"));
+}
+
+TEST_CASE("asset import: a changed setting describes the file again, keeping the choices made on its plan")
+{
+    Bed bed;
+    const String paths[] = {String(u8"/somewhere/box.kit")};
+    RefPtr<AssetImport::Session> session = bed.import->Begin(Span<const String>(paths, 1u), *bed.top);
+    REQUIRE(session);
+    AssetImport::File& file = session->files[0];
+    REQUIRE(file.plan.entries.Size() == 1u);
+    file.plan.entries[0].targetName = String(u8"Hull"); // renamed in the window
+    static_cast<KitOptions*>(file.options.Get())->withLid = true;
+    bed.import->RefreshPlan(*session, 0);
+    REQUIRE(file.plan.entries.Size() == 2u); // the lid now
+    CHECK(file.plan.entries[0].targetName == StringView(u8"Hull")); // the rename kept
+    CHECK(file.plan.entries[1].sourceName == StringView(u8"Lid"));
 }

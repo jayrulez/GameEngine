@@ -198,6 +198,22 @@ export namespace editor::app
             return file.Importer()->FindClash(*session.group, file.path.AsView(), file.plan, session.ledgerPath.AsView());
         }
 
+        /// Describes file `index` again with its settings as they are now (one changed: a model
+        /// without textures makes none), keeping what was read and the choices made on its plan.
+        void RefreshPlan(Session& session, usize index)
+        {
+            if (index >= session.files.Size())
+                return;
+            File& file = session.files[index];
+            pipeline::IFileImporter* importer = file.Importer();
+            if (importer == nullptr || file.state != File::State::Ready || session.group == nullptr)
+                return;
+            pipeline::ImportPlan fresh = importer->DescribeImport(file.path.AsView(), file.options.Get(), file.prepared.Get());
+            pipeline::MergeStoredSelection(fresh, importer->StoredSelection(*session.group, file.path.AsView()));
+            pipeline::MergeStoredSelection(fresh, file.plan); // what was chosen here wins
+            file.plan = Move(fresh);
+        }
+
         /// Chooses another importer for a file: its options start fresh and it is described again.
         void SetImporter(Session& session, usize file, usize importer)
         {

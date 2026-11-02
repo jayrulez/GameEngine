@@ -500,10 +500,16 @@ export namespace editor::app
                                             if (setting != nullptr && changed.Importer() != nullptr)
                                             {
                                                 changed.Importer()->SettingChanged(*changed.options, *setting);
-                                                self->Later([self]()
+                                                // What the file makes, described again with the
+                                                // change, and its settings shown again with what
+                                                // followed; not inside the grid's own edit.
+                                                self->Later([self, index]()
                                                             {
-                                                                if (self->m_settings)
-                                                                    self->m_settings->Refresh(); // not inside the grid's own edit
+                                                                if (!self->m_session || index != self->m_selected || index >= self->m_session->files.Size())
+                                                                    return;
+                                                                self->m_services.import->RefreshPlan(*self->m_session, index);
+                                                                self->ShowDetail();
+                                                                self->ShowWhy();
                                                             });
                                             }
                                             if (self->m_preview)

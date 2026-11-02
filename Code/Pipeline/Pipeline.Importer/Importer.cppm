@@ -149,10 +149,6 @@ export namespace pipeline
         }
     }
 
-    /// Importer-specific options, shown by the import dialog before the import runs. The
-    /// dialog renders one checkbox per Toggle (each points into the options object), a
-    /// declarative description with no reflection required. Subclasses add their fields and
-    /// return the toggle list; the base is empty (no options, no dialog).
     /// What a setting will do to the file being imported, or why it cannot apply (IFileImporter::
     /// DescribeSetting). Both empty: nothing to say.
     struct ImportSettingNote
@@ -161,6 +157,9 @@ export namespace pipeline
         String reason; ///< why it cannot apply, shown beside it disabled ("It is mono already")
     };
 
+    /// An importer's options for one import, shown in the import window before it runs: its
+    /// settings (a subclass's reflected properties, Settings) and the plan's per-resource choices
+    /// (selection). The base has no settings.
     class ImportOptions : public ISerializable
     {
         RTTI_OBJECT(ImportOptions, ISerializable)

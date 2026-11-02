@@ -15,7 +15,7 @@ export module modelviewer:commands;
 
 import foundation.core;
 import foundation.json;
-import :library;
+import editor.modelpreview;
 import :store;
 import :search;
 import :shortlist;
@@ -293,7 +293,7 @@ export namespace modelviewer
             JsonValue v = JsonValue::MakeObject();
             v.Set(String(u8"id"), IdJson(e.id));
             v.Set(String(u8"path"), JsonValue::MakeString(e.path));
-            v.Set(String(u8"file"), JsonValue::MakeString(FileTitle(e.path.AsView())));
+            v.Set(String(u8"file"), JsonValue::MakeString(editor::FileTitle(e.path.AsView())));
             JsonValue tags = JsonValue::MakeArray();
             for (const String& t : e.tags)
                 tags.Add(JsonValue::MakeString(t));

@@ -17,8 +17,7 @@ export module modelviewer:tabs;
 import foundation.core;
 import foundation.rhi;
 import engine.model;
-import :library;
-import :playback;
+import editor.modelpreview;
 import :loads;
 
 using namespace foundation::core;
@@ -40,10 +39,10 @@ export namespace modelviewer
     {
         String path;
         String title; // the file's name
-        UniquePtr<OpenModel> open;
+        UniquePtr<editor::OpenModel> open;
         bool ready = false;                    // its model is bound (false while its file is read)
         engine::model::ModelInstance instance; // what the window placed in the scene for it
-        UniquePtr<ClipPlayback> playback;      // the animation bar's state for that instance
+        UniquePtr<editor::ClipPlayback> playback;      // the animation bar's state for that instance
         Float3 center{};                       // the bounds as placed, measured by the window
         f32 radius = 1.0f;
         Float3 size{};                         // the bounds' extent, upright and scaled (the panel's Size row)
@@ -60,7 +59,7 @@ export namespace modelviewer
             i32 index = -1;     // the model's tab, -1 when it did not open
             bool added = false; // a new tab was added (false: it was open already)
             bool needsFile = false; // the tab was added before its model is ready: read the file, then call Finish
-            OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
+            editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
         };
 
         /// Like Open, but without reading the file. A model cooked before is bound and its tab is
@@ -73,19 +72,19 @@ export namespace modelviewer
             {
                 m_active = existing;
                 result.index = existing;
-                result.outcome = OpenModel::Outcome::FromCache;
+                result.outcome = editor::OpenModel::Outcome::FromCache;
                 return result;
             }
-            UniquePtr<OpenModel> open = MakeUnique<OpenModel>(*m_allocator, *m_allocator);
+            UniquePtr<editor::OpenModel> open = MakeUnique<editor::OpenModel>(*m_allocator, *m_allocator);
             open->SetLooseTextures(looseTextures);
-            const OpenModel::Begun begun = open->Begin(path, cacheRoot, device, result.outcome);
-            if (begun == OpenModel::Begun::Failed)
+            const editor::OpenModel::Begun begun = open->Begin(path, cacheRoot, device, result.outcome);
+            if (begun == editor::OpenModel::Begun::Failed)
                 return result;
             ModelTab tab;
             tab.path = String(path);
-            tab.title = FileTitle(path);
+            tab.title = editor::FileTitle(path);
             tab.open = foundation::core::Move(open);
-            tab.ready = begun == OpenModel::Begun::Bound;
+            tab.ready = begun == editor::OpenModel::Begun::Bound;
             m_tabs.PushBack(foundation::core::Move(tab));
             m_active = static_cast<i32>(m_tabs.Size()) - 1;
             result.index = m_active;
@@ -95,23 +94,23 @@ export namespace modelviewer
         }
 
         /// Completes the open of a tab that Begin left waiting, using `read` (from FileLoads or
-        /// OpenModel::LoadFile). On Opened the tab is ready; on any other outcome the tab is left
+        /// editor::OpenModel::LoadFile). On Opened the tab is ready; on any other outcome the tab is left
         /// for the caller to close.
-        OpenModel::Outcome Finish(i32 index, FileRead& read)
+        editor::OpenModel::Outcome Finish(i32 index, FileRead& read)
         {
             if (!Valid(index))
-                return OpenModel::Outcome::NotFound;
+                return editor::OpenModel::Outcome::NotFound;
             ModelTab& tab = m_tabs[static_cast<usize>(index)];
-            if (read.outcome != OpenModel::Outcome::Opened)
+            if (read.outcome != editor::OpenModel::Outcome::Opened)
                 return read.outcome;
-            const OpenModel::Outcome outcome = tab.open->Finish(read.model, read.stats);
-            tab.ready = outcome == OpenModel::Outcome::Opened;
+            const editor::OpenModel::Outcome outcome = tab.open->Finish(read.model, read.stats);
+            tab.ready = outcome == editor::OpenModel::Outcome::Opened;
             return outcome;
         }
 
         /// Opens `path` into a new tab at the end and brings it to the front; a file that is already
         /// open has its tab brought to the front instead. A file that fails to open adds no tab.
-        /// `looseTextures` is passed to OpenModel::SetLooseTextures.
+        /// `looseTextures` is passed to editor::OpenModel::SetLooseTextures.
         Opened Open(StringView path, StringView cacheRoot, foundation::rhi::Device* device, bool looseTextures = true)
         {
             const i32 before = m_active;
@@ -119,10 +118,10 @@ export namespace modelviewer
             if (!result.needsFile)
                 return result;
             FileRead read;
-            read.outcome = OpenModel::LoadFile(path, looseTextures, read.model, read.stats);
+            read.outcome = editor::OpenModel::LoadFile(path, looseTextures, read.model, read.stats);
             result.outcome = Finish(result.index, read);
             result.needsFile = false;
-            if (result.outcome != OpenModel::Outcome::Opened)
+            if (result.outcome != editor::OpenModel::Outcome::Opened)
             {
                 (void)Close(result.index);
                 m_active = Valid(before) ? before : m_active; // a file that fails to open adds no tab
@@ -218,7 +217,7 @@ export namespace modelviewer
     }
 
     /// The side panel's rows for a model's stats, in display order.
-    [[nodiscard]] inline Array<StatRow> StatRows(const ModelStats& stats)
+    [[nodiscard]] inline Array<StatRow> StatRows(const editor::ModelStats& stats)
     {
         Array<StatRow> rows;
         auto row = [&](StringView label, String value) { rows.PushBack(StatRow{String(label), foundation::core::Move(value)}); };

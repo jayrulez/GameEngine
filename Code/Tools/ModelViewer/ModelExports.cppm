@@ -19,7 +19,7 @@ export module modelviewer:exports;
 import foundation.core;
 import foundation.json;
 import foundation.model;
-import :library;
+import editor.modelpreview;
 import :store;
 import :commands;
 
@@ -162,12 +162,12 @@ export namespace modelviewer
             c.source = String(source);
             const bool under = !folder.IsEmpty() && source.Size() > folder.Size() + 1 && source.StartsWith(folder) &&
                                (source[folder.Size()] == u8'/' || source[folder.Size()] == u8'\\');
-            c.relative = under ? String(source.SubStr(folder.Size() + 1, source.Size() - folder.Size() - 1)) : FileTitle(source);
+            c.relative = under ? String(source.SubStr(folder.Size() + 1, source.Size() - folder.Size() - 1)) : editor::FileTitle(source);
             out.PushBack(foundation::core::Move(c));
         };
         foundation::model::Model model;
-        ModelStats stats;
-        if (OpenModel::LoadFile(modelPath, looseTextures, model, stats) != OpenModel::Outcome::Opened)
+        editor::ModelStats stats;
+        if (editor::OpenModel::LoadFile(modelPath, looseTextures, model, stats) != editor::OpenModel::Outcome::Opened)
             return false;
         // A texture names its file the way the loader recorded it: the file it read (FBX, a DDS),
         // else its uri beside the model (glTF). A data uri is inside the file and is skipped.
@@ -263,7 +263,7 @@ export namespace modelviewer
                 const Entry* e = library.FindEntry(m.entry);
                 if (e == nullptr)
                     continue;
-                const String fileName = m.name.IsEmpty() ? FileTitle(e->path.AsView())
+                const String fileName = m.name.IsEmpty() ? editor::FileTitle(e->path.AsView())
                                                          : Format(u8"{}{}", SafeName(m.name.AsView()).AsView(), Extension(e->path.AsView()));
                 if (!FileExists(e->path.AsView()))
                 {

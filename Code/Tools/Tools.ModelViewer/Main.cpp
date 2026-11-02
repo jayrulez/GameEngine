@@ -21,7 +21,7 @@
 //
 // The window has a Browse tab (a folder tree, filters, and a thumbnail per model, drawn by
 // modelviewer::ThumbnailRenderer), a Library tab (collections, tags, search), and a tab per open
-// model with its side panel, animation bar (modelviewer::ClipPlayback) and skeleton overlay. Every
+// model with its side panel, animation bar (editor::ClipPlayback) and skeleton overlay. Every
 // control runs one of the window's commands (WindowCommandSpecs), the same commands an agent runs
 // over MCP, and the views refresh from the library's change notifications whoever made the change.
 
@@ -789,7 +789,7 @@ namespace
             v.Set(String(u8"skeleton"), Flag(m_showSkeleton));
             return v;
         }
-        [[nodiscard]] JsonValue PlaybackJson(const modelviewer::ClipPlayback& p)
+        [[nodiscard]] JsonValue PlaybackJson(const editor::ClipPlayback& p)
         {
             JsonValue v = JsonValue::MakeObject();
             v.Set(String(u8"clip"), Text(p.ClipName(p.Selected()).AsView()));
@@ -801,7 +801,7 @@ namespace
             return v;
         }
         /// The playback of the front model, or null with `why` set.
-        [[nodiscard]] modelviewer::ClipPlayback* FrontPlayback(String& why)
+        [[nodiscard]] editor::ClipPlayback* FrontPlayback(String& why)
         {
             modelviewer::ModelTab* tab = m_browsing ? nullptr : m_tabs.ActiveTab();
             if (tab == nullptr)
@@ -965,7 +965,7 @@ namespace
             reg(u8"clip.list", [self](const JsonValue&)
                 {
                     String why;
-                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    editor::ClipPlayback* p = self->FrontPlayback(why);
                     if (p == nullptr)
                         return CommandResult::Fail(why.AsView());
                     JsonValue clips = JsonValue::MakeArray();
@@ -978,7 +978,7 @@ namespace
             reg(u8"clip.select", [self](const JsonValue& a)
                 {
                     String why;
-                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    editor::ClipPlayback* p = self->FrontPlayback(why);
                     if (p == nullptr)
                         return CommandResult::Fail(why.AsView());
                     const String name = a.Get(String(u8"clip")).AsString();
@@ -994,7 +994,7 @@ namespace
             reg(u8"clip.play", [self](const JsonValue& a)
                 {
                     String why;
-                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    editor::ClipPlayback* p = self->FrontPlayback(why);
                     if (p == nullptr)
                         return CommandResult::Fail(why.AsView());
                     if (a.Has(String(u8"loop")))
@@ -1009,7 +1009,7 @@ namespace
             reg(u8"clip.scrub", [self](const JsonValue& a)
                 {
                     String why;
-                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    editor::ClipPlayback* p = self->FrontPlayback(why);
                     if (p == nullptr)
                         return CommandResult::Fail(why.AsView());
                     p->SetPlaying(false);
@@ -1120,7 +1120,7 @@ namespace
             WireAnimationBar();
             m_guiHost->SetDropObserver([self](const shell::DroppedFile& file)
                                        {
-                                           if (modelviewer::IsModelFile(file.path.AsView()))
+                                           if (editor::IsModelFile(file.path.AsView()))
                                                self->Run(u8"model.open", Arg(u8"path", Text(file.path.AsView())));
                                        });
         }
@@ -1141,7 +1141,7 @@ namespace
             shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
             if (dialogs == nullptr)
                 return;
-            const shell::FileFilter filters[] = {{u8"Models", modelviewer::kModelExtensions}, {u8"All files", u8"*"}};
+            const shell::FileFilter filters[] = {{u8"Models", editor::kModelExtensions}, {u8"All files", u8"*"}};
             ModelViewerApp* self = this;
             dialogs->ShowOpenFile([self](Span<const String> paths)
                                   {
@@ -1390,7 +1390,7 @@ namespace
                                       const CommandResult result = self->m_library.Commands().Execute(u8"export.csv", a);
                                       if (result.ok)
                                           self->Toast(gui::ToastSeverity::Success,
-                                                      Format(u8"Exported {} rows to {}", result.value.Get(String(u8"rows")).AsInt(), modelviewer::FileTitle(paths[0].AsView()).AsView()).AsView());
+                                                      Format(u8"Exported {} rows to {}", result.value.Get(String(u8"rows")).AsInt(), editor::FileTitle(paths[0].AsView()).AsView()).AsView());
                                       else
                                           self->Toast(gui::ToastSeverity::Error, Format(u8"Not exported: {}", result.error.AsView()).AsView());
                                   },
@@ -1479,13 +1479,13 @@ namespace
         }
 
         // Puts a tab's ready model into the scene and sets up its instance, playback and bounds.
-        void PlaceModel(modelviewer::ModelTab& tab, modelviewer::OpenModel::Outcome outcome)
+        void PlaceModel(modelviewer::ModelTab& tab, editor::OpenModel::Outcome outcome)
         {
             LOG_INFO(u8"ModelViewer", u8"opened {} ({})", tab.path.AsView(), OutcomeText(outcome));
             engine::model::InstantiateOptions options;
             options.animate = !m_rest;
             tab.instance = engine::model::InstantiateModel(*m_viewport->Scene(), *tab.open->Model(), tab.title.AsView(), options);
-            tab.playback = MakeUnique<modelviewer::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
+            tab.playback = MakeUnique<editor::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
             tab.playback->SetLooping(m_settings.value.loop);
             KeepStats(tab.path.AsView(), tab.open->Stats());
             MeasureBounds(tab);
@@ -1501,8 +1501,8 @@ namespace
                 const i32 index = m_tabs.Find(read.path.AsView());
                 if (index < 0 || m_tabs.At(index).ready)
                     continue; // the tab closed during the read, or the file was read twice
-                const modelviewer::OpenModel::Outcome outcome = m_tabs.Finish(index, read);
-                if (outcome != modelviewer::OpenModel::Outcome::Opened)
+                const editor::OpenModel::Outcome outcome = m_tabs.Finish(index, read);
+                if (outcome != editor::OpenModel::Outcome::Opened)
                 {
                     m_failure = Format(u8"{} did not open ({}).", read.path.AsView(), OutcomeText(outcome));
                     LOG_ERROR(u8"ModelViewer", u8"{}", m_failure.AsView());
@@ -1610,7 +1610,7 @@ namespace
                 file->SetText(tab.path.AsView());
             // Show the size as placed in the view (the file's axes turned upright, its node scale
             // applied), not the file's raw box.
-            modelviewer::ModelStats stats = tab.open->Stats();
+            editor::ModelStats stats = tab.open->Stats();
             stats.size = tab.size;
             ShowStatRows(u8"viewer-stats", stats);
             ShowContents(u8"viewer", stats);
@@ -1619,7 +1619,7 @@ namespace
         // Lists a model's materials (how each shades, the textures in its slots) and its textures
         // (size in pixels, and the image's file or "in the file") as rows under `prefix`-materials
         // and `prefix`-textures.
-        void ShowContents(StringView prefix, const modelviewer::ModelStats& stats)
+        void ShowContents(StringView prefix, const editor::ModelStats& stats)
         {
             auto fill = [this](gui::Node* rows, auto&& each, usize count, StringView none)
             {
@@ -1660,19 +1660,19 @@ namespace
             {
                 if (index >= stats.textureList.Size())
                     return String(u8"?");
-                const modelviewer::ModelTextureInfo& t = stats.textureList[index];
+                const editor::ModelTextureInfo& t = stats.textureList[index];
                 return !t.name.IsEmpty() ? t.name : !t.file.IsEmpty() ? t.file : Format(u8"texture {}", index + 1);
             };
             fill(FindById(Format(u8"{}-materials", prefix).AsView()),
                  [&](usize i, String& label, String& value, String& tip)
                  {
-                     const modelviewer::ModelMaterialInfo& m = stats.materialList[i];
+                     const editor::ModelMaterialInfo& m = stats.materialList[i];
                      label = m.name.IsEmpty() ? Format(u8"material {}", i + 1) : m.name;
                      value = m.shading;
                      tip = Format(u8"{}, shaded {}", label.AsView(), m.shading.AsView());
                      if (m.slots.IsEmpty())
                          value += u8", no textures";
-                     for (const modelviewer::ModelMaterialInfo::Slot& slot : m.slots)
+                     for (const editor::ModelMaterialInfo::Slot& slot : m.slots)
                      {
                          value += Format(u8", {}", slot.slot.AsView()).AsView();
                          tip += Format(u8"\n{}: {}", slot.slot.AsView(), textureName(slot.texture).AsView()).AsView();
@@ -1682,7 +1682,7 @@ namespace
             fill(FindById(Format(u8"{}-textures", prefix).AsView()),
                  [&](usize i, String& label, String& value, String& tip)
                  {
-                     const modelviewer::ModelTextureInfo& t = stats.textureList[i];
+                     const editor::ModelTextureInfo& t = stats.textureList[i];
                      label = textureName(static_cast<u32>(i));
                      value = t.width > 0 ? Format(u8"{} x {}", t.width, t.height) : String(u8"size unknown");
                      value += t.file.IsEmpty() ? StringView(u8", in the file") : Format(u8", {}", t.file.AsView()).AsView();
@@ -1693,7 +1693,7 @@ namespace
         }
 
         // Fills the panel `id` names (a model tab's panel or a details pane) with a model's stats.
-        void ShowStatRows(StringView id, const modelviewer::ModelStats& stats)
+        void ShowStatRows(StringView id, const editor::ModelStats& stats)
         {
             gui::Node* rows = FindById(id);
             if (rows == nullptr)
@@ -1753,7 +1753,7 @@ namespace
         void WireAnimationBar()
         {
             ModelViewerApp* self = this;
-            auto playback = [self]() -> modelviewer::ClipPlayback*
+            auto playback = [self]() -> editor::ClipPlayback*
             {
                 String ignored;
                 return self->FrontPlayback(ignored);
@@ -1761,21 +1761,21 @@ namespace
             if (auto* clip = FindAs<gui::ComboBox>(u8"viewer-clip"))
                 clip->SetOnSelectionChanged([self, playback](i32 index)
                                             {
-                                                if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
+                                                if (editor::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
                                                     self->Run(u8"clip.select", Arg(u8"clip", Text(p->ClipName(index).AsView())));
                                             });
             if (auto* play = FindAs<gui::Button>(u8"viewer-play"))
                 play->SetOnClick([self, playback]()
                                  {
-                                     if (modelviewer::ClipPlayback* p = playback())
+                                     if (editor::ClipPlayback* p = playback())
                                          self->Run(u8"clip.play", Arg(u8"playing", Flag(!p->Playing())));
                                  });
             if (auto* stop = FindAs<gui::Button>(u8"viewer-stop"))
                 stop->SetOnClick([self]() { self->Run(u8"clip.scrub", Arg(u8"seconds", Number(0.0))); }); // rewind to the start, paused
             auto step = [self, playback](i32 frames)
             {
-                if (modelviewer::ClipPlayback* p = playback())
-                    self->Run(u8"clip.scrub", Arg(u8"seconds", Number(p->Time() + static_cast<f32>(frames) / modelviewer::ClipPlayback::kStepFps)));
+                if (editor::ClipPlayback* p = playback())
+                    self->Run(u8"clip.scrub", Arg(u8"seconds", Number(p->Time() + static_cast<f32>(frames) / editor::ClipPlayback::kStepFps)));
             };
             if (auto* back = FindAs<gui::Button>(u8"viewer-step-back"))
                 back->SetOnClick([step]() { step(-1); });
@@ -1784,7 +1784,7 @@ namespace
             if (auto* scrub = FindAs<gui::Slider>(u8"viewer-scrub"))
                 scrub->SetOnValueChanging([self, playback](f64 ratio)
                                           {
-                                              if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
+                                              if (editor::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
                                                   self->Run(u8"clip.scrub", Arg(u8"seconds", Number(ratio * p->Duration())));
                                           });
             if (auto* loop = FindAs<gui::CheckBox>(u8"viewer-loop"))
@@ -1807,7 +1807,7 @@ namespace
         void ShowClips(const modelviewer::ModelTab& tab)
         {
             gui::Node* bar = FindById(u8"viewer-anim");
-            const modelviewer::ClipPlayback* playback = tab.playback.Get();
+            const editor::ClipPlayback* playback = tab.playback.Get();
             const bool clips = playback != nullptr && playback->HasClips();
             if (bar != nullptr)
                 bar->SetDisplayed(clips);
@@ -1841,7 +1841,7 @@ namespace
         void ShowPlayback()
         {
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
-            modelviewer::ClipPlayback* playback = tab != nullptr ? tab->playback.Get() : nullptr;
+            editor::ClipPlayback* playback = tab != nullptr ? tab->playback.Get() : nullptr;
             if (playback == nullptr || !playback->HasClips())
                 return;
             const f32 duration = playback->Duration();
@@ -2009,7 +2009,7 @@ namespace
 
         i32 AddFolderNode(i32 parent, StringView path)
         {
-            const String title = modelviewer::FileTitle(path);
+            const String title = editor::FileTitle(path);
             const i32 id = m_folderModel->AddNode(parent, title.IsEmpty() ? path : title.AsView());
             m_folderModel->SetIcon(id, u8"Editor/Icons/folder.svg");
             if (static_cast<usize>(id) >= m_folderNodes.Size())
@@ -2048,7 +2048,7 @@ namespace
             m_folderStatsKnown.Clear();
             for (const String& model : m_folderModels)
             {
-                modelviewer::ModelStats stats;
+                editor::ModelStats stats;
                 const bool known = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model.AsView(), stats, m_settings.value.looseTextures);
                 m_folderStats.PushBack(foundation::core::Move(stats));
                 m_folderStatsKnown.PushBack(known);
@@ -2192,7 +2192,7 @@ namespace
                         return;
                     const modelviewer_window::GridRow& row = grid->rows[static_cast<usize>(index.Row)];
                     modelviewer_window::ModelCell::Shown shown;
-                    shown.name = modelviewer::FileTitle(row.path.AsView());
+                    shown.name = editor::FileTitle(row.path.AsView());
                     shown.sub = row.sub;
                     shown.inLibrary = row.inLibrary && grid == &self->m_browseGrid; // every model in the library grid is in the library, so no mark
                     shown.missing = row.missing;
@@ -2231,7 +2231,7 @@ namespace
                                                return;
                                            payload.Type = String(kModelsDrag);
                                            payload.Value = Variant::From<String>(paths);
-                                           payload.Label = count == 1 ? modelviewer::FileTitle(paths.AsView()) : Format(u8"{} models", count);
+                                           payload.Label = count == 1 ? editor::FileTitle(paths.AsView()) : Format(u8"{} models", count);
                                        });
                 const bool library = which == 1;
                 (void)list->AddEventListener(gui::EventType::ContextMenu, [self, list, grid, library](const gui::Event& e)
@@ -2886,7 +2886,7 @@ namespace
             shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
             if (dialogs == nullptr)
                 return;
-            const shell::FileFilter filters[] = {{u8"Models", modelviewer::kModelExtensions}};
+            const shell::FileFilter filters[] = {{u8"Models", editor::kModelExtensions}};
             ModelViewerApp* self = this;
             const String id = Format(u8"{}", entry);
             dialogs->ShowOpenFile([self, id](Span<const String> paths)
@@ -2947,10 +2947,10 @@ namespace
             const String& path = chosen[0];
             if (auto* file = FindAs<gui::Label>(Format(u8"{}-file", prefix).AsView()))
             {
-                file->SetText(modelviewer::FileTitle(path.AsView()).AsView());
+                file->SetText(editor::FileTitle(path.AsView()).AsView());
                 file->SetTooltip(path.AsView());
             }
-            modelviewer::ModelStats stats;
+            editor::ModelStats stats;
             if (modelviewer::ReadCachedStats(m_cacheRoot.AsView(), path.AsView(), stats, m_settings.value.looseTextures))
             {
                 ShowStatRows(Format(u8"{}-stats", prefix).AsView(), stats);
@@ -2965,7 +2965,7 @@ namespace
                 note->SetText(FileExists(path.AsView()) ? StringView(u8"Its numbers come once its picture is drawn.")
                                                         : StringView(u8"Its file is not there."));
                 rows->AddChild(note.Get());
-                ShowContents(prefix, modelviewer::ModelStats{}); // nothing known yet
+                ShowContents(prefix, editor::ModelStats{}); // nothing known yet
             }
             ShowLibrarySection(prefix, path.AsView());
         }
@@ -3073,7 +3073,7 @@ namespace
         }
 
         /// Stores the stats a cook counted on the model's entry, when it has one, for search.
-        void KeepStats(StringView path, const modelviewer::ModelStats& stats)
+        void KeepStats(StringView path, const editor::ModelStats& stats)
         {
             const modelviewer::Entry* e = m_library.Get().FindEntryByPath(path);
             if (e == nullptr || m_library.ReadOnly())
@@ -3162,7 +3162,7 @@ namespace
             for (const String& model : m_settings.value.recentModels)
             {
                 const String path = model;
-                gui::MenuItem* item = m_recentMenu->AddItem(modelviewer::FileTitle(path.AsView()).AsView(),
+                gui::MenuItem* item = m_recentMenu->AddItem(editor::FileTitle(path.AsView()).AsView(),
                                                             [self, path]() { self->Run(u8"model.open", Arg(u8"path", Text(path.AsView()))); });
                 item->SetTooltip(path.AsView());
             }
@@ -3237,16 +3237,16 @@ namespace
             return Format(u8"{} MB", FormatFixed(static_cast<f64>(bytes) / (1024.0 * 1024.0), 1).AsView());
         }
 
-        [[nodiscard]] static StringView OutcomeText(modelviewer::OpenModel::Outcome outcome)
+        [[nodiscard]] static StringView OutcomeText(editor::OpenModel::Outcome outcome)
         {
             switch (outcome)
             {
-            case modelviewer::OpenModel::Outcome::Opened: return u8"cooked";
-            case modelviewer::OpenModel::Outcome::FromCache: return u8"from the cache";
-            case modelviewer::OpenModel::Outcome::NotFound: return u8"the file is not there";
-            case modelviewer::OpenModel::Outcome::LoadFailed: return u8"the file could not be read";
-            case modelviewer::OpenModel::Outcome::CookFailed: return u8"it did not cook";
-            case modelviewer::OpenModel::Outcome::BindFailed: return u8"it did not load";
+            case editor::OpenModel::Outcome::Opened: return u8"cooked";
+            case editor::OpenModel::Outcome::FromCache: return u8"from the cache";
+            case editor::OpenModel::Outcome::NotFound: return u8"the file is not there";
+            case editor::OpenModel::Outcome::LoadFailed: return u8"the file could not be read";
+            case editor::OpenModel::Outcome::CookFailed: return u8"it did not cook";
+            case editor::OpenModel::Outcome::BindFailed: return u8"it did not load";
             }
             return u8"";
         }
@@ -3456,7 +3456,7 @@ namespace
         UniquePtr<gui::TreeModel> m_folderModel;
         Array<FolderNode> m_folderNodes; // by the tree model's node id
         Array<String> m_folderModels;     // every model under the chosen folder
-        Array<modelviewer::ModelStats> m_folderStats;
+        Array<editor::ModelStats> m_folderStats;
         Array<bool> m_folderStatsKnown;
         modelviewer::BrowseFilter m_filter;
         Array<ThumbImage> m_thumbImages;

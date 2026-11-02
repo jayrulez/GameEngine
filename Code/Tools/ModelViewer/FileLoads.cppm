@@ -4,7 +4,7 @@
 // ModelViewer - `modelviewer:loads`: model files read on a worker thread. Reading the file is
 // most of the cost of opening a model (a large FBX can take a tenth of a second or more, while the
 // cook and bind after it take a few milliseconds), so the window requests the read here and keeps
-// drawing. The main thread takes each finished read and completes the open (OpenModel::Finish),
+// drawing. The main thread takes each finished read and completes the open (editor::OpenModel::Finish),
 // since the content database and the resources belong to it. Requests are read in order, and a
 // path requested again while still queued is read once. Cancel drops the queue; a read already
 // under way runs to completion and is then discarded, so nothing cancelled is handed over.
@@ -16,7 +16,7 @@ export module modelviewer:loads;
 
 import foundation.core;
 import foundation.model;
-import :library;
+import editor.modelpreview;
 
 using namespace foundation::core;
 
@@ -28,9 +28,9 @@ export namespace modelviewer
     {
         String path;
         bool looseTextures = true;
-        OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
+        editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
         foundation::model::Model model;
-        ModelStats stats;
+        editor::ModelStats stats;
     };
 
     class FileLoads
@@ -133,7 +133,7 @@ export namespace modelviewer
                 FileRead read;
                 read.path = next.path;
                 read.looseTextures = next.looseTextures;
-                read.outcome = OpenModel::LoadFile(next.path.AsView(), next.looseTextures, read.model, read.stats);
+                read.outcome = editor::OpenModel::LoadFile(next.path.AsView(), next.looseTextures, read.model, read.stats);
                 ScopedLock lock(m_mutex);
                 m_reading = false;
                 m_readingPath = {};

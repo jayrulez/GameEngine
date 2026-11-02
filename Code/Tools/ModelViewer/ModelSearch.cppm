@@ -14,7 +14,7 @@ module;
 export module modelviewer:search;
 
 import foundation.core;
-import :library;
+import editor.modelpreview;
 import :store;
 
 using namespace foundation::core;
@@ -73,7 +73,7 @@ export namespace modelviewer
     {
         [[nodiscard]] inline bool WordMatches(const Library& library, const Entry& e, StringView word)
         {
-            if (FileTitle(e.path.AsView()).AsView().ContainsIgnoreCase(word) || e.note.AsView().ContainsIgnoreCase(word))
+            if (editor::FileTitle(e.path.AsView()).AsView().ContainsIgnoreCase(word) || e.note.AsView().ContainsIgnoreCase(word))
                 return true;
             for (const String& tag : e.tags)
                 if (tag.AsView().ContainsIgnoreCase(word))

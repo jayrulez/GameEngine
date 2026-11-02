@@ -77,7 +77,7 @@ export namespace modelviewer
                 m_queue.PushBack(model);
             m_next = 0;
         }
-        /// Whether models open with loose textures (OpenModel::SetLooseTextures), matching the viewer's tabs.
+        /// Whether models open with loose textures (editor::OpenModel::SetLooseTextures), matching the viewer's tabs.
         void SetLooseTextures(bool on) noexcept { m_looseTextures = on; }
 
         /// Draws `model` next, ahead of the queue (for an agent asking for its thumbnail).
@@ -113,7 +113,7 @@ export namespace modelviewer
                 while (m_state == State::Reading && m_loads.Take(read))
                     if (read.path == m_model)
                     {
-                        if (read.outcome == OpenModel::Outcome::Opened && m_open->Finish(read.model, read.stats) == OpenModel::Outcome::Opened)
+                        if (read.outcome == editor::OpenModel::Outcome::Opened && m_open->Finish(read.model, read.stats) == editor::OpenModel::Outcome::Opened)
                             Stage();
                         else
                         {
@@ -220,17 +220,17 @@ export namespace modelviewer
                 Finish({});
                 return;
             }
-            m_open = MakeUnique<OpenModel>(*m_allocator, *m_allocator);
+            m_open = MakeUnique<editor::OpenModel>(*m_allocator, *m_allocator);
             m_open->SetLooseTextures(m_looseTextures);
-            OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
-            const OpenModel::Begun begun = m_open->Begin(model, m_cacheRoot.AsView(), m_device, outcome);
-            if (begun == OpenModel::Begun::NeedsFile)
+            editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
+            const editor::OpenModel::Begun begun = m_open->Begin(model, m_cacheRoot.AsView(), m_device, outcome);
+            if (begun == editor::OpenModel::Begun::NeedsFile)
             {
                 m_loads.Request(model, m_looseTextures);
                 m_state = State::Reading;
                 return;
             }
-            if (begun == OpenModel::Begun::Failed)
+            if (begun == editor::OpenModel::Begun::Failed)
             {
                 LOG_WARNING(u8"ModelViewer", u8"no thumbnail for {}: it did not open", model);
                 Finish({});
@@ -363,7 +363,7 @@ export namespace modelviewer
         State m_state = State::Idle;
         String m_model;
         String m_png;
-        UniquePtr<OpenModel> m_open;
+        UniquePtr<editor::OpenModel> m_open;
         engine::model::ModelInstance m_instance;
         Float3 m_center{};
         f32 m_radius = 1.0f;

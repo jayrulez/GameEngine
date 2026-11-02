@@ -16,7 +16,7 @@ export module modelviewer:settings;
 
 import foundation.core;
 import foundation.json;
-import :library;
+import editor.modelpreview;
 import :commands;
 
 using namespace foundation::core;
@@ -216,7 +216,7 @@ export namespace modelviewer
     /// Characters a file name cannot hold become `_`, and `.png` is appended.
     [[nodiscard]] inline String ScreenshotName(StringView pattern, StringView modelPath, StringView clip, u64 stamp)
     {
-        String model = FileTitle(modelPath);
+        String model = editor::FileTitle(modelPath);
         usize dot = model.Size();
         while (dot > 0 && model[dot - 1] != u8'.')
             --dot;

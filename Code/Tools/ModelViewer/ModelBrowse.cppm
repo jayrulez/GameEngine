@@ -14,7 +14,7 @@ module;
 export module modelviewer:browse;
 
 import foundation.core;
-import :library;
+import editor.modelpreview;
 
 using namespace foundation::core;
 
@@ -81,7 +81,7 @@ export namespace modelviewer
                                     return;
                                 if (isDirectory)
                                     c->out->folders.PushBack(PathJoin(c->folder, name));
-                                else if (IsModelFile(name))
+                                else if (editor::IsModelFile(name))
                                     c->out->models.PushBack(PathJoin(c->folder, name));
                             },
                             &collect);
@@ -108,25 +108,25 @@ export namespace modelviewer
     }
 
     /// The thumbnail file for `path` under `thumbRoot`, named by the model file's path, size and
-    /// time (FileKey) so a changed file is drawn again. Empty when the model file does not exist.
+    /// time (editor::FileKey) so a changed file is drawn again. Empty when the model file does not exist.
     [[nodiscard]] inline String ThumbnailPathFor(StringView thumbRoot, StringView path)
     {
-        const String key = FileKey(path, kThumbnailVersion);
+        const String key = editor::FileKey(path, kThumbnailVersion);
         return key.IsEmpty() ? String{} : PathJoin(thumbRoot, Format(u8"{}.png", key).AsView());
     }
 
     /// Reads the stats of a cooked model from its record in the cache, for the given loose texture
     /// setting. Returns false when the model has not been cooked, or was cooked by an older viewer.
-    [[nodiscard]] inline bool ReadCachedStats(StringView cacheRoot, StringView path, ModelStats& out, bool looseTextures = true)
+    [[nodiscard]] inline bool ReadCachedStats(StringView cacheRoot, StringView path, editor::ModelStats& out, bool looseTextures = true)
     {
-        const String folder = CacheFolderFor(cacheRoot, path, looseTextures);
+        const String folder = editor::CacheFolderFor(cacheRoot, path, looseTextures);
         if (folder.IsEmpty())
             return false;
-        Result<Array<byte>> bytes = ReadFile(PathJoin(folder.AsView(), StringView(OpenModel::kRecordName)).AsView());
+        Result<Array<byte>> bytes = ReadFile(PathJoin(folder.AsView(), StringView(editor::OpenModel::kRecordName)).AsView());
         if (!bytes.HasValue())
             return false;
         Guid model;
-        return ReadRecord(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()), model, out);
+        return editor::ReadRecord(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()), model, out);
     }
 
     /// The grid's filter: names containing `name` (ignoring case), and, for each of the rigged,
@@ -142,13 +142,13 @@ export namespace modelviewer
     /// Whether the model at `path` passes `filter`. `stats` holds its stats when known (the model
     /// was cooked before); a model not cooked yet fails the rigged and animated boxes until it is.
     /// `inLibrary` says whether the library holds the model.
-    [[nodiscard]] inline bool Matches(const BrowseFilter& filter, StringView path, const ModelStats* stats, bool inLibrary = false)
+    [[nodiscard]] inline bool Matches(const BrowseFilter& filter, StringView path, const editor::ModelStats* stats, bool inLibrary = false)
     {
         if (filter.inLibraryOnly && !inLibrary)
             return false;
         if (!filter.name.IsEmpty())
         {
-            const String title = FileTitle(path);
+            const String title = editor::FileTitle(path);
             if (!title.AsView().ContainsIgnoreCase(filter.name.AsView()))
                 return false;
         }

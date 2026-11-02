@@ -20,7 +20,7 @@ export module modelviewer:store;
 import foundation.core;
 import foundation.xml;
 import foundation.xml.serialization;
-import :library;
+import editor.modelpreview;
 
 using namespace foundation::core;
 
@@ -584,7 +584,7 @@ export namespace modelviewer
         [[nodiscard]] String Describe(const Member& m) const
         {
             const Entry* e = FindEntry(m.entry);
-            return e != nullptr ? FileTitle(e->path.AsView()) : String(u8"a model");
+            return e != nullptr ? editor::FileTitle(e->path.AsView()) : String(u8"a model");
         }
 
         Array<Entry> m_entries;

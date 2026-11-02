@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:playback`: the animation bar's state, kept apart from the window.
+// Editor::ModelPreview - `editor.modelpreview:playback`: the animation bar's state, kept apart from
+// the window (the model viewer's, the import window's model preview).
 // InstantiateModel puts a skeletal animation component on the root of the model it places, and
 // ClipPlayback drives that component: which of the model's clips plays, play and pause, stop
 // (rewind and pause), stepping a frame while paused, scrubbing to a time, looping and speed. The
@@ -12,7 +13,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module modelviewer:playback;
+export module editor.modelpreview:playback;
 
 import foundation.core;
 import foundation.scene;
@@ -22,7 +23,7 @@ import engine.animation;
 
 using namespace foundation::core;
 
-export namespace modelviewer
+export namespace editor
 {
     namespace scene = foundation::scene;
     namespace animation = foundation::animation;

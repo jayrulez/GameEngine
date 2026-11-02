@@ -9,9 +9,8 @@ module;
 
 export module modelviewer;
 
-export import :library; // opening a model file: cooked into the viewer's cache and bound
+export import editor.modelpreview; // opening a model file into the viewer's cache, and its clips' playback
 export import :tabs;    // the open models, one tab each, and the side panel's rows
-export import :playback; // the animation bar's clip, play, pause, step, scrub, loop and speed
 export import :browse;   // folder listing, model collection, thumbnail files, the filters
 export import :shortlist; // starred models, their notes, and the CSV
 export import :store;     // the library: entries, nested collections, member names, tags

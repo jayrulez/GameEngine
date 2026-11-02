@@ -12,7 +12,7 @@ module;
 export module modelviewer:shortlist;
 
 import foundation.core;
-import :library;
+import editor.modelpreview;
 
 using namespace foundation::core;
 
@@ -101,7 +101,7 @@ export namespace modelviewer
             String csv(u8"name,path,note\n");
             for (const ShortlistEntry& entry : m_entries)
             {
-                csv += CsvField(FileTitle(entry.path.AsView()).AsView()).AsView();
+                csv += CsvField(editor::FileTitle(entry.path.AsView()).AsView()).AsView();
                 csv += u8",";
                 csv += CsvField(entry.path.AsView()).AsView();
                 csv += u8",";

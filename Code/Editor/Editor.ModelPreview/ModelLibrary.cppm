@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:library`: a model file opened for viewing without a project. The file
-// loads through the model loaders (glTF and GLB; ufbx for FBX and OBJ) into the in-memory model,
-// whose stats the viewer shows. The model cooks into its own content database in the viewer's
-// cache, and the cooked model binds through a resource manager with the engine's factories. The
-// cache folder is named by the file's path, size and modification time, so reopening a model binds
-// what was cooked before while a changed file cooks again. A record beside the cooked files keeps
-// the model's guid and its stats.
+// Editor::ModelPreview - `editor.modelpreview:library`: a model file opened for viewing without a
+// project (the model viewer; the import window's model preview). The file loads through the model
+// loaders (glTF and GLB; ufbx for FBX and OBJ) into the in-memory model, whose stats are shown. The
+// model cooks into its own content database in a cache folder, and the cooked model binds through a
+// resource manager with the engine's factories. The cache folder is named by the file's path, size
+// and modification time, so reopening a model binds what was cooked before while a changed file
+// cooks again. A record beside the cooked files keeps the model's guid and its stats.
 
 module;
 #include "Core/Prelude.h"
 
-export module modelviewer:library;
+export module editor.modelpreview:library;
 
 import foundation.core;
 import foundation.rhi;
@@ -29,7 +29,7 @@ import modelimporter;
 
 using namespace foundation::core;
 
-export namespace modelviewer
+export namespace editor
 {
     namespace content = foundation::content;
     namespace resource = foundation::resource;

@@ -265,13 +265,17 @@ TEST_CASE("model preview: a material without its texture takes the image beside 
     CHECK(texture(cloak)->uri() == u8"Knight.png");
     CHECK(model.materials()[static_cast<usize>(kept)]->baseColorTextureIndex == own);
 
-    // With neither name's image present, the first image in name order.
+    // With neither name's image present, nothing: the other images beside it are not its, and the
+    // material keeps its own colour (a model of plain colours among a game's sources).
     foundation::model::Model other;
     auto* m = new foundation::model::ModelMaterial();
-    m->setName(u8"Helm");
+    m->setName(u8"Jacket");
+    m->baseColorFactor = Float4(0.95f, 0.4f, 0.1f, 1.0f);
     other.addMaterial(m);
-    CHECK(editor::ApplyLooseTextures(other, PathJoin(folder.AsView(), u8"Squire.fbx").AsView()) == 1u);
-    CHECK(other.textures()[0]->uri() == u8"Body.png");
+    CHECK(editor::ApplyLooseTextures(other, PathJoin(folder.AsView(), u8"Rider.glb").AsView()) == 0u);
+    CHECK(other.materials()[0]->baseColorTextureIndex == -1);
+    CHECK(other.textures().IsEmpty());
+    CHECK(other.materials()[0]->baseColorFactor.x == doctest::Approx(0.95f));
     // A folder without images: nothing is applied.
     foundation::model::Model bare;
     auto* n = new foundation::model::ModelMaterial();

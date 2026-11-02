@@ -33,8 +33,10 @@ GUI, beside `Tools.Editor`. It never needs a project.
 - **Pick**: star a model and give it a note; the shortlist is saved beside the viewer's settings
   and exports as CSV.
 - **Loose textures**: a model whose material lost its texture on export (common with FBX files
-  from packs and extractions) gets the PNG beside it that shares its name, or the first one, so it
-  shows painted, not grey. On by default; a toggle turns it off.
+  from packs and extractions) gets the PNG or JPEG beside it named like the material or the model,
+  so it shows painted, not grey; a material neither names keeps its own colour (2026-11-02: the
+  first image in the folder was taken too, and painted a plain-colour model among a game's sources
+  with an unrelated picture). On by default; a toggle turns it off.
 
 ## How it is built (what exists)
 
@@ -112,7 +114,7 @@ cook takes skin 0; noted where the side panel says so), materials beyond the eng
   panel's Pick section (the star and the note of the tab in front), the browser's Starred filter
   (a starred tile's name in the accent) and Export CSV. `ApplyLooseTextures` runs between the load
   and the cook: a material with no colour texture takes the PNG or JPEG beside the model named
-  like the material, else like the model, else the first in name order. The toggle is in the View
+  like the material, else like the model; a material neither names is left as it is. The toggle is in the View
   section, kept in the settings, for models opened from then on; it is part of the cache key, so
   each choice cooks once.
 - **P5 Ship.** A Linux distribution script (as the editor's), a README, the user guide page, and

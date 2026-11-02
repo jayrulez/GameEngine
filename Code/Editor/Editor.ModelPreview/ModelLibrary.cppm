@@ -96,7 +96,7 @@ export namespace editor
 
     /// The version of the cache's cooked files. Raise it when the import changes what it makes, so
     /// a model opened again cooks afresh.
-    inline constexpr u32 kCacheVersion = 6; // 6: the record lists the materials and textures
+    inline constexpr u32 kCacheVersion = 7; // 7: the loose texture rule takes only an image named like the material or the model
 
     /// A name for what is made from the file at `path`: 16 hex digits hashed from its path, size,
     /// modification time and `version`, so a changed file or a raised version gets a new name.
@@ -174,8 +174,9 @@ export namespace editor
 
     /// The loose texture rule: a material that names no colour texture (the link is often lost on
     /// export, common with FBX files from packs and extractions) takes an image beside the model
-    /// file: the one named like the material, else the one named like the model, else the first
-    /// PNG or JPEG in name order. Returns how many materials took an image.
+    /// file named like the material, else one named like the model. Any other image there is left
+    /// alone, and so is a material neither names: a model of plain colours in a folder of other
+    /// images (a game's sources) keeps its colours. Returns how many materials took an image.
     inline u32 ApplyLooseTextures(foundation::model::Model& model, StringView modelPath)
     {
         usize slash = modelPath.Size();
@@ -218,7 +219,7 @@ export namespace editor
             if (chosen == nullptr)
                 chosen = find(modelStem);
             if (chosen == nullptr)
-                chosen = &images[0];
+                continue; // no image of its name or the model's: its own colour stays
             i32 index = -1;
             for (usize i = 0; i < added.Size(); ++i)
                 if (added[i] == *chosen)

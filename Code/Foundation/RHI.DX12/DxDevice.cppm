@@ -14,6 +14,7 @@ module;
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string> // std::wstring: SetName takes a wide name
 
 export module foundation.rhi.dx12:device;
 

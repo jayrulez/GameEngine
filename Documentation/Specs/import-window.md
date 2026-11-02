@@ -114,6 +114,7 @@ collision) shows them in the files pane as a tree under it, not as a list in the
 
 Phases: W8a the tree and a part's name and box in the settings pane (done, bf5e0bc3a); W8b a
 part's facts from the importer (done, 9fac278ba); W8c the previews of parts (done 2026-11-02: a mesh
-alone, a material on a sphere, the skeleton's bones over the model, a clip playing; a texture and a
-collision shape keep the whole file in view, the preview's cook making no collision and a picture
-view being the image page's).
+alone, a material on a sphere, the skeleton's bones over the model, a clip playing, a texture's picture
+in the picture view in place of the model (user 2026-11-02: the picture says more than the model with
+it alone, which suits only a base colour map); a collision shape keeps the whole file in view, the
+preview's cook making none).

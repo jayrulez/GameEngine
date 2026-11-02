@@ -13,6 +13,7 @@
 import foundation.core;
 import foundation.vfs;
 import editor.core;
+import pipeline.importer; // ImportPlan, a texture part to show
 import editor.app;
 import editor.geometry;
 import modelimporter; // the importer's own read
@@ -122,6 +123,37 @@ TEST_CASE("model file preview: StopReading ends its cook before the import may c
         CHECK(tasks.InFlight() <= 1u); // ended (cancelled, or finished just before), only its hand-back left
         tasks.Finish();
         CHECK_FALSE(preview.IsOpen()); // a stopped preview's completion does not run
+    }
+    (void)RemoveDirectoryRecursive(cache.AsView());
+}
+
+TEST_CASE("model file preview: a texture part shows its picture in place of the model, from the importer's read; the whole file brings the model back")
+{
+    const String cache = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_file_preview_texture");
+    (void)RemoveDirectoryRecursive(cache.AsView());
+    TaskPool tasks(DefaultAllocator(), 1u);
+    const editor::app::AssetPageServices services{};
+    const String fox = Fox();
+    pipeline::ModelFileImporter importer;
+    RefPtr<Object> prepared = importer.PrepareOnWorker(fox.AsView(), DefaultAllocator());
+    RefPtr<pipeline::ImportOptions> options = importer.CreateOptions(DefaultAllocator());
+    const pipeline::ImportPlan plan = importer.DescribeImport(fox.AsView(), options.Get(), prepared.Get());
+    const pipeline::ImportPlanEntry* texture = plan.Find(pipeline::ImportResourceKind::Texture, StringView{});
+    for (const pipeline::ImportPlanEntry& entry : plan.entries)
+        if (entry.kind == pipeline::ImportResourceKind::Texture)
+            texture = &entry;
+    REQUIRE(texture != nullptr);
+    {
+        editor::ModelFilePreview preview(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, prepared.Get());
+        CHECK(preview.ShowPart(*texture)); // the importer read it: its pixels are here
+        CHECK(preview.ShowsPicture());
+        preview.ShowWhole();
+        CHECK_FALSE(preview.ShowsPicture());
+        pipeline::ImportPlanEntry missing = *texture;
+        missing.sourceName = String(u8"no_such_texture");
+        CHECK_FALSE(preview.ShowPart(missing)); // no picture of that name: the model stays
+        CHECK_FALSE(preview.ShowsPicture());
+        tasks.Finish();
     }
     (void)RemoveDirectoryRecursive(cache.AsView());
 }

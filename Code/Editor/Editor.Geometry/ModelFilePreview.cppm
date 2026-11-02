@@ -52,9 +52,10 @@ export namespace editor
         void StopReading() override;
 
         /// A part alone: a mesh by itself, a material on a sphere, the skeleton's bones over the
-        /// model, a clip playing on it. False for a texture or a collision shape (the preview's cook
-        /// makes no collision, and pictures are another page's). Asked before the model is in, it is
-        /// shown once it is.
+        /// model, a clip playing on it, a texture's picture in place of the model. False for a
+        /// collision shape (the preview's cook makes none), and for a texture when the model was not
+        /// read here (bound from the preview's cache). Asked before the model is in, it is shown once
+        /// it is.
         bool ShowPart(const pipeline::ImportPlanEntry& part) override;
         void ShowWhole() override;
 
@@ -66,6 +67,8 @@ export namespace editor
         [[nodiscard]] bool IsOpen() const;
         /// Whether its parts are loading (it binds once they are in).
         [[nodiscard]] bool IsLoading() const;
+        /// Whether a texture's picture shows in place of the model.
+        [[nodiscard]] bool ShowsPicture() const;
         /// Runs its pool and its loading to the end, as frames would, without a host.
         void FinishLoading();
         /// The clips the picker lists, by name.

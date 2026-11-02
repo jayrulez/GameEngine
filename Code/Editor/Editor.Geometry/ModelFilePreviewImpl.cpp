@@ -19,6 +19,8 @@ import engine.render;
 import foundation.geometry;
 import foundation.materials; // a material part shown on a sphere
 import foundation.resource;  // a part found as its resource handle
+import foundation.image;     // a texture part's picture
+import foundation.image.io;
 import foundation.model;
 import foundation.model.resource;
 import foundation.animation;
@@ -99,6 +101,13 @@ namespace editor
         scene::EntityHandle sphere = scene::EntityHandle::Invalid();
         RefPtr<foundation::geometry::StaticMesh> sphereMesh;
         bool bonesByPart = false; // the skeleton part turned the bones on
+        // The model as read, for a texture part's picture: the importer's read, or the preview's own.
+        RefPtr<Object> importerRead;
+        RefPtr<Read> ownRead;
+        // A texture part's picture, in place of the model's view (made the first time).
+        RefPtr<gui::Node> pictureView;
+        UniquePtr<app::ImagePreview> picture;
+        gui::Node* bar = nullptr;
 
         Impl(IAllocator& alloc, ModelFilePreview& preview, StringView file)
             : allocator(&alloc), owner(&preview), path(file), open(alloc), facts(alloc), clipNames(alloc), bonePoses(alloc)
@@ -135,6 +144,7 @@ namespace editor
             clips = clipChoice.Get();
             play = playButton.Get();
             skeleton = bones.Get();
+            this->bar = bar.Get();
             bar->AddChild(frame.Get());
             bar->AddChild(clipChoice.Get());
             bar->AddChild(playButton.Get());
@@ -218,6 +228,7 @@ namespace editor
             // under it; StopReading cancels it and waits, before the import changes the importer's model.
             RefPtr<Read> result = MakeRef<Read>(*allocator);
             RefPtr<Object> keep(prepared);
+            importerRead = keep;
             auto* loaded = Cast<pipeline::LoadedModel>(prepared);
             if (loaded != nullptr)
                 result->stats = CountModel(loaded->model); // here: it works out the model's bounds, which this thread reads too
@@ -245,6 +256,8 @@ namespace editor
                                         self->Failed(result->outcome);
                                         return;
                                     }
+                                    if (!self->importerRead)
+                                        self->ownRead = result; // the model it read itself, for a texture's picture
                                     const OpenModel::Outcome bound = self->open.Bind(result->guid, result->stats);
                                     if (bound == OpenModel::Outcome::Loading)
                                         self->ShowLoading();
@@ -373,9 +386,70 @@ namespace editor
             viewport->Frame(center, radius);
         }
 
+        // The model as read (the importer's, or the preview's own read), or null when neither is here
+        // (the model came from the preview's cache with nothing read).
+        [[nodiscard]] const foundation::model::Model* ModelAsRead() const
+        {
+            if (const auto* loaded = Cast<pipeline::LoadedModel>(importerRead.Get()))
+                return &loaded->model;
+            return ownRead ? &ownRead->model : nullptr;
+        }
+
+        // The picture of texture part `name` (the plan's name for it), from the model as read: its
+        // decoded pixels, or the file beside the model it names. False when there is none to show.
+        bool ShowTexture(StringView name)
+        {
+            const foundation::model::Model* model = ModelAsRead();
+            if (model == nullptr)
+                return false;
+            const Span<foundation::model::ModelTexture* const> textures = model->textures();
+            for (usize i = 0; i < textures.Size(); ++i)
+            {
+                const foundation::model::ModelTexture& texture = *textures[i];
+                if (pipeline::ImportedTextureName(texture, i).AsView() != name)
+                    continue;
+                foundation::image::Image pixels;
+                if (texture.getData() != nullptr && texture.width > 0 && texture.height > 0 &&
+                    texture.getDataSize() == texture.width * texture.height * 4)
+                    pixels = foundation::image::Image(static_cast<u32>(texture.width), static_cast<u32>(texture.height), foundation::image::PixelFormat::RGBA8,
+                                                      Span<const u8>(texture.getData(), static_cast<usize>(texture.getDataSize())));
+                else if (!texture.sourceFile().IsEmpty())
+                {
+                    foundation::image::Image source;
+                    if (!foundation::image::io::LoadImage(texture.sourceFile(), source).IsOk() || source.Width() == 0)
+                        return false;
+                    pixels = source.Format() == foundation::image::PixelFormat::RGBA8 ? Move(source) : source.ConvertFormat(foundation::image::PixelFormat::RGBA8);
+                }
+                else
+                    return false;
+                if (!pictureView)
+                {
+                    pictureView = app::BuildImageView(*allocator);
+                    picture = MakeUnique<app::ImagePreview>(*allocator, *pictureView);
+                    root->AddChild(pictureView.Get());
+                }
+                picture->Show(Move(pixels));
+                ShowPicture(true);
+                return true;
+            }
+            return false;
+        }
+
+        // The model's view, or a texture's picture in its place.
+        void ShowPicture(bool shown)
+        {
+            if (pictureView)
+                pictureView->SetDisplayed(shown);
+            if (bar != nullptr)
+                bar->SetDisplayed(!shown);
+            if (stage != nullptr)
+                stage->SetDisplayed(!shown);
+        }
+
         // Undoes what showing a part changed: every mesh drawn, the sphere gone, the bones as they were.
         void ShowWholeModel()
         {
+            ShowPicture(false);
             scene::Scene* level = viewport ? viewport->Scene() : nullptr;
             if (level != nullptr)
             {
@@ -453,6 +527,9 @@ namespace editor
                     skeleton->SetChecked(true);
                     bonesByPart = true;
                 }
+                break;
+            case pipeline::ImportResourceKind::Texture:
+                (void)ShowTexture(part.sourceName.AsView());
                 break;
             case pipeline::ImportResourceKind::AnimationClip:
                 for (usize a = 0; a < clipNames.Size(); ++a)
@@ -563,9 +640,16 @@ namespace editor
         case pipeline::ImportResourceKind::Skeleton:
         case pipeline::ImportResourceKind::AnimationClip:
             break;
+        case pipeline::ImportResourceKind::Texture:
+            // Its picture, from the model as read: shown now, or not at all (nothing read here).
+            m_impl->ShowWholeModel();
+            m_impl->showsPart = m_impl->ShowTexture(part.sourceName.AsView());
+            if (m_impl->showsPart)
+                m_impl->part = part;
+            return m_impl->showsPart;
         default:
             ShowWhole();
-            return false; // a picture or a collision shape: the whole model stays
+            return false; // a collision shape: the preview's cook makes none, so the whole model stays
         }
         m_impl->part = part;
         m_impl->showsPart = true;
@@ -612,6 +696,11 @@ namespace editor
     bool ModelFilePreview::IsLoading() const
     {
         return m_impl->open.IsLoading();
+    }
+
+    bool ModelFilePreview::ShowsPicture() const
+    {
+        return m_impl->pictureView && m_impl->pictureView->IsDisplayed();
     }
 
     void ModelFilePreview::FinishLoading()

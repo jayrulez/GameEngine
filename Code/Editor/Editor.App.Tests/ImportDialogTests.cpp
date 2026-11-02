@@ -140,6 +140,16 @@ namespace
         [[nodiscard]] StringView Label() const override { return u8"Crate"; }
         [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"crate"); }
         [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override { return MakeRef<CrateOptions>(allocator); }
+        // A hollow crate is lined: its plan has the lining's texture as well.
+        [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView, const pipeline::ImportOptions* options, Object*) override
+        {
+            pipeline::ImportPlan plan;
+            plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Asset, String(u8"Crate"), String(u8"Crate"), true});
+            const auto* crate = Cast<CrateOptions>(options);
+            if (crate != nullptr && crate->hollow)
+                plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Texture, String(u8"Lining"), String(u8"Lining"), true});
+            return plan;
+        }
         [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions*, Object*,
                                                         Array<pipeline::DeferredImportWrite>*) override
         {
@@ -363,6 +373,25 @@ TEST_CASE("import window: a file's settings, as its importer's options declare t
     CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 0u);
     bed.window->Select(0);
     CHECK(Count<gui::PropertyGrid>(*bed.window->Detail()) == 1u);
+    bed.window->Close();
+}
+
+TEST_CASE("import window: a setting that changes what the file makes changes the tree under it")
+{
+    Bed bed;
+    const String one[] = {String(u8"/somewhere/a.crate")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(one, 1u));
+    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 1u); // the file alone: it makes one asset
+    static_cast<CrateOptions*>(session->files[0].options.Get())->hollow = true;
+    bed.window->SettingChanged(0, u8"hollow");
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0)); // a frame: the window's deferred work runs
+    CHECK(session->files[0].plan.entries.Size() == 2u);
+    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 3u); // and now a tree under it: its asset's kind and its textures
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"1 of 1"));
+    static_cast<CrateOptions*>(session->files[0].options.Get())->hollow = false;
+    bed.window->SettingChanged(0, u8"hollow");
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0)); // a frame: the window's deferred work runs
+    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 1u);
     bed.window->Close();
 }
 

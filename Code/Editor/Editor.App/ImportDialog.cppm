@@ -174,6 +174,51 @@ export namespace editor::app
             Close();
             return true;
         }
+        /// Setting `name` of file `index`'s options was changed (in the grid, or by a kind row's box):
+        /// the settings that follow from it (its importer's to say: a texture's colour space with its
+        /// usage), what the file makes described again, shown in the tree and the details, and in the
+        /// preview at once (a sound's trim shaded on its waveform).
+        void SettingChanged(usize index, StringView name)
+        {
+            if (!m_session || index >= m_session->files.Size())
+                return;
+            AssetImport::File& changed = m_session->files[index];
+            const String path(name);
+            const PropertyInfo* setting = changed.options ? FindProperty(*changed.options->GetType(), reinterpret_cast<const char*>(path.CStr())) : nullptr;
+            if (setting != nullptr && changed.Importer() != nullptr)
+            {
+                changed.Importer()->SettingChanged(*changed.options, *setting);
+                // Not inside the grid's own edit.
+                ImportWindow* self = this;
+                Later([self, index]()
+                      {
+                          if (!self->m_session || index >= self->m_session->files.Size())
+                              return;
+                          // The part selected, found again in the new plan by what it is (its place
+                          // may move, or it may be gone: the file is selected then).
+                          AssetImport::File& file = self->m_session->files[index];
+                          pipeline::ImportPlanEntry selected;
+                          const bool hadPart = index == self->m_selected && self->m_part >= 0 && static_cast<usize>(self->m_part) < file.plan.entries.Size();
+                          if (hadPart)
+                              selected = file.plan.entries[static_cast<usize>(self->m_part)];
+                          self->m_services.import->RefreshPlan(*self->m_session, index);
+                          if (hadPart)
+                          {
+                              self->m_part = -1;
+                              for (usize e = 0; e < file.plan.entries.Size(); ++e)
+                                  if (file.plan.entries[e].kind == selected.kind && file.plan.entries[e].sourceName == selected.sourceName)
+                                      self->m_part = static_cast<i64>(e);
+                          }
+                          self->ShowFiles(); // the tree: what it makes now
+                          if (index == self->m_selected)
+                              self->ShowDetail();
+                          self->ShowWhy();
+                      });
+            }
+            if (m_preview)
+                m_preview->OnSettingsChanged();
+        }
+
         /// Shows file `index`'s preview and settings.
         void Select(usize index)
         {
@@ -553,32 +598,7 @@ export namespace editor::app
                 // A change brings the settings that follow from it (its importer's to say: a
                 // texture's colour space with its usage), and shows in the preview at once (a
                 // sound's trim shaded on its waveform).
-                m_settings->SetOnChange([self, index](const gui::ReflectedChange& change)
-                                        {
-                                            if (!self->m_session || index >= self->m_session->files.Size())
-                                                return;
-                                            AssetImport::File& changed = self->m_session->files[index];
-                                            const String name(change.Path);
-                                            const PropertyInfo* setting =
-                                                changed.options ? FindProperty(*changed.options->GetType(), reinterpret_cast<const char*>(name.CStr())) : nullptr;
-                                            if (setting != nullptr && changed.Importer() != nullptr)
-                                            {
-                                                changed.Importer()->SettingChanged(*changed.options, *setting);
-                                                // What the file makes, described again with the
-                                                // change, and its settings shown again with what
-                                                // followed; not inside the grid's own edit.
-                                                self->Later([self, index]()
-                                                            {
-                                                                if (!self->m_session || index != self->m_selected || index >= self->m_session->files.Size())
-                                                                    return;
-                                                                self->m_services.import->RefreshPlan(*self->m_session, index);
-                                                                self->ShowDetail();
-                                                                self->ShowWhy();
-                                                            });
-                                            }
-                                            if (self->m_preview)
-                                                self->m_preview->OnSettingsChanged();
-                                        });
+                m_settings->SetOnChange([self, index](const gui::ReflectedChange& change) { self->SettingChanged(index, change.Path); });
                 const Instance target(file.options.Get(), file.options->GetType());
                 m_settings->SetObjects(Span<const Instance>(&target, 1u));
                 RefPtr<gui::PropertyGrid> grid = MakeRef<gui::PropertyGrid>(m_allocator);

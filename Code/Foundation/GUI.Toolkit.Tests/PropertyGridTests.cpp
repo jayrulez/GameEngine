@@ -210,6 +210,28 @@ TEST_CASE("property grid: a closed group says what it holds in a line, where an 
     CHECK_FALSE(row->GetSummary()->IsDisplayed()); // once open, its rows show what the summary said
 }
 
+TEST_CASE("property grid: a note shows after its row's editor, which then takes only its own width; a row without one has none")
+{
+    Bed bed;
+    PropertyInfo& mono = bed.Add(u8"mono", PropertyKind::Bool, Variant(false));
+    mono.Note = core::String(u8"It is mono already");
+    mono.ReadOnly = true;
+    bed.Add(u8"loop", PropertyKind::Bool, Variant(false));
+    bed.Show();
+    PropertyRowContent* row = bed.grid->FindRowContent(SV(u8"mono"));
+    REQUIRE(row != nullptr);
+    REQUIRE(row->GetNote() != nullptr);
+    CHECK(row->GetNote()->IsDisplayed());
+    CHECK(row->GetNote()->GetText() == SV(u8"It is mono already"));
+    REQUIRE(row->GetEditor() != nullptr);
+    CHECK(row->GetEditor()->IsReadOnly());
+    const Rect editor = row->GetEditor()->GetScreenBounds();
+    CHECK(row->GetNote()->GetScreenBounds().x >= editor.x + editor.width); // after the editor, not over it
+    PropertyRowContent* plain = bed.grid->FindRowContent(SV(u8"loop"));
+    REQUIRE(plain != nullptr);
+    CHECK_FALSE(plain->GetNote()->IsDisplayed());
+}
+
 TEST_CASE("property grid: a search keeps matches by name or path, with what holds them opened; the folding stays")
 {
     Bed bed;

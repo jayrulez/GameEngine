@@ -88,6 +88,7 @@ export namespace foundation::gui
         bool ReadOnly = false;
         bool Visible = true;
         core::String Summary; ///< for a group, a one-line summary shown on its row while it is closed
+        core::String Note;    ///< a short line beside its editor: what the value does here, or why it is read-only
         bool ShowsAlpha = true;   ///< whether a colour's alpha is edited (not for an HDR colour, nor one with `noAlpha`)
         u8 ListOps = 0;           ///< for a list, its PropertyListOps
         u32 MaxCount = 0;         ///< the most elements of a list (a BoundedArray's), keys of a curve or stops of a gradient; 0 for no limit

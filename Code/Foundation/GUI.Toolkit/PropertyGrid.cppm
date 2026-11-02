@@ -186,7 +186,8 @@ export namespace foundation::gui
     };
 
     /// A property's row, indented by its depth. It holds a group's chevron, the property's name (with
-    /// its description as the tooltip), the split, and its editor (none for a group).
+    /// its description as the tooltip), the split, and its editor (none for a group). A row whose
+    /// info has a Note shows it after its editor, which then takes only its own width.
     class PropertyRowContent : public UIWidget
     {
         RTTI_OBJECT(PropertyRowContent, UIWidget)
@@ -197,6 +198,7 @@ export namespace foundation::gui
         [[nodiscard]] PropertyEditor* GetEditor() const noexcept { return m_editor.Get(); }
         [[nodiscard]] Label* GetLabel() const noexcept { return m_label.Get(); }
         [[nodiscard]] Label* GetSummary() const noexcept { return m_summary.Get(); }
+        [[nodiscard]] Label* GetNote() const noexcept { return m_note.Get(); }
         [[nodiscard]] PropertySplitHandle* GetSplitHandle() const noexcept { return m_split.Get(); }
         [[nodiscard]] PropertyGrip* GetGrip() const noexcept { return m_grip.Get(); }
         /// Marks the row when an object's value here, or under here, differs from its default.
@@ -233,6 +235,7 @@ export namespace foundation::gui
         {
             ShareTextStyle(*m_label);
             ShareTextStyle(*m_summary);
+            ShareTextStyle(*m_note);
             if (m_editor)
                 ShareTextStyle(*m_editor);
         }
@@ -243,6 +246,7 @@ export namespace foundation::gui
         core::RefPtr<TreeArrow> m_arrow;
         core::RefPtr<Label> m_label;
         core::RefPtr<Label> m_summary; // the summary line of a closed group
+        core::RefPtr<Label> m_note;    // the info's Note, after the editor
         core::RefPtr<PropertySplitHandle> m_split;
         core::RefPtr<PropertyGrip> m_grip;
         core::RefPtr<PropertyEditor> m_editor;
@@ -734,6 +738,17 @@ namespace foundation::gui
         AddChild(m_summary.Get());
         if (m_editor)
             AddChild(m_editor.Get());
+        // A note (its info's Note) after the editor: what the value does here, or why it is read-only.
+        m_note = core::MakeRef<Label>(MemoryAllocator());
+        m_note->SetTag(core::StringView(u8"propertynote"));
+        m_note->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
+        {
+            StyleWriteScope defaults(*m_note);
+            m_note->SetTextOverflow(TextOverflow::Ellipsis);
+        }
+        m_note->SetHitTestVisible(false);
+        m_note->SetDisplayed(false);
+        AddChild(m_note.Get());
         m_grip = core::MakeRef<PropertyGrip>(MemoryAllocator(), grid);
         AddChild(m_grip.Get());
         m_split = core::MakeRef<PropertySplitHandle>(MemoryAllocator(), grid);
@@ -751,6 +766,10 @@ namespace foundation::gui
         m_summary->SetDisplayed(says);
         if (says)
             m_summary->SetText(row.Info.Summary.AsView());
+        const bool notes = m_editor && !row.Info.Note.IsEmpty();
+        m_note->SetDisplayed(notes);
+        if (notes)
+            m_note->SetText(row.Info.Note.AsView());
         m_movable =row.Element && (row.ListOps & PropertyListMove) != 0 && row.Count > 1;
         m_grip->SetDisplayed(m_movable);
         m_grip->SetPath(row.Path.AsView());
@@ -769,7 +788,15 @@ namespace foundation::gui
         const f32 textX = indent + arrow + 2.0f;
         m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), box.height}, box, rtl));
         if (m_editor)
-            m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, core::Max(0.0f, box.width - split - 2.0f), core::Max(0.0f, box.height - 2.0f)}, box, rtl));
+        {
+            const f32 room = core::Max(0.0f, box.width - split - 2.0f);
+            const f32 height = core::Max(0.0f, box.height - 2.0f);
+            // With a note the editor takes its own width and the note the rest; otherwise all of it.
+            const f32 width = m_note->IsDisplayed() ? core::Min(room, m_editor->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{room, height}}).x) : room;
+            m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, width, height}, box, rtl));
+            if (m_note->IsDisplayed())
+                m_note->Arrange(MirroredIn(Rect{box.x + split + 2.0f + width + 8.0f, box.y, core::Max(0.0f, room - width - 8.0f), box.height}, box, rtl));
+        }
         if (m_summary->IsDisplayed())
             m_summary->Arrange(MirroredIn(Rect{box.x + split + 4.0f, box.y, core::Max(0.0f, box.width - split - 8.0f), box.height}, box, rtl));
         m_split->Arrange(MirroredIn(Rect{box.x + split - 3.0f, box.y, 6.0f, box.height}, box, rtl));

@@ -1,5 +1,8 @@
 # Import workflow - the review-and-commit import dialog
 
+> 2026-11-01: continued by Specs/import-window.md (three panes, previews from a registry, settings
+> an importer declares, reimport), agreed with the user over a mockup.
+
 > STATUS 2026-08-31: P1 SHIPPED (37b44451) for the MODEL importer -
 > DescribeImport seam + selection on ImportOptions + the dialog's per-kind
 > resource list (check-all, per-row enable + rename) + prepare-first flow

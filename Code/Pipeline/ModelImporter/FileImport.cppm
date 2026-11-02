@@ -466,6 +466,19 @@ export namespace pipeline
             return facts;
         }
 
+        /// Textures, materials, and the skeleton with its clips each have a setting that leaves them out.
+        [[nodiscard]] StringView KindSetting(pipeline::ImportResourceKind kind) const override
+        {
+            switch (kind)
+            {
+            case pipeline::ImportResourceKind::Texture: return u8"importTextures";
+            case pipeline::ImportResourceKind::Material: return u8"importMaterials";
+            case pipeline::ImportResourceKind::Skeleton:
+            case pipeline::ImportResourceKind::AnimationClip: return u8"importAnimations";
+            default: return {};
+            }
+        }
+
         // The import makes the model's folder group, named after the file.
         [[nodiscard]] bool ImportsIntoItsOwnGroup() const override { return true; }
 

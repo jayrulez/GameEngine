@@ -2766,3 +2766,23 @@ TEST_CASE("model cook: told to stop, it returns Cancelled and makes no model; un
     CHECK_FALSE(guid.IsNil());
     (void)RemoveDirectoryRecursive(u8"scratch_modelimporter_cook_cancel");
 }
+
+TEST_CASE("model importer: textures, materials and the skeleton with its clips each have a setting that leaves them out, one its options have")
+{
+    ModelFileImporter importer;
+    RefPtr<ImportOptions> options = importer.CreateOptions(DefaultAllocator());
+    const ImportResourceKind gated[] = {ImportResourceKind::Texture, ImportResourceKind::Material, ImportResourceKind::Skeleton,
+                                        ImportResourceKind::AnimationClip};
+    for (const ImportResourceKind kind : gated)
+    {
+        const StringView name = importer.KindSetting(kind);
+        REQUIRE_FALSE(name.IsEmpty());
+        bool* setting = options->FindBoolSetting(name);
+        REQUIRE(setting != nullptr);
+        CHECK(*setting); // on by default
+    }
+    CHECK(importer.KindSetting(ImportResourceKind::Skeleton) == importer.KindSetting(ImportResourceKind::AnimationClip)); // one setting for both
+    CHECK(importer.KindSetting(ImportResourceKind::Mesh).IsEmpty());
+    CHECK(options->FindBoolSetting(u8"scale") == nullptr); // not a bool
+    CHECK(options->FindBoolSetting(u8"noSuchSetting") == nullptr);
+}

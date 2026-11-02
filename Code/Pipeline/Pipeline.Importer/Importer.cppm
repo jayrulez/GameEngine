@@ -233,6 +233,18 @@ export namespace pipeline
         /// The settings as text, a line each, "name=value": a flag true or false, a number, a choice
         /// by its value's name. An import records them beside what it made (RecordImportSettings),
         /// so a reimport starts from them.
+        /// The bool setting `name`, for a caller that reads or flips it (the import window's kind rows);
+        /// null when the options have no bool setting of that name.
+        [[nodiscard]] bool* FindBoolSetting(StringView name)
+        {
+            const String key(name);
+            const PropertyInfo* setting = FindProperty(*GetType(), reinterpret_cast<const char*>(key.CStr()));
+            if (setting == nullptr || setting->type != &TypeOf<bool>())
+                return nullptr;
+            const Instance self(this, GetType());
+            return static_cast<bool*>(setting->address(self));
+        }
+
         [[nodiscard]] String SettingsText() const
         {
             String text;
@@ -464,6 +476,11 @@ export namespace pipeline
         {
             return {};
         }
+
+        /// The bool setting of this importer's options that, off, leaves every part of `kind` out of
+        /// the import (a model's "importTextures" for its textures); empty when none does. The import
+        /// window makes a kind's row in its tree that setting, and hides it among the settings.
+        [[nodiscard]] virtual StringView KindSetting(ImportResourceKind /*kind*/) const { return {}; }
 
         /// What part `part` (an entry of this file's plan) holds, as the file has it, a fact each: a
         /// material's colour and roughness, a mesh's triangles. Read-only: changing them is the

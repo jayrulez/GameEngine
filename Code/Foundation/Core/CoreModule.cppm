@@ -90,5 +90,6 @@ export import :spin_lock;
 export import :condition_variable;
 export import :semaphore;
 export import :shared_mutex;
+export import :cancel;
 export import :job_system;
 export import :library;

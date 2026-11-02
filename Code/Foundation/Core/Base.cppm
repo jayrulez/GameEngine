@@ -214,6 +214,7 @@ export namespace foundation::core
         NotSupported,
         AlreadyExists,
         Internal,
+        Cancelled, ///< told to stop through its CancelToken, and stopped
     };
 
     class Status

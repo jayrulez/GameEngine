@@ -467,3 +467,77 @@ TEST_CASE("threading: a JobSystem's workers are named by their slot")
 }
 
 #endif // !PLATFORM_WEB
+
+// --- Cancelling (single-threaded cases run on the web build too) -----------------------------
+
+TEST_CASE("cancel: a default token never cancels; a source's token sees its Cancel, which stays")
+{
+    const CancelToken none;
+    CHECK_FALSE(none.IsCancelled());
+    CHECK_FALSE(none.CanBeCancelled());
+
+    CancelSource source(DefaultAllocator());
+    const CancelToken token = source.Token();
+    const CancelToken copy = token;
+    CHECK(token.CanBeCancelled());
+    CHECK_FALSE(token.IsCancelled());
+    source.Cancel();
+    CHECK(source.IsCancelled());
+    CHECK(token.IsCancelled());
+    CHECK(copy.IsCancelled()); // every copy shares the one flag
+    source.Cancel();           // twice is once
+    CHECK(token.IsCancelled());
+    CHECK(source.Token().IsCancelled()); // a token taken after still sees it
+}
+
+TEST_CASE("cancel: a token outlives its source, keeping what it last saw")
+{
+    CancelToken kept;
+    CancelToken cancelled;
+    {
+        CancelSource quiet(DefaultAllocator());
+        kept = quiet.Token();
+        CancelSource loud(DefaultAllocator());
+        cancelled = loud.Token();
+        loud.Cancel();
+    }
+    CHECK_FALSE(kept.IsCancelled());
+    CHECK(cancelled.IsCancelled());
+}
+
+TEST_CASE("cancel: Cancelled is an error code of its own")
+{
+    const Status status(ErrorCode::Cancelled);
+    CHECK_FALSE(status.IsOk());
+    CHECK(status.Code() == ErrorCode::Cancelled);
+}
+
+#if !PLATFORM_WEB
+TEST_CASE("cancel: work on another thread stops at its next check once its source cancels")
+{
+    CancelSource source(DefaultAllocator());
+    Atomic<int> steps{0};
+    Atomic<bool> started{false};
+    Status result;
+    Thread worker([token = source.Token(), &steps, &started, &result]()
+                  {
+                      started.store(true);
+                      for (int i = 0; i < 100000000; ++i)
+                      {
+                          if (token.IsCancelled())
+                          {
+                              result = Status(ErrorCode::Cancelled);
+                              return;
+                          }
+                          steps.fetch_add(1, MemoryOrder::Relaxed);
+                          Thread::YieldThread();
+                      }
+                  });
+    while (!started.load())
+        Thread::YieldThread();
+    source.Cancel();
+    worker.Join();
+    CHECK(result.Code() == ErrorCode::Cancelled);
+    CHECK(steps.load() < 100000000);
+}
+#endif // !PLATFORM_WEB

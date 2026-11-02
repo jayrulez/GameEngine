@@ -108,6 +108,7 @@ target_sources(Core
             Threading/ConditionVariable.cppm
             Threading/Semaphore.cppm
             Threading/SharedMutex.cppm
+            Threading/Cancel.cppm
             Threading/JobSystem.cppm
             Library/DynamicLibrary.cppm)
 

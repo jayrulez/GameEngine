@@ -154,6 +154,15 @@ TEST_CASE("model file preview: a texture part shows its picture in place of the 
         CHECK_FALSE(preview.ShowPart(missing)); // no picture of that name: the model stays
         CHECK_FALSE(preview.ShowsPicture());
         tasks.Finish();
+        preview.FinishLoading(); // cooked into the cache, for the open after
+    }
+    {
+        // Opened again, from the preview's cache (no cook): the picture still comes from the read.
+        editor::ModelFilePreview again(fox.AsView(), cache.AsView(), tasks, DefaultAllocator(), services, prepared.Get());
+        CHECK(again.IsLoading()); // bound from the cache, not cooked
+        CHECK(again.ShowPart(*texture));
+        CHECK(again.ShowsPicture());
+        again.FinishLoading();
     }
     (void)RemoveDirectoryRecursive(cache.AsView());
 }

@@ -220,6 +220,7 @@ namespace editor
         void Start(StringView cacheRoot, TaskPool& tasks, Object* prepared)
         {
             pool = &tasks;
+            importerRead = RefPtr<Object>(prepared); // kept whichever way it opens: a texture's picture comes from it
             message->SetText(Format(u8"Reading {}...", pipeline::FileNameOf(path.AsView())).AsView());
             // As the importer reads it: without the viewer's loose texture rule, which the import
             // does not apply either, so the preview shows what will come in.
@@ -247,7 +248,6 @@ namespace editor
             // under it; StopReading cancels it and waits, before the import changes the importer's model.
             RefPtr<Read> result = MakeRef<Read>(*allocator);
             RefPtr<Object> keep(prepared);
-            importerRead = keep;
             auto* loaded = Cast<pipeline::LoadedModel>(prepared);
             if (loaded != nullptr)
                 result->stats = CountModel(loaded->model); // here: it works out the model's bounds, which this thread reads too

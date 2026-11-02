@@ -4,8 +4,10 @@
 // Editor::Geometry - the `editor.geometry` module.
 //
 // The meshes' editor page: MeshEditorPage (for a static or skinned mesh, including a model's), its
-// factory and RegisterMeshEditor, which the editor executable calls.
+// factory and RegisterMeshEditor, which the editor executable calls; and the import window's
+// preview of a model file, which RegisterMeshEditor registers.
 
 export module editor.geometry;
 
 export import :page;
+export import :model_file_preview;

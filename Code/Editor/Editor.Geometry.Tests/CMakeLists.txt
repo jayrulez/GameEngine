@@ -1,8 +1,8 @@
-# Editor::Geometry tests: the mesh page.
-add_executable(Editor.Geometry.Tests TestsMain.cpp MeshPageTests.cpp)
+# Editor::Geometry tests: the mesh page, and the import window's model preview.
+add_executable(Editor.Geometry.Tests TestsMain.cpp MeshPageTests.cpp ModelFilePreviewTests.cpp)
 target_link_libraries(Editor.Geometry.Tests PRIVATE
     Editor::Geometry Editor::App Editor::Core Foundation::Content Foundation::Settings Foundation::Geometry Pipeline::Geometry
-    Foundation::GUI Foundation::GUI.Toolkit doctest::doctest)
+    Foundation::GUI Foundation::GUI.Toolkit Foundation::VFS doctest::doctest)
 target_compile_definitions(Editor.Geometry.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
     RAPTOR_SOURCE_DIR="${CMAKE_SOURCE_DIR}") # the page's markup the tests load
 target_compile_options(Editor.Geometry.Tests PRIVATE

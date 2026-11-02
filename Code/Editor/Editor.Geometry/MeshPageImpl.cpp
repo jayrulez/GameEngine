@@ -27,6 +27,7 @@ import foundation.gui;
 import editor.core;
 import editor.app;
 import editor.preview;
+import :model_file_preview;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -413,6 +414,7 @@ namespace editor
             editor::EditorRootAllocator().New<MeshEditorPageFactory>(pipeline::StaticMeshAsset::StaticType(), services), editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<MeshEditorPageFactory>(pipeline::SkinnedMeshAsset::StaticType(), services), editor::EditorRootAllocator()));
+        RegisterModelFilePreview(context, services); // the import window's preview of a model file
     }
 
     RTTI_DEFINE_OBJECT_VERSIONED(MeshPreviewSettings, "rtti::editor::editor.mesh", 1)

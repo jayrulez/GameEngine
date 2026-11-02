@@ -699,6 +699,31 @@ namespace editor::app
                     if (foundation::content::Group* found = GroupPicker::Find(project->SourceDb(), key))
                         onPicked(*found);
                 };
+                // Right-click a group (or the space under them, for the top one): New Group..., its
+                // name asked; the picker stays open with the new group highlighted to pick.
+                request.OnContextMenu = [self, project](foundation::gui::Menu& menu, StringView key)
+                {
+                    foundation::content::Group* parent = key.IsEmpty() ? project->SourceDb().RootGroup() : GroupPicker::Find(project->SourceDb(), key);
+                    if (parent == nullptr)
+                        return;
+                    (void)menu.AddItem(u8"New Group...", [self, project, parent]()
+                                       {
+                                           NameRequest ask;
+                                           ask.title = Format(u8"New Group in {}", GroupPicker::ShownName(*parent));
+                                           ask.suggested = parent->UniqueGroupName(u8"Group");
+                                           ask.accept = String(u8"Create");
+                                           ask.refusal = [parent](StringView name) { return AssetNames::GroupRefusal(*parent, name); };
+                                           ask.describe = [parent](StringView name)
+                                           { return Format(u8"Makes the group {} in {}.", name, GroupPicker::ShownName(*parent)); };
+                                           ask.accepted = [self, project, parent](StringView name)
+                                           {
+                                               foundation::content::Group* made = self->m_assetOps->CreateGroup(*parent, name);
+                                               if (made != nullptr && self->m_picker && self->m_picker->IsOpen())
+                                                   self->m_picker->Refill(GroupPicker::Request(project->SourceDb(), nullptr).Items, GroupPicker::KeyOf(*made).AsView());
+                                           };
+                                           self->AskName(Move(ask));
+                                       });
+                };
                 self->ShowPicker(Move(request));
             };
             m_importWindow = MakeUnique<ImportWindow>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ImportWindow::kPath));

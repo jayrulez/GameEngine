@@ -264,3 +264,33 @@ TEST_CASE("picker: it opens in the window's middle; a lit item's description is 
     CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc keeps Wood"));
     bed.picker.Close();
 }
+
+TEST_CASE("picker: a right-click's menu from the request, on an item or the space under them; refilled while open, the new item highlighted")
+{
+    Bed bed;
+    String clicked = String(u8"none");
+    PickerRequest request = bed.Materials();
+    request.OnContextMenu = [&clicked](foundation::gui::Menu& menu, StringView key)
+    {
+        clicked = String(key);
+        (void)menu.AddItem(u8"New Material...", []() {});
+    };
+    bed.Open(Move(request));
+    bed.picker.OpenContextMenu(u8"wood");
+    CHECK(clicked == StringView(u8"wood"));
+    REQUIRE(bed.picker.ContextMenu() != nullptr);
+    CHECK(bed.picker.ContextMenu()->ItemCount() == 1u);
+    bed.picker.ContextMenu()->Close();
+    bed.picker.OpenContextMenu(StringView{}); // the space under the items
+    CHECK(clicked.IsEmpty());
+    bed.picker.ContextMenu()->Close();
+
+    // Something made: the rows refilled, the search cleared, the new one highlighted, still open.
+    bed.picker.SetQuery(u8"woo");
+    PickerRequest more = bed.Materials();
+    more.Items.PushBack(Item(u8"cedar", u8"Cedar", u8"Props"));
+    bed.picker.Refill(Move(more.Items), u8"cedar");
+    CHECK(bed.picker.IsOpen());
+    CHECK(bed.picker.LitKey() == StringView(u8"cedar"));
+    CHECK(bed.picker.RowCount() > 4u); // every row again, not the search's
+}

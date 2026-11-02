@@ -55,6 +55,9 @@ export namespace editor::app
         String EmptyVerb;        ///< the next step it offers then ("Import..."), run after it closes
         Function<void()> OnEmptyVerb;
         Function<void(StringView key)> OnPicked;
+        /// Adds what can be done where the picker was right-clicked to `menu`: on the item `key`,
+        /// or in the space under the items (`key` empty). An empty menu is not shown; unset: no menu.
+        Function<void(gui::Menu& menu, StringView key)> OnContextMenu;
     };
 
     /// One row: an item's glyph, name, detail, favourite star and current check.
@@ -163,6 +166,22 @@ export namespace editor::app
                 m_list->SetModel(&m_model);
                 m_list->SetOnActivated([self](gui::ModelIndex index) { self->PickRow(index.Row); });
                 m_list->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowHint(); });
+                // A right-click's menu, from the request: on an item (lit first by the list), or
+                // in the space under them.
+                (void)m_list->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
+                                               {
+                                                   if (!self->m_request.OnContextMenu)
+                                                       return;
+                                                   const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                                   const i32 row = self->m_list->ItemAt(at);
+                                                   const String key(self->IsItemRow(row) ? self->m_request.Items[self->m_rows[static_cast<usize>(row)].Item].Key.AsView()
+                                                                                         : StringView{});
+                                                   self->m_menu = MakeRef<gui::Menu>(self->m_allocator);
+                                                   self->m_request.OnContextMenu(*self->m_menu, key.AsView());
+                                                   if (self->m_menu->ItemCount() > 0)
+                                                       self->m_menu->Open(*self->m_list, at);
+                                                   e.Handled = true;
+                                               });
             }
             if (auto* close = Find<gui::Button>(u8"picker-close"))
                 close->SetOnClick([self]() { self->Close(); });
@@ -281,6 +300,33 @@ export namespace editor::app
             }
             Light(row);
         }
+        /// Shows `items` in place of the request's, while it stays open (one was just made), the
+        /// search cleared and the item `lit` highlighted.
+        void Refill(Array<PickerItem> items, StringView lit)
+        {
+            m_request.Items = Move(items);
+            SetQuery(StringView{});
+            for (usize row = 0; row < m_rows.Size(); ++row)
+                if (IsItemRow(static_cast<i32>(row)) && m_request.Items[m_rows[row].Item].Key.AsView() == lit)
+                {
+                    Light(static_cast<i32>(row));
+                    break;
+                }
+        }
+        /// The menu a right-click opened, while it is the last one (for tests).
+        [[nodiscard]] gui::Menu* ContextMenu() const noexcept { return m_menu.Get(); }
+        /// Opens the right-click menu as a right-click on the item `key` (empty: the space under
+        /// the items) does, for tests and a keyboard's menu key.
+        void OpenContextMenu(StringView key)
+        {
+            if (!m_request.OnContextMenu || m_list == nullptr)
+                return;
+            m_menu = MakeRef<gui::Menu>(m_allocator);
+            m_request.OnContextMenu(*m_menu, key);
+            if (m_menu->ItemCount() > 0)
+                m_menu->Open(*m_list, Float2{0.0f, 0.0f});
+        }
+
         /// Picks the highlighted item; does nothing when none is highlighted.
         void PickLit() { PickRow(m_list != nullptr ? m_list->GetSelectedItem() : -1); }
         [[nodiscard]] StringView Hint() const { return m_hint != nullptr ? m_hint->GetText() : StringView{}; }
@@ -579,6 +625,7 @@ export namespace editor::app
         String m_keysHint; // what the keys do; the footer shows it when the highlighted item has no description
         gui::SceneRoot* m_root = nullptr; // what it opened over
         PickerRequest m_request;
+        RefPtr<gui::Menu> m_menu; // a right-click's menu (OnContextMenu), while it is the last one
         Array<Row> m_rows;
         Model m_model;
     };

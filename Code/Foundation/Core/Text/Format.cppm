@@ -396,4 +396,8 @@ export namespace foundation::core
         FormatToV(out, fmt.data, args...);
         return out;
     }
+
+    // A size for a person: "412 KB" below a megabyte (at least 1 KB), then "7.2 MB" to a tenth;
+    // 1024-based. Defined in TextImpl.cpp, out of this interface.
+    [[nodiscard]] String ByteSizeText(u64 bytes);
 }

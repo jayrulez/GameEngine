@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Core - :string_util tests: character classification and whitespace trimming.
+// Core - :string_util tests: character classification and whitespace trimming; a size for a person.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -80,4 +80,13 @@ TEST_CASE("string-util: UTF-8 codepoint boundaries")
 
     // Prev from an interior byte snaps to the codepoint start it is inside/after.
     CHECK(core::Utf8PrevBoundary(s, 5) == 3); // inside €
+}
+
+TEST_CASE("format: a size for a person, in KB below a megabyte and MB to a tenth above")
+{
+    CHECK(core::ByteSizeText(0) == core::StringView(u8"1 KB")); // never "0 KB"
+    CHECK(core::ByteSizeText(115461) == core::StringView(u8"113 KB"));
+    CHECK(core::ByteSizeText(421504) == core::StringView(u8"412 KB"));
+    CHECK(core::ByteSizeText(1024 * 1024) == core::StringView(u8"1.0 MB"));
+    CHECK(core::ByteSizeText(7549747) == core::StringView(u8"7.2 MB"));
 }

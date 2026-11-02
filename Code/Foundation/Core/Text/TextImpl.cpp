@@ -66,3 +66,14 @@ namespace foundation::core::detail
         return static_cast<usize>(result.ptr - buffer);
     }
 }
+
+namespace foundation::core
+{
+    String ByteSizeText(u64 bytes)
+    {
+        const u64 tenths = (bytes * 10 + 512 * 1024) / (1024 * 1024);
+        if (tenths < 10)
+            return Format(u8"{} KB", Max<u64>(1, (bytes + 512) / 1024));
+        return Format(u8"{}.{} MB", tenths / 10, tenths % 10);
+    }
+}

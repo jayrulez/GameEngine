@@ -211,3 +211,33 @@ TEST_CASE("model viewer loads: given the open model's cache, the worker cooks wh
     CHECK(read.outcome == editor::OpenModel::Outcome::Opened);
     CHECK(read.cooked.IsNil());
 }
+
+TEST_CASE("model viewer loads: a tab given a pool loads its parts there and binds over frames, never at once")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String cache = FreshCache(u8"scratch_viewer_loads_parts");
+    {
+        editor::OpenModel first(DefaultAllocator()); // cooks it, so the tab finds it cooked
+        REQUIRE(first.Open(fox.AsView(), cache.AsView(), nullptr) == editor::OpenModel::Outcome::Opened);
+    }
+    TaskPool parts(DefaultAllocator(), 2u);
+    modelviewer::ModelTabs tabs(DefaultAllocator());
+    tabs.SetTasks(&parts);
+    const modelviewer::ModelTabs::Opened opened = tabs.Begin(fox.AsView(), cache.AsView(), nullptr);
+    REQUIRE(opened.index >= 0);
+    CHECK(opened.outcome == editor::OpenModel::Outcome::Loading);
+    CHECK_FALSE(opened.needsFile);
+    CHECK_FALSE(tabs.At(opened.index).ready); // not bound at once
+
+    editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::Loading;
+    for (u32 frame = 0; frame < 4000u && outcome == editor::OpenModel::Outcome::Loading; ++frame)
+    {
+        parts.Pump();
+        outcome = tabs.UpdateLoading(opened.index);
+        if (outcome == editor::OpenModel::Outcome::Loading)
+            SleepMilliseconds(1);
+    }
+    CHECK(outcome == editor::OpenModel::Outcome::FromCache);
+    CHECK(tabs.At(opened.index).ready);
+    CHECK(tabs.At(opened.index).open->Model() != nullptr);
+}

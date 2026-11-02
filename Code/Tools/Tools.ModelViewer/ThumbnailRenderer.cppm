@@ -57,6 +57,7 @@ export namespace modelviewer
             m_scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             m_render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
             m_device = host.Graphics() != nullptr ? host.Graphics()->Raw() : nullptr;
+            m_parts = &host.Tasks(); // a model's parts decode there, so its bind never holds the window
             (void)CreateDirectories(m_thumbRoot.AsView());
         }
         ~ThumbnailRenderer() { Shutdown(); }
@@ -68,9 +69,10 @@ export namespace modelviewer
         /// Replaces the queue with `models`, drawn in order.
         void SetQueue(Span<const String> models)
         {
-            if (m_state == State::Reading)
+            if (m_state == State::Reading || m_state == State::Loading)
             {
-                // The model being read is no longer wanted: drop it and write nothing for it.
+                // The model being read or loaded is no longer wanted: drop it and write nothing for it
+                // (its open model going cancels its parts' decodes).
                 m_loads.Cancel();
                 DropModel();
                 m_state = State::Idle;
@@ -116,9 +118,13 @@ export namespace modelviewer
                 while (m_state == State::Reading && m_loads.Take(read))
                     if (read.path == m_model)
                     {
-                        if (read.outcome == editor::OpenModel::Outcome::Opened &&
-                            (read.cooked.IsNil() ? m_open->Finish(read.model, read.stats) : m_open->Bind(read.cooked, read.stats)) ==
-                                editor::OpenModel::Outcome::Opened)
+                        const editor::OpenModel::Outcome opened =
+                            read.outcome != editor::OpenModel::Outcome::Opened ? read.outcome
+                            : read.cooked.IsNil()                              ? m_open->Finish(read.model, read.stats)
+                                                                               : m_open->Bind(read.cooked, read.stats);
+                        if (opened == editor::OpenModel::Outcome::Loading)
+                            m_state = State::Loading;
+                        else if (opened == editor::OpenModel::Outcome::Opened)
                             Stage();
                         else
                         {
@@ -126,6 +132,18 @@ export namespace modelviewer
                             Finish({});
                         }
                     }
+            }
+            if (m_state == State::Loading)
+            {
+                // A few of its parts finish each frame; it binds once they are all in.
+                const editor::OpenModel::Outcome outcome = m_open->Update();
+                if (outcome == editor::OpenModel::Outcome::Opened || outcome == editor::OpenModel::Outcome::FromCache)
+                    Stage();
+                else if (outcome != editor::OpenModel::Outcome::Loading)
+                {
+                    LOG_WARNING(u8"ModelViewer", u8"no thumbnail for {}: it did not open", m_model.AsView());
+                    Finish({});
+                }
             }
             if (m_state == State::Staged && ++m_settleFrames >= 2)
                 m_state = State::RenderPending; // the pose is applied and the transforms composed
@@ -200,6 +218,7 @@ export namespace modelviewer
         {
             Idle,
             Reading,       // the file is being read on the worker
+            Loading,       // cooked; its parts load on the task pool, then it binds
             Staged,        // placed in the scene; the pose and transforms settle over a frame or two
             RenderPending, // the next Render declares its view
             CopyPending,   // declared; the next Render records the copy-back
@@ -227,8 +246,14 @@ export namespace modelviewer
             }
             m_open = MakeUnique<editor::OpenModel>(*m_allocator, *m_allocator);
             m_open->SetLooseTextures(m_looseTextures);
+            m_open->SetTasks(m_parts);
             editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
             const editor::OpenModel::Begun begun = m_open->Begin(model, m_cacheRoot.AsView(), m_device, outcome);
+            if (begun == editor::OpenModel::Begun::Loading)
+            {
+                m_state = State::Loading;
+                return;
+            }
             if (begun == editor::OpenModel::Begun::NeedsFile)
             {
                 m_loads.Request(model, m_looseTextures, m_open->Cache()); // read and cooked on the worker
@@ -351,6 +376,7 @@ export namespace modelviewer
         engine::scene::SceneSubsystem* m_scenes = nullptr;
         engine::render::RenderSubsystem* m_render = nullptr;
         rhi::Device* m_device = nullptr;
+        TaskPool* m_parts = nullptr; // the host's: where a model's parts decode
         scene::SceneManager m_sceneManager;
         scene::Scene* m_scene = nullptr;
         rhi::Texture* m_target = nullptr;

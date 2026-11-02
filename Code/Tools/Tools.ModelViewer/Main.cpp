@@ -431,6 +431,7 @@ namespace
             m_cacheRoot = PathJoin(cacheBase.AsView(), u8"cache");
             m_thumbnailSize = m_settings.value.thumbnailSize;
             m_thumbnailRoot = PathJoin(PathJoin(cacheBase.AsView(), u8"thumbnails").AsView(), Format(u8"{}", m_thumbnailSize).AsView());
+            m_tabs.SetTasks(&host.Tasks()); // a tab's model loads its parts there, never holding the window
             m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_reads, m_cacheRoot.AsView(),
                                                                       m_thumbnailRoot.AsView(), m_thumbnailSize);
             ModelViewerApp* self = this;
@@ -496,8 +497,9 @@ namespace
             DefaultApplication::OnUpdate(host, deltaTime); // writes a recorded screenshot and handles --screenshot-exit
             if (!m_guiHost)
                 return;
+            UpdateLoadingTabs();
             for (i32 i = 0; i < m_tabs.Count(); ++i)
-                if (m_tabs.At(i).open->Resources() != nullptr)
+                if (m_tabs.At(i).ready && m_tabs.At(i).open->Resources() != nullptr)
                     m_tabs.At(i).open->Resources()->Pump();
             m_guiHost->Update(deltaTime);
             if (m_thumbnails)
@@ -1222,7 +1224,7 @@ namespace
                 }
                 if (opened.needsFile)
                     m_tabLoads.Request(tab.path.AsView(), m_settings.value.looseTextures, tab.open->Cache()); // read and cooked on the worker; the tab shows "cooking" until then
-                else
+                else if (opened.outcome != editor::OpenModel::Outcome::Loading) // loading: UpdateLoadingTabs places it
                     PlaceModel(tab, opened.outcome);
             }
             ShowTab(opened.index);
@@ -1491,6 +1493,32 @@ namespace
             MeasureBounds(tab);
         }
 
+        // The tabs whose parts load: a few finish each frame, and each tab whose parts are all in is
+        // bound, placed, and shown when in front; one that did not bind is closed, saying why.
+        void UpdateLoadingTabs()
+        {
+            for (i32 i = m_tabs.Count() - 1; i >= 0; --i)
+            {
+                modelviewer::ModelTab& tab = m_tabs.At(i);
+                if (tab.ready || !tab.open->IsLoading())
+                    continue;
+                const editor::OpenModel::Outcome outcome = m_tabs.UpdateLoading(i);
+                if (outcome == editor::OpenModel::Outcome::Loading)
+                    continue;
+                if (outcome != editor::OpenModel::Outcome::Opened && outcome != editor::OpenModel::Outcome::FromCache)
+                {
+                    m_failure = Format(u8"{} did not open ({}).", tab.path.AsView(), OutcomeText(outcome));
+                    LOG_ERROR(u8"ModelViewer", u8"{}", m_failure.AsView());
+                    CloseTab(i);
+                    ShowEmpty();
+                    continue;
+                }
+                PlaceModel(tab, outcome);
+                if (i == m_tabs.Active() && !m_browsing)
+                    ShowTab(i);
+            }
+        }
+
         // Takes the files the worker has read. Each waiting tab is finished (cooked, bound, placed,
         // and shown when in front), or closed with a message saying why it did not open.
         void TakeReads()
@@ -1502,6 +1530,12 @@ namespace
                 if (index < 0 || m_tabs.At(index).ready)
                     continue; // the tab closed during the read, or the file was read twice
                 const editor::OpenModel::Outcome outcome = m_tabs.Finish(index, read);
+                if (outcome == editor::OpenModel::Outcome::Loading)
+                {
+                    if (index == m_tabs.Active() && !m_browsing)
+                        ShowTab(index); // "Loading" now, rather than "Cooking"
+                    continue; // UpdateLoadingTabs places it once its parts are in
+                }
                 if (outcome != editor::OpenModel::Outcome::Opened)
                 {
                     m_failure = Format(u8"{} did not open ({}).", read.path.AsView(), OutcomeText(outcome));
@@ -3274,7 +3308,7 @@ namespace
             if (auto* text = FindAs<gui::Label>(u8"viewer-empty-text"))
             {
                 if (front != nullptr && !front->ready)
-                    text->SetText(Format(u8"Cooking {}...", front->title.AsView()).AsView());
+                    text->SetText((front->open->IsLoading() ? Format(u8"Loading {}...", front->title.AsView()) : Format(u8"Cooking {}...", front->title.AsView())).AsView());
                 else if (!m_failure.IsEmpty())
                     text->SetText(m_failure.AsView());
                 else if (front == nullptr)

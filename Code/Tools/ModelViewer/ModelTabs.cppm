@@ -40,7 +40,7 @@ export namespace modelviewer
         String path;
         String title; // the file's name
         UniquePtr<editor::OpenModel> open;
-        bool ready = false;                    // its model is bound (false while its file is read)
+        bool ready = false;                    // its model is bound (false while its file is read and its parts load)
         engine::model::ModelInstance instance; // what the window placed in the scene for it
         UniquePtr<editor::ClipPlayback> playback;      // the animation bar's state for that instance
         Float3 center{};                       // the bounds as placed, measured by the window
@@ -54,11 +54,16 @@ export namespace modelviewer
     public:
         explicit ModelTabs(IAllocator& allocator) : m_allocator(&allocator), m_tabs(allocator) {}
 
+        /// Where the tabs' models load their parts (OpenModel::SetTasks): with a pool a model binds
+        /// over frames (UpdateLoading), never holding the window; without one it binds at once.
+        void SetTasks(TaskPool* tasks) noexcept { m_tasks = tasks; }
+
         struct Opened
         {
             i32 index = -1;     // the model's tab, -1 when it did not open
             bool added = false; // a new tab was added (false: it was open already)
             bool needsFile = false; // the tab was added before its model is ready: read the file, then call Finish
+            // outcome Loading: cooked before, its parts load; UpdateLoading binds it
             editor::OpenModel::Outcome outcome = editor::OpenModel::Outcome::NotFound;
         };
 
@@ -77,6 +82,7 @@ export namespace modelviewer
             }
             UniquePtr<editor::OpenModel> open = MakeUnique<editor::OpenModel>(*m_allocator, *m_allocator);
             open->SetLooseTextures(looseTextures);
+            open->SetTasks(m_tasks);
             const editor::OpenModel::Begun begun = open->Begin(path, cacheRoot, device, result.outcome);
             if (begun == editor::OpenModel::Begun::Failed)
                 return result;
@@ -89,7 +95,7 @@ export namespace modelviewer
             m_active = static_cast<i32>(m_tabs.Size()) - 1;
             result.index = m_active;
             result.added = true;
-            result.needsFile = !m_tabs[static_cast<usize>(m_active)].ready;
+            result.needsFile = begun == editor::OpenModel::Begun::NeedsFile;
             return result;
         }
 
@@ -105,7 +111,22 @@ export namespace modelviewer
                 return read.outcome;
             // Cooked on the worker (FileLoads given the tab's cache): only the bind is left here.
             const editor::OpenModel::Outcome outcome = read.cooked.IsNil() ? tab.open->Finish(read.model, read.stats) : tab.open->Bind(read.cooked, read.stats);
-            tab.ready = outcome == editor::OpenModel::Outcome::Opened;
+            tab.ready = outcome == editor::OpenModel::Outcome::Opened; // Loading: UpdateLoading finishes it
+            return outcome;
+        }
+
+        /// Once a frame for a tab whose parts load: finishes a few, and binds it once they are in.
+        /// Loading until then; Opened or FromCache once (the tab is ready); any other outcome says
+        /// why it did not open, the tab left for the caller to close.
+        editor::OpenModel::Outcome UpdateLoading(i32 index)
+        {
+            if (!Valid(index))
+                return editor::OpenModel::Outcome::NotFound;
+            ModelTab& tab = m_tabs[static_cast<usize>(index)];
+            if (!tab.open->IsLoading())
+                return tab.ready ? editor::OpenModel::Outcome::Opened : editor::OpenModel::Outcome::Loading;
+            const editor::OpenModel::Outcome outcome = tab.open->Update();
+            tab.ready = outcome == editor::OpenModel::Outcome::Opened || outcome == editor::OpenModel::Outcome::FromCache;
             return outcome;
         }
 
@@ -191,6 +212,7 @@ export namespace modelviewer
 
     private:
         IAllocator* m_allocator;
+        TaskPool* m_tasks = nullptr;
         Array<ModelTab> m_tabs;
         i32 m_active = -1;
     };

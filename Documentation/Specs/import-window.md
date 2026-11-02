@@ -104,5 +104,5 @@ collision) shows them in the files pane as a tree under it, not as a list in the
 - **Generic.** Nothing in the window names a kind's meaning: the tree comes from the importer's
   plan, a part's facts from the importer (DescribePart), its preview from the file's preview.
 
-Phases: W8a the tree and a part's name and box in the settings pane; W8b a part's facts from the
-importer; W8c the previews of parts.
+Phases: W8a the tree and a part's name and box in the settings pane (done, bf5e0bc3a); W8b a
+part's facts from the importer (done, 9fac278ba); W8c the previews of parts.

@@ -16,6 +16,9 @@ import foundation.vfs;
 import foundation.scene;
 import foundation.model;
 import foundation.model.resource;
+import foundation.geometry;  // FindPart by product type
+import foundation.materials;
+import foundation.resource;
 import foundation.image;
 import foundation.image.io;
 import engine.render;
@@ -370,4 +373,25 @@ TEST_CASE("model preview: a cook told to stop says so and clears its folder, so 
     CHECK(open.Bind(guid, stats) == editor::OpenModel::Outcome::Opened);
     CHECK(open.IsOpen());
     CHECK(open.Stats().triangles == stats.triangles);
+}
+
+TEST_CASE("model preview: a part of the bound model found by the name the import's plan gives it, as its type")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String cache = FreshCache(u8"scratch_model_viewer_parts");
+    editor::OpenModel open(DefaultAllocator());
+    open.SetLooseTextures(false);
+    REQUIRE(open.Open(fox.AsView(), cache.AsView(), nullptr) == editor::OpenModel::Outcome::Opened);
+
+    // Fox.gltf: the mesh "fox1" and the material "fox_material", named as the plan names them.
+    RefPtr<foundation::resource::ResourceHandle> mesh = open.FindPart(u8"fox1", foundation::geometry::StaticMesh::StaticType());
+    REQUIRE(mesh);
+    CHECK(mesh->Get() == static_cast<Object*>(open.Model()->meshes[0].Get())); // the model's own (a skinned mesh, as a mesh)
+    RefPtr<foundation::resource::ResourceHandle> material = open.FindPart(u8"fox_material", foundation::materials::Material::StaticType());
+    REQUIRE(material);
+    CHECK(Cast<foundation::materials::Material>(material->Get()) != nullptr);
+
+    CHECK_FALSE(open.FindPart(u8"fox1", foundation::materials::Material::StaticType())); // a mesh is not a material
+    CHECK_FALSE(open.FindPart(u8"fox", foundation::geometry::StaticMesh::StaticType())); // only the whole name
+    CHECK_FALSE(open.FindPart(u8"no_such_part", foundation::geometry::StaticMesh::StaticType()));
 }

@@ -665,6 +665,37 @@ export namespace editor
             return BindCooked(m_loadingGuid, m_loadingOutcome);
         }
 
+        /// One part of the bound model, as `productType` (or a type made from it: a skinned mesh for a
+        /// mesh), found by the name the import's plan gives it (`sourceName`, an ImportPlanEntry's):
+        /// the cook names each part's instance `model.<name>`, with `.2` and on when a name was taken.
+        /// Null when it has none (a part the preview's cook does not make, such as a collision shape).
+        [[nodiscard]] RefPtr<resource::ResourceHandle> FindPart(StringView sourceName, const TypeInfo& productType)
+        {
+            if (!m_cache || !m_resources || !IsOpen())
+                return {};
+            const content::Group* root = m_cache->database->RootGroup();
+            if (root == nullptr)
+                return {};
+            const String base = Format(u8"model.{}", sourceName);
+            for (content::Instance* instance : root->Instances())
+            {
+                const StringView name = instance->Name();
+                bool named = name == base.AsView();
+                if (!named && name.Size() > base.Size() + 1 && name.StartsWith(base.AsView()) && name[base.Size()] == u8'.')
+                {
+                    named = true;
+                    for (usize i = base.Size() + 1; i < name.Size(); ++i)
+                        named = named && name[i] >= u8'0' && name[i] <= u8'9';
+                }
+                if (!named)
+                    continue;
+                const TypeInfo* made = m_resources->ProductTypeOf(instance->Id());
+                if (made != nullptr && IsDerivedFrom(made, &productType))
+                    return m_resources->Bind(*made, instance->Id());
+            }
+            return {};
+        }
+
         /// While it loads: the parts asked for, and how many are still on their way.
         [[nodiscard]] bool IsLoading() const noexcept { return m_loading; }
         [[nodiscard]] usize PartsAsked() const noexcept { return m_parts.Size(); }

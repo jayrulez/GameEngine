@@ -407,6 +407,10 @@ export namespace editor::mcp
                         return Err(String(u8"`options` takes an object of settings: "
                                           u8"{\"Generate collision\": true}"));
                     }
+                    // Twice: the first pass sets each and lets the importer change what follows
+                    // from it (a texture's colour space with its usage); the second sets each again,
+                    // so a setting asked for explicitly keeps its value whatever followed.
+                    for (u32 pass = 0; pass < 2; ++pass)
                     for (i64 i = 0; i < asked.Count(); ++i)
                     {
                         const String key = asked.KeyAt(i);
@@ -464,6 +468,8 @@ export namespace editor::mcp
                         {
                             return Err(Format(u8"option '{}' is not one asset_import sets", key.AsView()));
                         }
+                        if (pass == 0)
+                            request.importer->SettingChanged(*request.options, *found);
                     }
                 }
                 // The name asked for, and what to do when another file's asset holds it.

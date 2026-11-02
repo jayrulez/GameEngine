@@ -1096,11 +1096,10 @@ export namespace pipeline{
             wrap = asset.wrapU;
             generateMipmaps = asset.generateMipmaps;
         }
-        /// Sets `asset` up for the usage chosen (its sampler and the like, as the presets do), then
-        /// gives it these settings.
-        void ApplyTo(TextureAsset& asset) const
+        /// Sets `asset` up as `chosen`'s preset does (its sampler, colour space, wrap and mipmaps).
+        static void SetupForUsage(TextureAsset& asset, texcomp::TextureUsage chosen)
         {
-            switch (usage)
+            switch (chosen)
             {
             case texcomp::TextureUsage::Normal:
                 asset.SetupForNormalMap();
@@ -1115,6 +1114,12 @@ export namespace pipeline{
                 asset.SetupFor3D();
                 break;
             }
+        }
+        /// Sets `asset` up for the usage chosen (its sampler and the like, as the presets do), then
+        /// gives it these settings.
+        void ApplyTo(TextureAsset& asset) const
+        {
+            SetupForUsage(asset, usage);
             asset.colorSpace = colorSpace;
             asset.compression = compression;
             asset.wrapU = wrap;
@@ -1228,6 +1233,20 @@ export namespace pipeline{
                 SetupForDds(asset, sourcePath, stem);
             else
                 SetupForInferredUsage(asset, stem);
+        }
+
+        /// A new usage brings the colour space, wrap and mipmaps its preset gives (a mask is linear,
+        /// an HDR environment clamped and without mipmaps); they can be changed again after it.
+        void SettingChanged(pipeline::ImportOptions& options, const PropertyInfo& setting) const override
+        {
+            auto* texture = Cast<TextureImportOptions>(&options);
+            if (texture == nullptr || StringView(reinterpret_cast<const utf8char*>(setting.name)) != StringView(u8"usage"))
+                return;
+            TextureAsset preset;
+            TextureImportOptions::SetupForUsage(preset, texture->usage);
+            texture->colorSpace = preset.colorSpace;
+            texture->wrap = preset.wrapU;
+            texture->generateMipmaps = preset.generateMipmaps;
         }
 
         void InitializeOptions(StringView sourcePath, pipeline::ImportOptions& options) const override

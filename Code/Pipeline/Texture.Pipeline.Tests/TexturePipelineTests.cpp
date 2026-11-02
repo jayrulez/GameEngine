@@ -1252,3 +1252,24 @@ TEST_CASE("texture-import: the settings start as the file's preset, its usage gu
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
 }
+
+TEST_CASE("texture-import: a new usage brings its preset's colour space, wrap and mipmaps")
+{
+    RegisterTextureAsset();
+    TextureFileImporter importer;
+    TextureImportOptions options; // Color: sRGB, repeat, mipmaps
+    const PropertyInfo& usage = *options.FindSetting(u8"Usage");
+    options.usage = texcomp::TextureUsage::Mask;
+    importer.SettingChanged(options, usage);
+    CHECK(options.colorSpace == foundation::image::ImageColorSpace::Linear); // a mask is data
+    CHECK(options.generateMipmaps);
+    options.usage = texcomp::TextureUsage::HDR;
+    importer.SettingChanged(options, usage);
+    CHECK(options.colorSpace == foundation::image::ImageColorSpace::Linear);
+    CHECK_FALSE(options.generateMipmaps);
+    CHECK(options.wrap == TextureWrap::ClampToEdge);
+    // Another setting changed brings nothing along.
+    options.colorSpace = foundation::image::ImageColorSpace::Srgb;
+    importer.SettingChanged(options, *options.FindSetting(u8"Mipmaps"));
+    CHECK(options.colorSpace == foundation::image::ImageColorSpace::Srgb);
+}

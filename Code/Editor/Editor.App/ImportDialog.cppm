@@ -486,9 +486,26 @@ export namespace editor::app
                                               else
                                                   info.Note = note.effect;
                                           });
-                // A change shows in the preview at once (a sound's trim shaded on its waveform).
-                m_settings->SetOnChange([self](const gui::ReflectedChange&)
+                // A change brings the settings that follow from it (its importer's to say: a
+                // texture's colour space with its usage), and shows in the preview at once (a
+                // sound's trim shaded on its waveform).
+                m_settings->SetOnChange([self, index](const gui::ReflectedChange& change)
                                         {
+                                            if (!self->m_session || index >= self->m_session->files.Size())
+                                                return;
+                                            AssetImport::File& changed = self->m_session->files[index];
+                                            const String name(change.Path);
+                                            const PropertyInfo* setting =
+                                                changed.options ? FindProperty(*changed.options->GetType(), reinterpret_cast<const char*>(name.CStr())) : nullptr;
+                                            if (setting != nullptr && changed.Importer() != nullptr)
+                                            {
+                                                changed.Importer()->SettingChanged(*changed.options, *setting);
+                                                self->Later([self]()
+                                                            {
+                                                                if (self->m_settings)
+                                                                    self->m_settings->Refresh(); // not inside the grid's own edit
+                                                            });
+                                            }
                                             if (self->m_preview)
                                                 self->m_preview->OnSettingsChanged();
                                         });

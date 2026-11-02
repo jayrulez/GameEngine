@@ -1,6 +1,8 @@
 # The import window
 
-Status: AGREED 2026-11-01 over a mockup (the model, image and sound views of one three-file drop).
+Status: AGREED 2026-11-01 over a mockup (the model, image and sound views of one three-file drop);
+W1 to W7 BUILT 2026-11-02 (the week's notes, Plans/week-2026-10-24.md, list the commits and what
+was left out).
 Continues Plans/import-workflow.md, whose P1 to P5 built today's review window (prepare, review,
 commit; one window per drop; per-resource choice and names; re-import memory). Its open items were
 previews and richer settings, and its rulings stand: previews are live, not rasterized pictures;

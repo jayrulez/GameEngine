@@ -50,8 +50,8 @@ file resolves to, or from what its domain registers.
   numbers, not only toggles. A setting may say what it will do to this file ("Cuts 0.19 s from
   the end", "+3.1 dB"); one that cannot apply is shown disabled with why ("It is mono already").
   Then what the file makes, by kind, collapsed to "13 of 13", each kind opening to its items with
-  a checkbox and a name; an item the preview can show (a clip) has its play. "Use these for every
-  <label> in this import" copies the settings to the drop's other files of that importer.
+  a checkbox and a name; an item the preview can show (a clip) has its play. "Apply to all <label>
+  in this import" copies the settings to the drop's other files of that importer.
 - **New settings, where the importer has them:** a model's scale and up axis; a texture's usage
   (Color, Normal map, Mask, HDR: guessed from the file's name, with the reason shown), colour
   space, compression, wrap and mipmaps, which the texture asset has today but only its page sets.
@@ -74,7 +74,7 @@ it is handed to the user for the visual check.
   in the window; clips, skeleton, wireframe; the facts.
 - **W5. Settings an importer declares.** ImportOptions declares reflected settings, drawn by the
   property editors; toggles become one kind of them. A setting's effect line and its disabled
-  reason. "Use these for every <label>".
+  reason. "Apply to all <label> in this import".
 - **W6. The new settings.** Model scale and up axis (the importer applies them); the texture's
   settings at import, with usage guessed from the name; the sound's trim and normalize shown on the
   waveform and in "Hear it as imported".

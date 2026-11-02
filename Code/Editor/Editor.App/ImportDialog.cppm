@@ -176,8 +176,8 @@ export namespace editor::app
             ShowPreview();
             ShowDetail();
         }
-        /// Gives file `index`'s settings to the session's other files of its importer (its
-        /// "Use these for every ..."); returns how many took them.
+        /// Gives file `index`'s settings to the session's other files of its importer (its "Apply to
+        /// all ... in this import"); returns how many took them.
         usize ShareSettings(usize index)
         {
             if (!m_session || index >= m_session->files.Size() || !m_session->files[index].options)
@@ -545,7 +545,7 @@ export namespace editor::app
                 {
                     RefPtr<gui::Button> share = MakeRef<gui::Button>(m_allocator);
                     share->AddClass(u8"import-share");
-                    share->SetText(Format(u8"Use these for every {} in this import", LabelOf(file)).AsView());
+                    share->SetText(Format(u8"Apply to all {} in this import", LabelOf(file)).AsView());
                     share->SetTooltip(Format(u8"Gives the {} other {} files these settings", others, LabelOf(file)).AsView());
                     share->SetOnClick([self, index]() { self->ShareSettings(index); });
                     detail->AddChild(share.Get());

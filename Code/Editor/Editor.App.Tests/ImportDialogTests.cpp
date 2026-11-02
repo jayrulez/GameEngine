@@ -315,7 +315,7 @@ TEST_CASE("import window: a file's settings, as its importer's options declare t
     bed.window->Close();
 }
 
-TEST_CASE("import window: Use these for every <label> gives the selected file's settings to the drop's other files of its importer")
+TEST_CASE("import window: Apply to all <label> in this import gives the selected file's settings to the drop's other files of its importer")
 {
     Bed bed;
     const String three[] = {String(u8"/somewhere/a.crate"), String(u8"/somewhere/b.crate"), String(u8"/somewhere/c.box")};
@@ -324,7 +324,7 @@ TEST_CASE("import window: Use these for every <label> gives the selected file's 
     usize buttons = 0;
     for (usize i = 0; i < bed.window->Detail()->ChildCount(); ++i)
         if (auto* button = Cast<gui::Button>(bed.window->Detail()->GetChildAt(i)))
-            buttons += button->GetText() == StringView(u8"Use these for every Crate in this import") ? 1u : 0u;
+            buttons += button->GetText() == StringView(u8"Apply to all Crate in this import") ? 1u : 0u;
     CHECK(buttons == 1u);
     static_cast<CrateOptions*>(session->files[0].options.Get())->hollow = true;
     CHECK(bed.window->ShareSettings(0) == 1u); // the other crate; the box has its own importer

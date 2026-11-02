@@ -157,6 +157,44 @@ namespace
         }
     };
 
+    // A shelf's options: whether its books (textures) come in, a setting that leaves a whole kind out.
+    class ShelfOptions final : public pipeline::ImportOptions
+    {
+        RTTI_OBJECT(ShelfOptions, pipeline::ImportOptions)
+    public:
+        bool books = true;
+    };
+
+    // Takes ".shelf": a board (a mesh) and, while books is on, two books (textures).
+    class ShelfImporter final : public pipeline::IFileImporter
+    {
+    public:
+        [[nodiscard]] StringView Label() const override { return u8"Shelf"; }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"shelf"); }
+        [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator& allocator) const override { return MakeRef<ShelfOptions>(allocator); }
+        [[nodiscard]] StringView KindSetting(pipeline::ImportResourceKind kind) const override
+        {
+            return kind == pipeline::ImportResourceKind::Texture ? StringView(u8"books") : StringView{};
+        }
+        [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView, const pipeline::ImportOptions* options, Object*) override
+        {
+            pipeline::ImportPlan plan;
+            plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Mesh, String(u8"Board"), String(u8"Board"), true});
+            const auto* shelf = Cast<ShelfOptions>(options);
+            if (shelf == nullptr || shelf->books)
+            {
+                plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Texture, String(u8"Atlas"), String(u8"Atlas"), true});
+                plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Texture, String(u8"Index"), String(u8"Index"), true});
+            }
+            return plan;
+        }
+        [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions*, Object*,
+                                                        Array<pipeline::DeferredImportWrite>*) override
+        {
+            return group.CreateInstance(u8"Shelf", WindowThing::StaticType());
+        }
+    };
+
     RefPtr<gui::Node> LoadImport()
     {
         const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(editor::app::kImportWindowPath));
@@ -209,6 +247,7 @@ namespace
             context.SetProject(project.Get());
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<BoxImporter>(), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<CrateImporter>(), DefaultAllocator()));
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<ShelfImporter>(), DefaultAllocator()));
             top = project->SourceDb().RootGroup();
             AssetImport::Services services;
             services.context = &context;
@@ -240,6 +279,10 @@ namespace
 }
 
 RTTI_DEFINE_OBJECT(WindowThing, "rtti::tests::importwindow")
+REFLECT_MEMBERS(ShelfOptions, "rtti::tests::importwindow")
+{
+    builder.Property<&ShelfOptions::books>("books").PropAttribute("displayName", String(u8"Books"));
+}
 REFLECT_MEMBERS(CrateOptions, "rtti::tests::importwindow")
 {
     builder.Property<&CrateOptions::hollow>("hollow").PropAttribute("displayName", String(u8"Hollow"));
@@ -382,6 +425,7 @@ TEST_CASE("import window: a setting that changes what the file makes changes the
     const String one[] = {String(u8"/somewhere/a.crate")};
     RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(one, 1u));
     CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 1u); // the file alone: it makes one asset
+    CHECK(Texts(*bed.window->Detail()).AsView().Contains(u8"Hollow")); // a setting no kind row stands for is shown
     static_cast<CrateOptions*>(session->files[0].options.Get())->hollow = true;
     bed.window->SettingChanged(0, u8"hollow");
     bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0)); // a frame: the window's deferred work runs
@@ -392,6 +436,37 @@ TEST_CASE("import window: a setting that changes what the file makes changes the
     bed.window->SettingChanged(0, u8"hollow");
     bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0)); // a frame: the window's deferred work runs
     CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 1u);
+    bed.window->Close();
+}
+
+TEST_CASE("import window: a kind row is its importer's setting for the kind: unticked it leaves them all out and stays, ticked they come back; that setting is not shown twice")
+{
+    Bed bed;
+    const String one[] = {String(u8"/somewhere/a.shelf")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(one, 1u));
+    auto* options = static_cast<ShelfOptions*>(session->files[0].options.Get());
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"2 of 2"));
+    CHECK_FALSE(Texts(*bed.window->Detail()).AsView().Contains(u8"Books")); // the Textures row is that setting
+
+    bed.window->SetKindKept(0, pipeline::ImportResourceKind::Texture, false);
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0));
+    CHECK_FALSE(options->books);
+    CHECK(session->files[0].plan.entries.Size() == 1u); // the importer leaves them out
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"Left out")); // the row stays, to tick them back
+    CHECK(Count<gui::CheckBox>(*bed.window->Files()) == 3u); // the file, Meshes, Textures
+
+    bed.window->SetKindKept(0, pipeline::ImportResourceKind::Texture, true);
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0));
+    CHECK(options->books);
+    CHECK(session->files[0].plan.entries.Size() == 3u);
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"2 of 2"));
+
+    // A kind its importer has no setting for: its box keeps or drops the parts, nothing else.
+    bed.window->SetKindKept(0, pipeline::ImportResourceKind::Mesh, false);
+    bed.root->GetContext().Update(Duration::FromSeconds(1.0 / 60.0));
+    CHECK(options->books);
+    CHECK_FALSE(session->files[0].plan.entries[0].enabled);
+    CHECK(Texts(*bed.window->Files()).AsView().Contains(u8"0 of 1"));
     bed.window->Close();
 }
 

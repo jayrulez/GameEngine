@@ -219,6 +219,28 @@ export namespace editor::app
                 m_preview->OnSettingsChanged();
         }
 
+        /// A kind row's box: keeps or drops every part of `kind` in file `index`. Where its importer
+        /// has a setting for the kind, the box is that setting: unticked leaves them out as the
+        /// importer does (a model's materials then name no textures), ticked imports them again;
+        /// ticked while the setting is on but every part was dropped, it keeps them all again.
+        void SetKindKept(usize index, pipeline::ImportResourceKind kind, bool on)
+        {
+            if (!m_session || index >= m_session->files.Size())
+                return;
+            AssetImport::File& file = m_session->files[index];
+            if (bool* setting = KindFlag(file, kind); setting != nullptr && *setting != on)
+            {
+                *setting = on;
+                SettingChanged(index, file.Importer()->KindSetting(kind));
+                return;
+            }
+            for (pipeline::ImportPlanEntry& entry : file.plan.entries)
+                if (entry.kind == kind)
+                    entry.enabled = on;
+            ImportWindow* self = this;
+            Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
+        }
+
         /// Shows file `index`'s preview and settings.
         void Select(usize index)
         {
@@ -581,6 +603,13 @@ export namespace editor::app
                                               const pipeline::IFileImporter* importer = described.Importer();
                                               if (importer == nullptr || !described.options)
                                                   return;
+                                              // A setting a kind row in the tree stands for is that row, not a second switch here.
+                                              for (const pipeline::ImportResourceKind kind : kKinds)
+                                                  if (!importer->KindSetting(kind).IsEmpty() && importer->KindSetting(kind) == path)
+                                                  {
+                                                      info.Visible = false;
+                                                      return;
+                                                  }
                                               const String name(path);
                                               const PropertyInfo* setting = FindProperty(*described.options->GetType(), reinterpret_cast<const char*>(name.CStr()));
                                               if (setting == nullptr)
@@ -641,7 +670,12 @@ export namespace editor::app
         // importer makes.
         [[nodiscard]] static bool HasTree(const AssetImport::File& file)
         {
-            return file.plan.entries.Size() > 1 || (file.plan.entries.Size() == 1 && file.plan.entries[0].kind != pipeline::ImportResourceKind::Asset);
+            if (file.plan.entries.Size() > 1 || (file.plan.entries.Size() == 1 && file.plan.entries[0].kind != pipeline::ImportResourceKind::Asset))
+                return true;
+            for (const pipeline::ImportResourceKind kind : kKinds) // a kind left out still has its row, to tick it back
+                if (const bool* setting = KindFlag(file, kind); setting != nullptr && !*setting)
+                    return true;
+            return false;
         }
 
         // The tree under file `index`: each kind it makes, its box keeping or dropping all of it
@@ -662,35 +696,32 @@ export namespace editor::app
                         ++count;
                         kept += entry.enabled ? 1u : 0u;
                     }
-                if (count == 0)
+                // A kind its importer's setting has left out keeps its row, unticked, so it is turned
+                // back on where it was turned off.
+                const bool* setting = KindFlag(file, kind);
+                const bool off = setting != nullptr && !*setting;
+                if (count == 0 && !off)
                     continue;
                 const bool open = IsKindOpen(index, kind);
                 RefPtr<gui::Panel> head = Row(u8"import-kind");
                 RefPtr<gui::CheckBox> all = MakeRef<gui::CheckBox>(m_allocator);
-                all->SetTooltip(u8"Keep or drop all of them");
-                all->SetChecked(kept == count);
-                all->SetIndeterminate(kept > 0 && kept < count);
-                all->SetOnToggled([self, index, kind](bool on)
-                                  {
-                                      if (!self->m_session || index >= self->m_session->files.Size())
-                                          return;
-                                      for (pipeline::ImportPlanEntry& entry : self->m_session->files[index].plan.entries)
-                                          if (entry.kind == kind)
-                                              entry.enabled = on;
-                                      self->Later([self]() { self->ShowFiles(); self->ShowDetail(); self->ShowWhy(); });
-                                  });
+                all->SetTooltip(setting != nullptr ? StringView(u8"Import them, or leave them all out") : StringView(u8"Keep or drop all of them"));
+                all->SetChecked(!off && kept == count);
+                all->SetIndeterminate(!off && kept > 0 && kept < count);
+                all->SetOnToggled([self, index, kind](bool on) { self->SetKindKept(index, kind, on); });
                 RefPtr<gui::Button> toggle = MakeRef<gui::Button>(m_allocator);
                 toggle->AddClass(u8"import-kind-toggle");
                 toggle->AddClass(u8"with-icon");
                 toggle->SetIconSource(String(open ? u8"Editor/Icons/chevron-down.svg" : u8"Editor/Icons/chevron-right.svg"));
                 toggle->SetText(pipeline::ImportResourceKindLabel(kind));
-                toggle->SetTooltip(open ? StringView(u8"Hide them") : StringView(u8"Show them"));
+                toggle->SetTooltip(off ? StringView(u8"Left out: tick to import them") : open ? StringView(u8"Hide them") : StringView(u8"Show them"));
+                toggle->SetEnabled(!off);
                 toggle->SetOnClick([self, index, kind, open]() { self->Later([self, index, kind, open]() { self->SetKindOpen(index, kind, !open); }); });
                 head->AddChild(all.Get());
                 head->AddChild(toggle.Get());
-                head->AddChild(Text(Format(u8"{} of {}", kept, count).AsView(), u8"import-kind-count").Get());
+                head->AddChild(Text((off ? String(u8"Left out") : Format(u8"{} of {}", kept, count)).AsView(), u8"import-kind-count").Get());
                 list.AddChild(head.Get());
-                if (!open)
+                if (!open || off)
                     continue;
                 for (usize e = 0; e < file.plan.entries.Size(); ++e)
                 {
@@ -718,6 +749,16 @@ export namespace editor::app
                     list.AddChild(line.Get());
                 }
             }
+        }
+
+        // The importer's setting that leaves `kind` out of file's import, or null when it has none.
+        [[nodiscard]] static bool* KindFlag(const AssetImport::File& file, pipeline::ImportResourceKind kind)
+        {
+            const pipeline::IFileImporter* importer = file.Importer();
+            if (importer == nullptr || !file.options)
+                return nullptr;
+            const StringView name = importer->KindSetting(kind);
+            return name.IsEmpty() ? nullptr : file.options->FindBoolSetting(name);
         }
 
         // The selected part's details: what it is, its name to give it (with the file's own name

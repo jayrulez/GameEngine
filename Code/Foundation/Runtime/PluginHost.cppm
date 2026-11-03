@@ -68,8 +68,8 @@ export namespace foundation::runtime
         PluginHost(core::IAllocator& allocator, SubsystemManager& subsystems, HostRole role,
                    core::StringView engineVersion)
             : m_allocator(&allocator), m_subsystems(&subsystems), m_role(role),
-              m_engineVersion(engineVersion, allocator), m_loader(subsystems), m_candidates(allocator),
-              m_contexts(allocator), m_loaded(allocator)
+              m_engineVersion(engineVersion, allocator), m_loader(subsystems), m_services(allocator),
+              m_candidates(allocator), m_contexts(allocator), m_loaded(allocator)
         {
         }
 
@@ -82,6 +82,29 @@ export namespace foundation::runtime
 
         // The loader the parts load through, for adding recorders before Load.
         [[nodiscard]] PluginLoader& Loader() noexcept { return m_loader; }
+
+        // Hands `service` (borrowed; it must outlive the host) to every plugin this host loads, as
+        // PluginContext::Find<T>. One service per type: a second Provide of a type replaces the
+        // first. False once plugins are loaded: their contexts read the table, so it is fixed then.
+        template <typename T>
+        [[nodiscard]] bool Provide(T& service)
+        {
+            if (!m_contexts.IsEmpty())
+            {
+                return false;
+            }
+            const core::TypeId type = core::TypeOf<T>().id;
+            for (PluginService& known : m_services)
+            {
+                if (known.type == type)
+                {
+                    known.object = &service;
+                    return true;
+                }
+            }
+            m_services.PushBack(PluginService{type, &service});
+            return true;
+        }
 
         // The plugins linked into this binary (the generated registry's list). A manifest that
         // does not read is a build defect: Internal, and nothing from the list is added.
@@ -452,8 +475,9 @@ export namespace foundation::runtime
         [[nodiscard]] core::String LoadParts(const Candidate& candidate)
         {
             const PluginManifest& manifest = *candidate.manifest;
-            m_contexts.PushBack(core::MakeUnique<PluginContext>(*m_allocator, m_role, *m_subsystems,
-                                                                manifest.id.AsView(), *m_allocator));
+            m_contexts.PushBack(core::MakeUnique<PluginContext>(
+                *m_allocator, m_role, *m_subsystems, manifest.id.AsView(),
+                core::Span<const PluginService>(m_services.Data(), m_services.Size()), *m_allocator));
             PluginContext& context = *m_contexts.Back();
             // Every linked entry is checked before any part loads, so a plugin refused here leaves
             // nothing behind. (A shared library can only be checked by loading it.)
@@ -499,6 +523,7 @@ export namespace foundation::runtime
         HostRole m_role;
         core::String m_engineVersion;
         PluginLoader m_loader;
+        core::Array<PluginService> m_services;
         core::Array<Candidate> m_candidates;
         core::Array<core::UniquePtr<PluginContext>> m_contexts; // one per loaded plugin
         core::Array<core::String> m_loaded;

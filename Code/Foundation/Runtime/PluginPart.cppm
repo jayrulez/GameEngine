@@ -66,14 +66,23 @@ export namespace foundation::runtime
         return false;
     }
 
+    // A service a host hands its plugins, keyed by its type: the layer that owns the service
+    // provides it (PluginHost::Provide), so this layer never names the types above it.
+    struct PluginService
+    {
+        core::TypeId type;
+        void* object;
+    };
+
     // What a part's load and unload are handed: the host's services, as far as its role has them.
     // One context per plugin, shared by its parts, alive from the plugin's load to its unload.
     class PluginContext
     {
     public:
         PluginContext(HostRole role, SubsystemManager& subsystems, core::StringView pluginId,
-                      core::IAllocator& allocator)
-            : m_role(role), m_subsystems(&subsystems), m_pluginId(pluginId, allocator), m_allocator(&allocator)
+                      core::Span<const PluginService> services, core::IAllocator& allocator)
+            : m_role(role), m_subsystems(&subsystems), m_pluginId(pluginId, allocator), m_services(services),
+              m_allocator(&allocator)
         {
         }
 
@@ -91,10 +100,27 @@ export namespace foundation::runtime
         [[nodiscard]] core::TypeRegistry& Types() noexcept { return core::GlobalTypeRegistry(); }
         [[nodiscard]] core::SerializableRegistry& Serializables() noexcept { return core::GlobalSerializableRegistry(); }
 
+        // The host's service of type T, or null when this host has none (a cook has no window, so
+        // no application host): a part checks, and leaves out what the host cannot support.
+        template <typename T>
+        [[nodiscard]] T* Find() const noexcept
+        {
+            const core::TypeId type = core::TypeOf<T>().id;
+            for (const PluginService& service : m_services)
+            {
+                if (service.type == type)
+                {
+                    return static_cast<T*>(service.object);
+                }
+            }
+            return nullptr;
+        }
+
     private:
         HostRole m_role;
         SubsystemManager* m_subsystems;
         core::String m_pluginId;
+        core::Span<const PluginService> m_services; // the host's, which outlives every context
         core::IAllocator* m_allocator;
     };
 

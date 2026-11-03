@@ -514,3 +514,50 @@ TEST_CASE("plugin host: the roles' part table")
     CHECK(RoleLoads(HostRole::Editor, PluginPartKind::Editor));
     CHECK(PluginPartSymbol(u8"steam", PluginPartKind::Engine, DefaultAllocator()) == String(u8"PluginPart_steam_Engine"));
 }
+
+namespace
+{
+    struct ClockService
+    {
+        int ticks = 0;
+    };
+    struct AbsentService
+    {
+    };
+
+    constexpr char8_t kServiceUser[] = u8"service_user";
+    bool g_sawAbsent = true;
+
+    void LoadServiceUser(PluginContext& context)
+    {
+        if (ClockService* clock = context.Find<ClockService>(); clock != nullptr)
+        {
+            ++clock->ticks;
+        }
+        g_sawAbsent = context.Find<AbsentService>() != nullptr;
+    }
+    const PluginPart* ServiceUserEngine()
+    {
+        static constexpr PluginPart part{kServiceUser, PluginPartKind::Engine, &LoadServiceUser, nullptr};
+        return &part;
+    }
+}
+
+TEST_CASE("plugin host: a part finds the services its host provides by type, and null for the rest")
+{
+    SubsystemManager subsystems(DefaultAllocator());
+    Linked linked;
+    linked.Add({.id = kServiceUser, .parts = Parts({PluginPartKind::Engine})}, {&ServiceUserEngine});
+    ClockService clock;
+    ClockService replacement;
+    PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+    REQUIRE(host.AddLinked(linked.List()).IsOk());
+    CHECK(host.Provide(clock));
+    CHECK(host.Provide(replacement)); // one per type: this one replaces the first
+    const StringView enabled[] = {kServiceUser};
+    CHECK(host.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+    CHECK(clock.ticks == 0);
+    CHECK(replacement.ticks == 1);
+    CHECK_FALSE(g_sawAbsent);
+    CHECK_FALSE(host.Provide(clock)); // loaded plugins read the table: it is fixed now
+}

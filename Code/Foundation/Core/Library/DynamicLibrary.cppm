@@ -4,7 +4,7 @@
 // Core - :library partition
 //
 // DynamicLibrary: an RAII handle over the System raw dynamic-library calls,
-// with typed symbol resolution. The runtime's PluginHost loads plugins through it.
+// with typed symbol resolution. The runtime's PluginLoader loads plugins through it.
 
 module;
 #include "Core/Prelude.h"

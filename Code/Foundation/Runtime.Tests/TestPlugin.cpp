@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A real plugin shared library, dynamically loaded by the PluginHost::Load test.
+// A real plugin shared library, dynamically loaded by the PluginLoader::Load test.
 // It registers a subsystem on load and removes it on unload; the subsystem bumps
 // a counter the test observes across the library boundary via TestPluginTicks.
 
@@ -47,7 +47,7 @@ namespace
     };
 }
 
-// Factory resolved by PluginHost::Load. The instance is owned by this library.
+// Factory resolved by PluginLoader::Load. The instance is owned by this library.
 extern "C" PLUGIN_EXPORT IRuntimePlugin* CreatePlugin()
 {
     static TestPlugin plugin;

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // engine.scene - implementation unit: the scene-manager contribution recorder.
-// A PluginHost arms it around a plugin's OnLoad so the managers the plugin contributes
+// A PluginLoader arms it around a plugin's OnLoad so the managers the plugin contributes
 // are recorded and reversed on unload, leaving live scenes while the code that built
 // them is still mapped.
 

@@ -3,7 +3,7 @@
 
 // Engine.GamePlayer: the ship entry point. The same launcher the dev player uses, with the
 // project's native game plugin statically linked. One checked-in stub covers every game: the
-// plugin contract already exports extern "C" CreatePlugin (the symbol PluginHost resolves
+// plugin contract already exports extern "C" CreatePlugin (the symbol PluginLoader resolves
 // with dlopen in dev builds), so referencing it here pulls the game's registration out of its
 // static archive, with no generated main, forced-reference chains or whole-archive linking.
 

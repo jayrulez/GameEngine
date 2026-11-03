@@ -107,7 +107,7 @@ export namespace foundation::core
             }
         }
 
-        // Registration observer (one at a time): PluginHost records what a plugin's
+        // Registration observer (one at a time): PluginLoader records what a plugin's
         // OnLoad registers so unload can reverse it exactly, without the plugin keeping its
         // own list of registrations. Fires only on real inserts (a duplicate
         // Register is a no-op and stays owned by the first registrant).

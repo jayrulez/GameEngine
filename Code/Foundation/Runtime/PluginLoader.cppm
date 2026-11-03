@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Runtime - :pluginhost partition
+// Runtime - :plugin_loader partition
 //
-// PluginHost: owns the set of loaded plugins and their backing shared libraries
+// PluginLoader: owns the set of loaded plugins and their backing shared libraries
 // and drives the load/unload contract against a SubsystemManager. Statically-created
 // plugins are registered with Add() (caller keeps ownership of the object);
-// shared-library plugins with Load() (the host owns the library handle and
-// closes it on teardown).
+// shared-library plugins with Load() (the loader owns the library handle and
+// closes it on teardown). It records what each plugin registers and reverses it on unload.
 
 module;
 #include "Core/Prelude.h"
 
-export module foundation.runtime:pluginhost;
+export module foundation.runtime:plugin_loader;
 
 import foundation.core;
 import :subsystem_manager;
@@ -25,7 +25,7 @@ export namespace foundation::runtime
     // A registry the RegistrationScope can record: armed around a plugin's OnLoad, it
     // reports every real insert to the sink; Reverse undoes one. The two core registries
     // are built in; layers above (scene-manager contributions, Engine.Scene) plug theirs
-    // in through PluginHost::AddRecorder so one unload reverses everything a plugin did.
+    // in through PluginLoader::AddRecorder so one unload reverses everything a plugin did.
     class IRegistrationRecorder
     {
     public:
@@ -35,10 +35,10 @@ export namespace foundation::runtime
         virtual void Reverse(core::TypeId id) = 0;
     };
 
-    class PluginHost
+    class PluginLoader
     {
     public:
-        explicit PluginHost(SubsystemManager& subsystems) noexcept : m_subsystems(&subsystems) {}
+        explicit PluginLoader(SubsystemManager& subsystems) noexcept : m_subsystems(&subsystems) {}
 
         // Registers an extra recorder (borrowed; must outlive the host). Add it before loading
         // plugins: later loads record through it, earlier ones do not.
@@ -49,10 +49,10 @@ export namespace foundation::runtime
                 m_recorders.PushBack(recorder);
             }
         }
-        ~PluginHost() { UnloadAll(); }
+        ~PluginLoader() { UnloadAll(); }
 
-        PluginHost(const PluginHost&) = delete;
-        PluginHost& operator=(const PluginHost&) = delete;
+        PluginLoader(const PluginLoader&) = delete;
+        PluginLoader& operator=(const PluginLoader&) = delete;
 
         // Registers an already-created plugin (the caller retains ownership of the
         // object) and calls OnLoad immediately. Returns the plugin for chaining.

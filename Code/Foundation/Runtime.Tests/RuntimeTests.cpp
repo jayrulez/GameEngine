@@ -267,12 +267,12 @@ namespace
     };
 }
 
-TEST_CASE("runtime: PluginHost::Add registers a static plugin's subsystem")
+TEST_CASE("runtime: PluginLoader::Add registers a static plugin's subsystem")
 {
     SubsystemManager ctx(DefaultAllocator());
     StaticTestPlugin plugin;
     {
-        PluginHost host(ctx);
+        PluginLoader host(ctx);
         CHECK(host.Add(&plugin) == &plugin);
         CHECK(host.Count() == 1u);
         CHECK(ctx.HasSubsystem<Sys<7>>());
@@ -289,11 +289,11 @@ TEST_CASE("runtime: PluginHost::Add registers a static plugin's subsystem")
     CHECK(plugin.m_sys.shutdowns == 1);
 }
 
-TEST_CASE("runtime: PluginHost::Load loads a plugin from a shared library")
+TEST_CASE("runtime: PluginLoader::Load loads a plugin from a shared library")
 {
     SubsystemManager ctx(DefaultAllocator());
     {
-        PluginHost host(ctx);
+        PluginLoader host(ctx);
 
         auto loaded = host.Load(PluginPath());
         REQUIRE(loaded.HasValue());
@@ -320,10 +320,10 @@ TEST_CASE("runtime: PluginHost::Load loads a plugin from a shared library")
     }
 }
 
-TEST_CASE("runtime: PluginHost::Load reports failure for a missing library")
+TEST_CASE("runtime: PluginLoader::Load reports failure for a missing library")
 {
     SubsystemManager ctx(DefaultAllocator());
-    PluginHost host(ctx);
+    PluginLoader host(ctx);
     auto result = host.Load(u8"./definitely-not-a-real-plugin.so");
     CHECK_FALSE(result.HasValue());
     CHECK(host.Count() == 0u);
@@ -423,7 +423,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
         }
     } contributionRecorder;
 
-    PluginHost host(ctx);
+    PluginLoader host(ctx);
     host.AddRecorder(&contributionRecorder);
     auto loaded = host.Load(path);
     REQUIRE(loaded.HasValue());

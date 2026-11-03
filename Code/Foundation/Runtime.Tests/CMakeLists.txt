@@ -1,6 +1,6 @@
 # Foundation::Runtime unit tests (doctest).
 
-# A real plugin shared object, dlopen'd by the PluginHost::Load test.
+# A real plugin shared object, dlopen'd by the PluginLoader::Load test.
 add_library(Runtime.TestPlugin MODULE TestPlugin.cpp)
 set_target_properties(Runtime.TestPlugin PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(Runtime.TestPlugin PRIVATE Foundation::Runtime Foundation::Policy)

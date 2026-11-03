@@ -46,7 +46,7 @@ export namespace editor::app
         {
             if (project.Settings().nativeModule.IsEmpty())
                 return;
-            m_plugins = MakeUnique<foundation::runtime::PluginHost>(m_allocator, runtime);
+            m_plugins = MakeUnique<foundation::runtime::PluginLoader>(m_allocator, runtime);
             m_plugins->AddRecorder(&engine::scene::GlobalSceneContributionRecorder());
             const String modulePath = StageCopy(project);
             bool ok = false;
@@ -117,7 +117,7 @@ export namespace editor::app
                 restoreScenes();
                 return;
             }
-            m_plugins = MakeUnique<foundation::runtime::PluginHost>(m_allocator, runtime);
+            m_plugins = MakeUnique<foundation::runtime::PluginLoader>(m_allocator, runtime);
             m_plugins->AddRecorder(&engine::scene::GlobalSceneContributionRecorder());
             auto loaded = m_plugins->Load(staged.AsView());
             restoreScenes(); // after the contribution, so plugin components rehydrate
@@ -193,7 +193,7 @@ export namespace editor::app
 
     private:
         IAllocator& m_allocator;
-        UniquePtr<foundation::runtime::PluginHost> m_plugins;
+        UniquePtr<foundation::runtime::PluginLoader> m_plugins;
         u32 m_reloads = 0; // numbers the staged copies' versions
     };
 }

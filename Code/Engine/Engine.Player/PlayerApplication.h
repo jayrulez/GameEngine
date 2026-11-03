@@ -140,7 +140,7 @@ namespace engine::player
             // nativeModule (a project-relative path to the built module; shared-engine builds
             // only). A missing or unloadable module is reported and the run continues (scripts
             // still work).
-            m_plugins = MakeUnique<runtime::PluginHost>(AppRoot(), host.Subsystems());
+            m_plugins = MakeUnique<runtime::PluginLoader>(AppRoot(), host.Subsystems());
             // Record the managers and systems the game contributes to scenes so unload reverses
             // them.
             m_plugins->AddRecorder(&engine::scene::GlobalSceneContributionRecorder());
@@ -610,7 +610,7 @@ namespace engine::player
         PlayerOptions m_options;
         f32 m_elapsed = 0.0f;
         engine::project::ProjectSettings m_settings;
-        UniquePtr<runtime::PluginHost> m_plugins; // the native game (static or dev-loaded)
+        UniquePtr<runtime::PluginLoader> m_plugins; // the native game (static or dev-loaded)
         UniquePtr<foundation::vfs::NativeFileSystem> m_root;
         UniquePtr<foundation::vfs::PakFileSystem> m_pak;             // dist mode only
         UniquePtr<foundation::vfs::NativeFileSystem> m_contentMount; // project mode only

@@ -99,7 +99,7 @@ namespace editor
             u8"// OnLoad(SubsystemManager&) is the ONE registration entry: components, subsystems, and\n"
             u8"// script facades all register explicitly here (never via static initializers),\n"
             u8"// and the engine reverses recorded registrations on unload/reload. The exported\n"
-            u8"// CreatePlugin below is the whole contract: PluginHost dlopens it in dev builds,\n"
+            u8"// CreatePlugin below is the whole contract: PluginLoader dlopens it in dev builds,\n"
             u8"// and the ship player's stub references it statically.\n"
             u8"\n"
             u8"#include \"Core/Prelude.h\"\n"

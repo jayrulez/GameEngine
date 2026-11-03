@@ -117,6 +117,7 @@ endif()
 
 # Reusable helpers (util_copy_runtime_deps, ...).
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Helpers.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Plugins.cmake) # util_add_plugin: plugin packages from their Plugin.xml
 # BUILDSYSTEM_NOTICES_FILE: the third-party notices every shipped executable stages beside it.
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThirdPartyNotices.cmake)
 

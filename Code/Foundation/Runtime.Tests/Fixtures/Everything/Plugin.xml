@@ -1,0 +1,49 @@
+<root>
+	<array name="dataVersions" count="1">
+		<u64 name="type">10998758824331725369</u64>
+		<u32 name="version">1</u32>
+	</array>
+	<string name="id">everything</string>
+	<string name="name">Every Part</string>
+	<string name="version">1.2.3</string>
+	<string name="engineVersion">0.1</string>
+	<array name="dependsOn" count="2">
+		<object>
+			<string name="id">online</string>
+			<string name="version">0.1</string>
+		</object>
+		<object>
+			<string name="id">other_thing</string>
+			<string name="version">2.0.1</string>
+		</object>
+	</array>
+	<array name="provides" count="1">
+		<string>online.backend</string>
+	</array>
+	<array name="parts" count="4">
+		<object>
+			<string name="kind">Engine</string>
+		</object>
+		<object>
+			<string name="kind">Pipeline</string>
+		</object>
+		<object>
+			<string name="kind">Tooling</string>
+		</object>
+		<object>
+			<string name="kind">Editor</string>
+		</object>
+	</array>
+	<array name="platforms" count="2">
+		<object>
+			<string name="platform">Linux64</string>
+			<array name="deploy" count="1">
+				<string>ThirdParty/linux64/libthing.so</string>
+			</array>
+		</object>
+		<object>
+			<string name="platform">Web</string>
+			<array name="deploy" count="0"/>
+		</object>
+	</array>
+</root>

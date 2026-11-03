@@ -26,7 +26,7 @@ import foundation.graphics.gpu;
 import foundation.xml;
 import foundation.xml.serialization;
 import foundation.settings;
-import plugins.imgui;
+import imgui.engine;
 import foundation.input;
 import engine.input;
 

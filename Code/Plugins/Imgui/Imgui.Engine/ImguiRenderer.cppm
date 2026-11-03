@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Plugins::Imgui - the `:renderer` partition.
+/// Plugins::Imgui.Engine - the `:renderer` partition.
 ///
 /// A Dear ImGui renderer built on our RHI rather than a stock imgui backend. It owns the GPU
 /// pipeline, the font atlas and the per-frame dynamic vertex, index and uniform buffers, and records
@@ -13,7 +13,7 @@ module;
 #include "imgui.h"
 #include <cstring>
 
-export module plugins.imgui:renderer;
+export module imgui.engine:renderer;
 
 import foundation.core;
 import foundation.rhi;

@@ -16,6 +16,6 @@ target_link_libraries(AudioPlayground PRIVATE
     Engine::Scene
     Engine::Render
     Foundation::Audio Engine::Audio
-    Plugins::Imgui
+    Plugins::Imgui.Engine
     Foundation::Policy)
 util_copy_sdl3_dll(AudioPlayground)

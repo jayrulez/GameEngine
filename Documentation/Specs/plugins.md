@@ -156,7 +156,9 @@ every other data file:
 - **id** is lower case and stable; it keys the project's entry, the settings block and the
   generated entry symbols. **name** is for display.
 - **version** and **engineVersion**: the engine refuses a manifest whose engine version it does
-  not satisfy, with a message naming both.
+  not satisfy, with a message naming both. Versions are `major.minor[.patch]`. An engine satisfies
+  a plugin of its own major at or below its own version; before 1.0 the minor must match as well,
+  since a 0.x minor release may break plugins (`EngineSatisfies`, settled in X0).
 - **dependsOn**: other plugin ids with a minimum version. Loading is in dependency order; a
   missing or refused dependency disables its dependents, each with a message.
 - **provides**: named slots, at most one enabled provider per slot per platform (Traktor's
@@ -167,10 +169,13 @@ every other data file:
   entries later add their non-C++ pieces (Java, Objective-C, manifest entries) as more fields of
   the same record.
 
-The CMake helper `util_add_plugin(<dir>)` reads the manifest (a small CMake reader over the
-known shape, or a configure-time step through a host tool; see Gotchas) and declares each part as
-an engine library through `util_add_engine_library`, so the part names, their link to each other
-and the dependency order are never written twice.
+The CMake helper `util_add_plugin(<dir>)` (`cmake/Plugins.cmake`) reads the manifest (a line
+reader over the writer's shape; see Gotchas) and adds each part's folder in load order. The part's
+CMakeLists starts with `util_add_plugin_part()`, which declares `${PLUGIN_PART}` as an engine
+library through `util_add_engine_library`, linked to the package's previous part and to the same
+part of each plugin it depends on (which must be added first), so the part names, their link to
+each other and the dependency order are never written twice. The part then adds its sources and
+its engine links.
 
 ## Decision 2 - parts follow the hosts that load them
 
@@ -303,9 +308,11 @@ that turns a non-empty `nativeModule` into the game's package entry):
 
 ## Phases
 
-- **X0 - manifest and package layout.** `PluginManifest` (reflected, versioned) and its reader;
+- **X0 - manifest and package layout** (built 2026-11-03). `PluginManifest` (reflected, versioned) and its reader;
   `util_add_plugin`; Imgui moves from `Code/Plugins/Imgui` to `Code/Plugins/Imgui/Imgui.Engine`
-  with a manifest listing Linux64, Win64 and Web. The framework samples are not
+  with a manifest listing Linux64, Win64 and Web; the part's target is `Imgui.Engine`
+  (`Plugins::Imgui.Engine`) and its module `imgui.engine`, after the engine's rule that a module
+  is its target in lower case. The framework samples are not
   projects: the ten that use Imgui keep linking the part directly, and the web builds of
   TerrainPlayground and WebScene (WebScene's tweak UI, `Code/Samples/WebScene/CMakeLists.txt:40`)
   must still build and show the panel, so X0 runs the wasm build. Tests: manifest round trip,
@@ -337,10 +344,13 @@ that turns a non-empty `nativeModule` into the game's package entry):
 
 ## Gotchas
 
-- **Reading the manifest from CMake.** CMake has no XML reader. Either the helper parses the
-  known flat shape with `string(REGEX ...)` (fragile, but the manifest is ours), or a small host
-  tool converts it at configure time (a chicken-and-egg problem for the first configure). Decide
-  in X0; a test pins whichever is chosen to the C++ reader's output.
+- **Reading the manifest from CMake** (settled in X0). CMake has no XML reader, and a host tool
+  at configure time would not exist on the first configure, so `cmake/Plugins.cmake` reads the
+  shape the engine's XML writer emits, one element per line, tracking the array and object nesting
+  to find the top-level id, the part kinds and the dependency ids. Every manifest a configure reads
+  is recorded in `<build>/plugin-manifests-read.txt`, and Runtime.Tests reads each one again with
+  the C++ reader and compares; a four-part fixture with dependencies is always among them, and a
+  second test proves the writer emits that fixture, so a written manifest is one the build reads.
 - **Scripts and absent plugins.** A script that calls a plugin's facade compiles only
   where the plugin is enabled. Per-platform enablement therefore means per-platform script
   compile results. Platform services should be reached through engine facades with providers

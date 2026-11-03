@@ -20,7 +20,7 @@ set(_terrain_common_libs
     Engine::Scene
     Engine::Render
     Foundation::Render
-    Plugins::Imgui
+    Plugins::Imgui.Engine
     Foundation::Geometry
     Foundation::Materials
     Foundation::Heightfield

@@ -191,7 +191,7 @@ add_library(doctest::doctest ALIAS doctest)
 target_include_directories(doctest SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/doctest)
 
 # Dear ImGui - vendored (copied from upstream, not a submodule). Compiled as a static library;
-# the include dir is PUBLIC + SYSTEM so consumers (the plugins.imgui lib + apps) can
+# the include dir is PUBLIC + SYSTEM so consumers (the imgui.engine lib + apps) can
 # #include "imgui.h" and call ImGui:: directly. Does NOT link policy, so the vendored
 # sources build without our -Werror. No stock backends - The engine has its own RHI-based renderer.
 # Builds for Emscripten too (portable C++; the debug panel works in the browser).

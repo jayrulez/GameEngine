@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Plugins::Imgui - `plugins.imgui`, the Dear ImGui debug-UI integration.
+/// Plugins::Imgui.Engine - `imgui.engine`, the Dear ImGui debug-UI integration.
 ///
 /// ImguiRenderer renders ImGui draw data through the RHI, and ImguiSubsystem owns the context and the
 /// per-frame NewFrame and Render hooks an app drives. Dear ImGui itself is used through its own
-/// header (imgui.h, from the vendored Plugins::Imgui library this links PUBLIC): apps include
+/// header (imgui.h, from the vendored ThirdParty::ImGui library this links PUBLIC): apps include
 /// "imgui.h" and call ImGui:: directly, and this module only adds the engine integration. It depends
 /// on Runtime, Shell (input), Graphics (FrameContext), RHI and Shaders.
 
-export module plugins.imgui;
+export module imgui.engine;
 
 export import :renderer;
 export import :subsystem;

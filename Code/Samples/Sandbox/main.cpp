@@ -7,7 +7,7 @@
 // As the renderer grows, this is where we exercise it.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (debug UI), used directly; plugins.imgui does the engine integration
+#include "imgui.h" // Dear ImGui (debug UI), used directly; imgui.engine does the engine integration
 
 import foundation.core;
 import foundation.rhi; // offscreen render target (Texture / ResourceState / Blit)
@@ -25,7 +25,7 @@ import engine.scene;
 import engine.render; // MeshComponent / CameraComponent and their managers
 import engine.model;  // InstantiateModel: a cooked model's nodes as entities
 import engine.animation; // SkeletalAnimation/AnimationGraph components (engine-driven skinning)
-import plugins.imgui;               // ImguiSubsystem (debug UI)
+import imgui.engine;               // ImguiSubsystem (debug UI)
 import foundation.particles;           // ParticleEffect and the CPU sim (the campfire demo)
 import engine.particles;    // ParticleEffectComponent and the subsystem
 import foundation.image;               // Image (HDR equirect pixels)

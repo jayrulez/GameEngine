@@ -16,7 +16,7 @@
 // move fast, Esc to exit.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (HUD), used directly; plugins.imgui does the engine integration
+#include "imgui.h" // Dear ImGui (HUD), used directly; imgui.engine does the engine integration
 
 import foundation.core;
 import foundation.rhi; // PresentMode (run the benchmark vsync-off)
@@ -32,7 +32,7 @@ import engine.defaultapp;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import plugins.imgui; // ImguiSubsystem (HUD)
+import imgui.engine; // ImguiSubsystem (HUD)
 import foundation.geometry;
 import foundation.materials;
 

@@ -37,7 +37,7 @@ if(EMSCRIPTEN)
         Foundation::Shell.Web
         Foundation::Runtime.Web)
     if(OPTION_PLUGIN_IMGUI)
-        target_link_libraries(WebScene PRIVATE Plugins::Imgui)
+        target_link_libraries(WebScene PRIVATE Plugins::Imgui.Engine)
     endif()
 
     # Cook the WGSL shader pack with the native tool (the browser has no compiler) and bundle it
@@ -91,7 +91,7 @@ else()
         Foundation::Shell.Desktop
         Foundation::Runtime.Desktop)
     if(OPTION_PLUGIN_IMGUI)
-        target_link_libraries(WebScene PRIVATE Plugins::Imgui)
+        target_link_libraries(WebScene PRIVATE Plugins::Imgui.Engine)
     endif()
     util_copy_runtime_deps(WebScene) # SDL3 is vendored static; no DLL to stage
 

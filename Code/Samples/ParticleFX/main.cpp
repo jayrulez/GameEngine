@@ -26,7 +26,7 @@ import foundation.scene;
 import engine.scene;
 import engine.render;
 import foundation.render;
-import plugins.imgui;
+import imgui.engine;
 import foundation.geometry;
 import foundation.materials;
 import foundation.particles;           // the CPU sim (effect/system/modules)

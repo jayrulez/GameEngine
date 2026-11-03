@@ -9,7 +9,7 @@
 
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (isolate animation-drive cost)
-#include "imgui.h"             // Dear ImGui (HUD), used directly; plugins.imgui does the integration
+#include "imgui.h"             // Dear ImGui (HUD), used directly; imgui.engine does the integration
 
 import foundation.core;
 import foundation.profiler;
@@ -27,7 +27,7 @@ import foundation.scene;
 import engine.scene;
 import engine.render; // MeshComponent / CameraComponent and their managers
 import foundation.render;           // ViewCamera / ViewportRect (split-screen overrides)
-import plugins.imgui;            // ImguiSubsystem (HUD)
+import imgui.engine;            // ImguiSubsystem (HUD)
 import foundation.geometry;
 import foundation.geometry.resource; // StaticMeshFactory and the StaticMesh product
 import foundation.materials;

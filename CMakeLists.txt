@@ -138,7 +138,7 @@ option(OPTION_BUILD_DEPRECATED "Build Code/Deprecated (the old UI framework and 
 # Optional plugins are independently switchable; each exposes an OPTION_HAS_* compile define
 # (see the policy block) so C++ can guard usage with #if.
 option(OPTION_GUI_LIBFUZZER "Build a libFuzzer executable per GUI fuzz target (clang; configure the tree with -fsanitize=fuzzer-no-link,address)" OFF)
-option(OPTION_PLUGIN_IMGUI  "Build the Dear ImGui debug-UI plugin (plugins.imgui)" ON)
+option(OPTION_PLUGIN_IMGUI  "Build the Dear ImGui debug-UI plugin (imgui.engine)" ON)
 # Script backends are independently switchable; each defines OPTION_HAS_<backend> (presence macro,
 # guard C++ with `#ifdef`) when enabled. At least one must stay on. AngelScript additionally needs
 # its vendored lib to have built (reconciled after ThirdParty is added, before the backend subdirs).
@@ -151,7 +151,7 @@ option(OPTION_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 # game has the engine's GUI (Engine.GUI) as a desktop one does.
 if(EMSCRIPTEN)
     set(OPTION_BUILD_TOOLS OFF)
-    # OPTION_PLUGIN_IMGUI stays available on web: Dear ImGui and plugins.imgui compile for
+    # OPTION_PLUGIN_IMGUI stays available on web: Dear ImGui and imgui.engine compile for
     # wasm (the renderer is pure RHI, the subsystem consumes the shell's input), so the debug
     # panel works in the browser too (WebScene's tweak UI).
 
@@ -541,7 +541,7 @@ add_subdirectory(Code/Engine/Engine.Integration) # cross-subsystem composition h
 add_subdirectory(Code/Engine/Engine.GUI) # the engine's GUI on foundation.gui
 add_subdirectory(Code/Engine/Engine.Composition) # the composition root: the one list of domains and the facets built from it on demand (scene, reflection, resource types, factories, facades)
 if(OPTION_PLUGIN_IMGUI)
-    add_subdirectory(Code/Plugins/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime
+    util_add_plugin(Code/Plugins/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime, from its Plugin.xml
 endif()
 add_subdirectory(Code/Engine/Engine.Player)        # Generic game runner
 

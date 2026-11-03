@@ -29,7 +29,7 @@ import foundation.graphics.gpu;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import plugins.imgui;
+import imgui.engine;
 import foundation.audio;
 import engine.audio;
 

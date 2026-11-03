@@ -7,7 +7,7 @@
 // in CMakeLists.txt: the sample bundles its shader pack because the browser has no compiler.
 
 #include "Core/Prelude.h"
-// imgui.h must be textually included before `import plugins.imgui`: gcc does not merge the
+// imgui.h must be textually included before `import imgui.engine`: gcc does not merge the
 // module's global-module-fragment declarations into a later textual include (clang does), so
 // including it first is the portable order.
 #include "imgui.h"
@@ -26,7 +26,7 @@ import foundation.scene;
 import engine.scene;
 import engine.render;
 import foundation.render;
-import plugins.imgui;
+import imgui.engine;
 import foundation.geometry;  // Primitives (the orbiting shadow caster)
 import foundation.materials; // CreatePBR
 import foundation.shaders;        // ShaderEffect, ShaderFlags (the grass's Wind group)

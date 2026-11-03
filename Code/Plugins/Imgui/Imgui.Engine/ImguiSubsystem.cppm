@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Plugins::Imgui - the `:subsystem` partition.
+/// Plugins::Imgui.Engine - the `:subsystem` partition.
 ///
 /// ImguiSubsystem: an application-level subsystem that owns the Dear ImGui context and the RHI
 /// renderer, and exposes the per-frame hooks an app drives. NewFrame feeds input and the display size
@@ -14,7 +14,7 @@ module;
 #include "Core/Prelude.h"
 #include "imgui.h"
 
-export module plugins.imgui:subsystem;
+export module imgui.engine:subsystem;
 
 import foundation.core;
 import foundation.rhi;

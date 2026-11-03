@@ -16,7 +16,7 @@ target_link_libraries(AnimatedCrowd PRIVATE
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Plugins::Imgui
+    Plugins::Imgui.Engine
     Foundation::Geometry
     Foundation::Materials
     Pipeline::ModelImporter

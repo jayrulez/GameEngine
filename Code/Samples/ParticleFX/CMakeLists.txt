@@ -15,7 +15,7 @@ target_link_libraries(ParticleFX PRIVATE
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Plugins::Imgui
+    Plugins::Imgui.Engine
     Foundation::Geometry
     Foundation::Materials
     Foundation::Particles

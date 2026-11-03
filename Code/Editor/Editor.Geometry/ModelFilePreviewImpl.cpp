@@ -143,8 +143,8 @@ namespace editor
         {
             RefPtr<gui::Panel> panel = MakeRef<gui::Panel>(*allocator);
             panel->AddClass(u8"import-model");
-            RefPtr<gui::Panel> bar = MakeRef<gui::Panel>(*allocator);
-            bar->AddClass(u8"panel-toolbar");
+            RefPtr<gui::Panel> toolbar = MakeRef<gui::Panel>(*allocator);
+            toolbar->AddClass(u8"panel-toolbar");
             Impl* self = this;
             RefPtr<gui::ToolButton> frame = Tool(*allocator, u8"Editor/Icons/frame-selection.svg", u8"Frame it (F)");
             frame->SetOnClick([self]() { self->Frame(); });
@@ -169,11 +169,11 @@ namespace editor
             clips = clipChoice.Get();
             play = playButton.Get();
             skeleton = bones.Get();
-            this->bar = bar.Get();
-            bar->AddChild(frame.Get());
-            bar->AddChild(clipChoice.Get());
-            bar->AddChild(playButton.Get());
-            bar->AddChild(bones.Get());
+            bar = toolbar.Get();
+            toolbar->AddChild(frame.Get());
+            toolbar->AddChild(clipChoice.Get());
+            toolbar->AddChild(playButton.Get());
+            toolbar->AddChild(bones.Get());
             RefPtr<gui::Panel> stagePanel = MakeRef<gui::Panel>(*allocator);
             stagePanel->AddClass(u8"import-model-stage");
             stage = stagePanel.Get();
@@ -181,7 +181,7 @@ namespace editor
             text->AddClass(u8"state-text");
             text->AddClass(u8"import-model-message");
             message = text.Get();
-            panel->AddChild(bar.Get());
+            panel->AddChild(toolbar.Get());
             panel->AddChild(stagePanel.Get());
             panel->AddChild(text.Get());
             root = panel;

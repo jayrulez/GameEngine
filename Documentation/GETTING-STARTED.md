@@ -85,7 +85,7 @@ The roles, in dependency order (lower layers never know about higher ones):
   scene (desktop + browser), `Framework/` holds the shared sample scaffolding.
 - **Integration/**: cross-cutting integration test suites (script facades,
   texture compression probes, ...).
-- **Extensions/**: optional integrations (Dear ImGui).
+- **Plugins/**: optional integrations (Dear ImGui).
 - **Deprecated/**: code kept compiling on its way out: `UI` holds the old UI
   framework (`foundation.ui` and its satellites) and its UISandbox. Nothing
   outside `Deprecated/` links it, and it builds only with

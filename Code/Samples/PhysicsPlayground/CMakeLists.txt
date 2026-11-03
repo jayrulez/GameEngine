@@ -15,6 +15,6 @@ target_link_libraries(PhysicsPlayground PRIVATE
     Engine::Render
     Foundation::Physics Foundation::Physics.Resource Engine::Physics
     Foundation::GUI Foundation::GUI.Resources Engine::GUI # the HUD canvas, the nameplate billboard, the kiosk panel
-    Extensions::Imgui
+    Plugins::Imgui
     Foundation::Policy)
 util_copy_sdl3_dll(PhysicsPlayground)

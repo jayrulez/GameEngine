@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Extensions::Imgui - the `:renderer` partition.
+/// Plugins::Imgui - the `:renderer` partition.
 ///
 /// A Dear ImGui renderer built on our RHI rather than a stock imgui backend. It owns the GPU
 /// pipeline, the font atlas and the per-frame dynamic vertex, index and uniform buffers, and records
@@ -13,7 +13,7 @@ module;
 #include "imgui.h"
 #include <cstring>
 
-export module extensions.imgui:renderer;
+export module plugins.imgui:renderer;
 
 import foundation.core;
 import foundation.rhi;
@@ -25,7 +25,7 @@ using namespace foundation;
 namespace shaders = foundation::shaders;
 namespace rhi = foundation::rhi;
 
-export namespace extensions::imgui
+export namespace imgui
 {
 
     // The ImGui vertex and pixel shaders ship with the engine shaders (imgui.vs and imgui.ps) and
@@ -520,4 +520,4 @@ export namespace extensions::imgui
         FrameSlot m_frames[kMaxFIF] = {};
     };
 
-} // namespace extensions::imgui
+} // namespace imgui

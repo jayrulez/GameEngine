@@ -134,10 +134,10 @@ option(OPTION_BUILD_TESTS "Build unit tests" ON)
 option(OPTION_BUILD_SAMPLES "Build sample applications" ON)
 option(OPTION_BUILD_TOOLS "Build editor/authoring tooling (the editor libraries + CLI exes)" ON)
 option(OPTION_BUILD_DEPRECATED "Build Code/Deprecated (the old UI framework and its UISandbox)" OFF)
-# Optional extensions are independently switchable; each exposes an OPTION_HAS_* compile define
+# Optional plugins are independently switchable; each exposes an OPTION_HAS_* compile define
 # (see the policy block) so C++ can guard usage with #if.
 option(OPTION_GUI_LIBFUZZER "Build a libFuzzer executable per GUI fuzz target (clang; configure the tree with -fsanitize=fuzzer-no-link,address)" OFF)
-option(OPTION_EXTENSION_IMGUI  "Build the Dear ImGui debug-UI extension (extensions.imgui)" ON)
+option(OPTION_PLUGIN_IMGUI  "Build the Dear ImGui debug-UI plugin (plugins.imgui)" ON)
 # Script backends are independently switchable; each defines OPTION_HAS_<backend> (presence macro,
 # guard C++ with `#ifdef`) when enabled. At least one must stay on. AngelScript additionally needs
 # its vendored lib to have built (reconciled after ThirdParty is added, before the backend subdirs).
@@ -150,7 +150,7 @@ option(OPTION_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 # game has the engine's GUI (Engine.GUI) as a desktop one does.
 if(EMSCRIPTEN)
     set(OPTION_BUILD_TOOLS OFF)
-    # OPTION_EXTENSION_IMGUI stays available on web: Dear ImGui and extensions.imgui compile for
+    # OPTION_PLUGIN_IMGUI stays available on web: Dear ImGui and plugins.imgui compile for
     # wasm (the renderer is pure RHI, the subsystem consumes the shell's input), so the debug
     # panel works in the browser too (WebScene's tweak UI).
 
@@ -231,8 +231,8 @@ target_compile_definitions(policy INTERFACE
     BUILD_CONFIG=\"$<CONFIG>\"
     BUILD_COMPILER=\"${_dr_comp}\"
     # Optional-module presence flags (0 or 1); guard their use in C++ with, for example,
-    # `#if OPTION_HAS_EXTENSION_IMGUI`.
-    OPTION_HAS_EXTENSION_IMGUI=$<BOOL:${OPTION_EXTENSION_IMGUI}>
+    # `#if OPTION_HAS_PLUGIN_IMGUI`.
+    OPTION_HAS_PLUGIN_IMGUI=$<BOOL:${OPTION_PLUGIN_IMGUI}>
     USER_DATA_DIR_NAME=u8\"${USER_DATA_DIR_NAME_VALUE}\"
     TEMPLATE_ID_PREFIX=u8\"${TEMPLATE_ID_PREFIX_VALUE}\")
 
@@ -307,7 +307,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/Code/Engine
     ${CMAKE_SOURCE_DIR}/Code/Editor
     ${CMAKE_SOURCE_DIR}/Code/Tools
-    ${CMAKE_SOURCE_DIR}/Code/Extensions)
+    ${CMAKE_SOURCE_DIR}/Code/Plugins)
 
 # --- Targets -----------------------------------------------------------------
 # One dependency-ordered list for every platform. The order must stay a valid topological order,
@@ -539,8 +539,8 @@ add_subdirectory(Code/Engine/Engine.Script) # entity behaviors (ScriptComponent 
 add_subdirectory(Code/Engine/Engine.Integration) # cross-subsystem composition helpers (the bridge from physics contacts to scripts) over Physics and Script
 add_subdirectory(Code/Engine/Engine.GUI) # the engine's GUI on foundation.gui
 add_subdirectory(Code/Engine/Engine.Composition) # the composition root: the one list of domains and the facets built from it on demand (scene, reflection, resource types, factories, facades)
-if(OPTION_EXTENSION_IMGUI)
-    add_subdirectory(Code/Extensions/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime
+if(OPTION_PLUGIN_IMGUI)
+    add_subdirectory(Code/Plugins/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime
 endif()
 add_subdirectory(Code/Engine/Engine.Player)        # Generic game runner
 
@@ -875,7 +875,7 @@ if(EMSCRIPTEN)
     if(OPTION_BUILD_SAMPLES)
         add_subdirectory(Code/Samples/WebTriangle)  # WebShell, the web runner and the WebGPU factory; builds WebTriangle.html
         add_subdirectory(Code/Samples/WebScene)     # DefaultApplication and a lit PBR scene; builds WebScene.html
-        if(OPTION_EXTENSION_IMGUI)
+        if(OPTION_PLUGIN_IMGUI)
             add_subdirectory(Code/Samples/TerrainPlayground) # a heightfield built in code, drawn by engine.terrain; builds TerrainPlayground.html
         endif()
     endif()

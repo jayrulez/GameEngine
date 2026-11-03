@@ -15,7 +15,7 @@ target_link_libraries(RenderStressTest PRIVATE Foundation::VFS
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Extensions::Imgui
+    Plugins::Imgui
     Foundation::Geometry
     Foundation::Materials
     Foundation::Policy)

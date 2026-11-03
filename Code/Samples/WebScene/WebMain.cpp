@@ -7,10 +7,10 @@
 // Unlike the Player, the sample bundles its shader pack, since no export step runs before it.
 
 #include "Core/Prelude.h"
-// imgui.h must be textually included before `import extensions.imgui`: gcc does not merge the
+// imgui.h must be textually included before `import plugins.imgui`: gcc does not merge the
 // module's global-module-fragment declarations into a later textual include (clang does), so
 // including it first is the portable order (Sandbox does the same).
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
 #include "imgui.h"
 #endif
 
@@ -38,8 +38,8 @@ import engine.particles;
 import foundation.gui;
 import foundation.gui.resources; // GuiDocument (the documents made in code)
 import engine.gui;
-#if OPTION_HAS_EXTENSION_IMGUI
-import extensions.imgui;
+#if OPTION_HAS_PLUGIN_IMGUI
+import plugins.imgui;
 #endif
 
 #include "Runtime.Client/AppMain.h"

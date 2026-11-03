@@ -32,7 +32,7 @@
 
 #include "../Common/FlyCamera.h" // shared free-fly camera (WASD/QE, right mouse button to look)
 
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
 #include "imgui.h"
 
 namespace
@@ -65,13 +65,13 @@ namespace samples
     class WebSceneApp : public engine::runtime::DefaultApplication
     {
     public:
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Subsystems().AddSubsystem<extensions::imgui::ImguiSubsystem>(
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(
                     *gfx->Raw(), gfx->FramesInFlight(), DataFileSystem());
             }
         }
@@ -127,8 +127,8 @@ namespace samples
                 return;
             }
 
-#if OPTION_HAS_EXTENSION_IMGUI
-            if (auto* g = host.Subsystems().GetSubsystem<extensions::imgui::ImguiSubsystem>())
+#if OPTION_HAS_PLUGIN_IMGUI
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
                 BuildTweakPanel(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
@@ -271,9 +271,9 @@ namespace samples
                 }
             }
             engine::runtime::DefaultApplication::OnRenderWindow(host, frame);
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
             // The debug panel draws over the finished scene on the backbuffer.
-            if (auto* g = host.Subsystems().GetSubsystem<extensions::imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -725,7 +725,7 @@ namespace samples
 
         // --- the tweak panel --------------------------------------------------------------
 
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
         void BuildTweakPanel(engine::render::RenderSubsystem* renderSub)
         {
             if (renderSub == nullptr || m_scene == nullptr)

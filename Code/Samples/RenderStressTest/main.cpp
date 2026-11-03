@@ -16,7 +16,7 @@
 // move fast, Esc to exit.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (HUD), used directly; extensions.imgui does the engine integration
+#include "imgui.h" // Dear ImGui (HUD), used directly; plugins.imgui does the engine integration
 
 import foundation.core;
 import foundation.rhi; // PresentMode (run the benchmark vsync-off)
@@ -32,7 +32,7 @@ import engine.defaultapp;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import extensions.imgui; // ImguiSubsystem (HUD)
+import plugins.imgui; // ImguiSubsystem (HUD)
 import foundation.geometry;
 import foundation.materials;
 
@@ -44,7 +44,6 @@ namespace runtime = foundation::runtime;
 namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
-namespace imgui = extensions::imgui;
 namespace geometry = foundation::geometry;
 namespace materials = foundation::materials;
 

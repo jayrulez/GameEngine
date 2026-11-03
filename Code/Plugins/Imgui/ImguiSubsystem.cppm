@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Extensions::Imgui - the `:subsystem` partition.
+/// Plugins::Imgui - the `:subsystem` partition.
 ///
 /// ImguiSubsystem: an application-level subsystem that owns the Dear ImGui context and the RHI
 /// renderer, and exposes the per-frame hooks an app drives. NewFrame feeds input and the display size
@@ -14,7 +14,7 @@ module;
 #include "Core/Prelude.h"
 #include "imgui.h"
 
-export module extensions.imgui:subsystem;
+export module plugins.imgui:subsystem;
 
 import foundation.core;
 import foundation.rhi;
@@ -31,7 +31,7 @@ namespace shaders = foundation::shaders;
 namespace rhi = foundation::rhi;
 namespace shell = foundation::shell;
 
-export namespace extensions::imgui
+export namespace imgui
 {
 
     class ImguiSubsystem final : public foundation::runtime::Subsystem
@@ -196,4 +196,4 @@ export namespace extensions::imgui
         bool m_frameOpen = false;
     };
 
-} // namespace extensions::imgui
+} // namespace imgui

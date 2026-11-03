@@ -26,7 +26,7 @@ import foundation.graphics.gpu;
 import foundation.xml;
 import foundation.xml.serialization;
 import foundation.settings;
-import extensions.imgui;
+import plugins.imgui;
 import foundation.input;
 import engine.input;
 
@@ -35,7 +35,6 @@ namespace runtime = foundation::runtime;
 namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace input = foundation::input;
-namespace imgui = extensions::imgui;
 
 using core::f32;
 using core::u32;

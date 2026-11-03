@@ -16,7 +16,7 @@ target_link_libraries(AnimStressTest PRIVATE
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Extensions::Imgui
+    Plugins::Imgui
     Foundation::Geometry
     Foundation::Materials
     Pipeline::ModelImporter

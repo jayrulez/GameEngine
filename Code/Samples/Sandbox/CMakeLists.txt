@@ -20,7 +20,7 @@ target_link_libraries(Sandbox PRIVATE
     Engine::Animation
     Foundation::Particles
     Engine::Particles
-    Extensions::Imgui
+    Plugins::Imgui
     Foundation::Image
     Foundation::Image.IO
     Foundation::Geometry

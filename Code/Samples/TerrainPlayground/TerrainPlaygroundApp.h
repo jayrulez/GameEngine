@@ -30,7 +30,6 @@ namespace samples
     namespace runtime = foundation::runtime;
     namespace graphics = foundation::graphics;
     namespace scene = foundation::scene;
-    namespace imgui = extensions::imgui;
     namespace hf = foundation::heightfield;
     namespace terrain = foundation::terrain;
     namespace geometry = foundation::geometry;

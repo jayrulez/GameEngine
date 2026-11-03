@@ -10,6 +10,6 @@ target_link_libraries(InputActions PRIVATE
     Foundation::Graphics
     Foundation::Graphics.Gpu
     Foundation::Input Engine::Input
-    Foundation::Settings Foundation::Xml.Serialization Extensions::Imgui
+    Foundation::Settings Foundation::Xml.Serialization Plugins::Imgui
     Foundation::Policy)
 util_copy_sdl3_dll(InputActions)

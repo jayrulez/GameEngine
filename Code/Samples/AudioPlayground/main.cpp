@@ -29,7 +29,7 @@ import foundation.graphics.gpu;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import extensions.imgui;
+import plugins.imgui;
 import foundation.audio;
 import engine.audio;
 
@@ -41,7 +41,6 @@ namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
 namespace audio = foundation::audio;
-namespace imgui = extensions::imgui;
 
 using core::f32;
 

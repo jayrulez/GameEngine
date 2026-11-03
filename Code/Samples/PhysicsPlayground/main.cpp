@@ -26,7 +26,7 @@ import foundation.graphics.gpu;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import extensions.imgui;
+import plugins.imgui;
 import foundation.physics;
 import foundation.physics.resource;
 import engine.physics;
@@ -42,7 +42,6 @@ namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
 namespace physics = foundation::physics;
-namespace imgui = extensions::imgui;
 namespace gui = foundation::gui;
 
 namespace

@@ -26,7 +26,7 @@ import foundation.scene;
 import engine.scene;
 import engine.render;
 import foundation.render;
-import extensions.imgui;
+import plugins.imgui;
 import foundation.geometry;
 import foundation.materials;
 import foundation.particles;           // the CPU sim (effect/system/modules)
@@ -46,7 +46,6 @@ namespace runtime = foundation::runtime;
 namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
-namespace imgui = extensions::imgui;
 namespace geometry = foundation::geometry;
 namespace materials = foundation::materials;
 namespace particles = foundation::particles;

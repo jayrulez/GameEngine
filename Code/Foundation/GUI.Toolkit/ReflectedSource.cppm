@@ -139,7 +139,7 @@ export namespace foundation::gui
     {
     public:
         explicit ReflectedPropertySource(core::IAllocator& allocator)
-            : m_allocator(allocator), m_objects(allocator), m_originals(allocator), m_providers(allocator)
+            : m_allocator(allocator), m_objects(allocator), m_originals(allocator), m_providers(allocator), m_seen(allocator)
         {
         }
 
@@ -152,6 +152,7 @@ export namespace foundation::gui
                 if (!object.IsEmpty())
                     m_objects.PushBack(object);
             m_originals.Clear();
+            m_seen.Clear(); // the next look at new objects tells the grid
             // The type's defaults come from an instance its creator makes (none for a type without
             // a creator).
             m_typeDefault = m_objects.IsEmpty() ? core::RefPtr<core::Object>{} : core::CreateObject(*m_objects[0].Type(), m_allocator);
@@ -193,6 +194,34 @@ export namespace foundation::gui
 
         /// Tells the grid that the objects changed from outside it (an undo the application made).
         void Refresh() { NotifyPropertiesChanged(); }
+        /// For a host that looks at the objects every frame (they may change under it: a gizmo's
+        /// drag, a simulation): tells the grid as Refresh does, but only when TakeChanges finds the
+        /// values moved. The grid reads its rows again on each notice, so an unchanged frame then
+        /// costs it nothing.
+        void RefreshIfChanged()
+        {
+            if (TakeChanges())
+                NotifyPropertiesChanged();
+        }
+        /// Returns whether the objects' values, as the text format writes them, differ from the last
+        /// look, and remembers them. The first look after SetObjects, and every look without a text
+        /// format, returns true.
+        [[nodiscard]] bool TakeChanges()
+        {
+            if (m_format == nullptr)
+                return true;
+            bool same = m_seen.Size() == m_objects.Size();
+            core::Array<core::String> now(m_allocator);
+            for (usize i = 0; i < m_objects.Size(); ++i)
+            {
+                now.PushBack(WriteState(core::StringView{}, i));
+                same = same && now[i] == m_seen[i];
+            }
+            if (same)
+                return false;
+            m_seen = core::Move(now);
+            return true;
+        }
 
         /// Treats the struct named `typeName` as a reference: one value, with its Guid at `parts.Id`,
         /// pointing at the struct type itself.
@@ -1824,6 +1853,7 @@ export namespace foundation::gui
             core::String RevertText;
         };
         core::Array<Provider> m_providers;
+        core::Array<core::String> m_seen; // each object's state at the last RefreshIfChanged
         core::RefPtr<core::Object> m_typeDefault; // the type's defaults, made by its creator
         struct CurveType
         {

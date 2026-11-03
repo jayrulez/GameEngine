@@ -621,6 +621,82 @@ TEST_CASE("reflected source: the grid shows it")
     grid->SetSource(nullptr);
 }
 
+namespace
+{
+    // Counts what a source tells its grid.
+    struct NoticeCounter : IPropertySourceClient
+    {
+        i32 properties = 0;
+        i32 values = 0;
+        void OnPropertiesChanged() override { ++properties; }
+        void OnValuesChanged() override { ++values; }
+    };
+}
+
+TEST_CASE("reflected source: a look each frame tells the grid only when a value moved")
+{
+    Bed bed(true);
+    reflected::BlobFormat format;
+    bed.source.SetTextFormat(&format);
+    NoticeCounter counter;
+    bed.source.SetClient(&counter);
+
+    bed.source.RefreshIfChanged(); // the first look tells it
+    CHECK(counter.properties == 1);
+    for (i32 frame = 0; frame < 3; ++frame)
+        bed.source.RefreshIfChanged(); // nothing moved: nothing said
+    CHECK(counter.properties == 1);
+
+    bed.b->position.y = 7.0f; // moved under the source, as a gizmo's drag or a simulation does
+    bed.source.RefreshIfChanged();
+    CHECK(counter.properties == 2);
+    bed.source.RefreshIfChanged();
+    CHECK(counter.properties == 2);
+
+    // New objects are looked at afresh; Refresh still tells the grid every time.
+    core::Instance one[] = {core::Instance(bed.a.Get(), bed.a->GetType())};
+    bed.source.SetObjects(core::Span<const core::Instance>(one, 1u));
+    const i32 afterSet = counter.properties;
+    bed.source.RefreshIfChanged();
+    CHECK(counter.properties == afterSet + 1);
+    bed.source.Refresh();
+    CHECK(counter.properties == afterSet + 2);
+
+    // Without a text format every look tells it.
+    bed.source.SetTextFormat(nullptr);
+    CHECK(bed.source.TakeChanges());
+    CHECK(bed.source.TakeChanges());
+    bed.source.SetClient(nullptr);
+}
+
+TEST_CASE("property grid: a row bound again to the property it shows asks for no layout")
+{
+    Bed bed;
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 600.0f});
+    root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
+    auto grid = core::MakeRef<PropertyGrid>(core::DefaultAllocator());
+    grid->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(360.0f);
+        s.Height = LayoutLength::Px(560.0f);
+    });
+    root->AddChild(grid.Get());
+    grid->SetSource(&bed.source);
+    (void)root->UpdateLayout();
+    PropertyEditor* editor = grid->FindEditor(SV(u8"intensity"));
+    REQUIRE(editor != nullptr);
+    auto* content = core::Cast<PropertyRowContent>(editor->GetParent());
+    REQUIRE(content != nullptr);
+    const PropertyRow* row = grid->GetRow(grid->FindRow(SV(u8"intensity")));
+    REQUIRE(row != nullptr);
+    REQUIRE_FALSE(content->IsLayoutDirty());
+    content->Show(*row); // what each read of the source does to every row
+    CHECK_FALSE(content->IsLayoutDirty());
+    CHECK_FALSE(root->HasLayoutDirtyDescendant());
+    grid->SetSource(nullptr);
+}
+
 TEST_CASE("reflected source: arrays and bounded arrays are lists, elements by index, changed in each object as one change")
 {
     Bed bed(true);

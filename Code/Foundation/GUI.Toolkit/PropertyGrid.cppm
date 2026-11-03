@@ -756,6 +756,11 @@ namespace foundation::gui
     }
     inline void PropertyRowContent::Show(const PropertyRow& row)
     {
+        // This row's own layout reads its depth and whether its grip shows; its parts ask for
+        // layout themselves when what they show changes. A row bound again to the same property,
+        // as every row is when the grid reads its source again, so asks for none.
+        const bool movable = row.Element && (row.ListOps & PropertyListMove) != 0 && row.Count > 1;
+        const bool placed = m_depth != row.Depth || m_movable != movable;
         m_path = row.Path;
         m_depth = row.Depth;
         m_description = row.Info.Description;
@@ -770,10 +775,11 @@ namespace foundation::gui
         m_note->SetDisplayed(notes);
         if (notes)
             m_note->SetText(row.Info.Note.AsView());
-        m_movable =row.Element && (row.ListOps & PropertyListMove) != 0 && row.Count > 1;
+        m_movable = movable;
         m_grip->SetDisplayed(m_movable);
         m_grip->SetPath(row.Path.AsView());
-        RequestLayout();
+        if (placed)
+            RequestLayout();
     }
     inline void PropertyRowContent::OnLayout()
     {

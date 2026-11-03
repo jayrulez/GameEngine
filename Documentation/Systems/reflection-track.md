@@ -31,7 +31,7 @@ version). Property attributes drive tooling: `displayName`, `range` (sliders), `
 
 1. **Generic asset page** - reflection-FIRST (serialize-scan stays as the fallback for still-unreflected
    types): real labels, sliders, tooltips, conditional rows, and enum dropdowns by name.
-2. **Script backends** (Wren + AngelScript) - both harvest reflected types, so every newly reflected
+2. **Script backends** (AngelScript + Luau) - both harvest reflected types, so every newly reflected
    type/enum becomes scriptable surface with no hand bindings.
 3. **Bespoke inspectors** (particle modules, graph data) - reflected instead of hand-built `Cast<T>`
    dispatches.

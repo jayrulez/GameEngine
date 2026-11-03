@@ -29,7 +29,7 @@ skeleton + Lumix's mutation discipline + Traktor's asset pipeline.
 
 ---
 
-## 1. What Draconic already has (build on, don't rebuild)
+## 1. What the engine already has (build on, don't rebuild)
 
 - **`foundation.editor`** - the asset-cook *authoring base*: `Asset` (source object referencing an
  external file + import settings) / `IAssetBuilder` / `DefaultAssetBuilder`, `AssetBuildContext`
@@ -264,7 +264,7 @@ service, status sink, and the registries:
  asset-type routing + **incremental** (hash of source object + source file + builder version,
  Traktor's pipeline-db pattern simplified) + dependency-ordered build. Built as a library used by
  BOTH the CLI cooker tool and the editor's background build (Sedulous has no cooker - import IS
- the bake - but Draconic already committed to the cook seam; keep it).
+ the bake - but the engine already committed to the cook seam; keep it).
 - **Asset browser panel** over the source DB group tree: left mount/group tree + right content
  grid with thumbnails; import (file drop / dialog → `IAssetImporter` creates `Asset` instances),
  create (`IAssetCreator`), open (page-factory dispatch), build, show-in-explorer.
@@ -313,8 +313,8 @@ listener (thread-safe pending list, drained to the `LogView` once per frame on t
 retained UNBOUNDED until the view connects) + a good `LogView` (recycled list rows, per-level
 filter toggles, 1000-entry cap, auto-scroll, level colors).
 
-**Draconic does it with ONE object instead of three**, because core already has a global `Logger`
-with pluggable `ILogSink`s that the whole engine logs through (`DRACONIC_LOG_*`):
+**The engine does it with ONE object instead of three**, because core already has a global `Logger`
+with pluggable `ILogSink`s that the whole engine logs through (`LOG_*`):
 - **`EditorLogBuffer : ILogSink`** (`editor.core`, headless) - thread-safe BOUNDED ring
  of full-fidelity entries `{level, category, message, sequence}` (heap strings - core's
  `RingLogSink` truncates messages to 192 chars, useless for build errors/paths). Registered on
@@ -348,7 +348,7 @@ with pluggable `ILogSink`s that the whole engine logs through (`DRACONIC_LOG_*`)
 
 **(a) Scene edit-time data model - ✅ DECIDED (user, 2026-07-11) = live-scene editing** (Lumix/Sedulous):
 edit the live ECS through commands, snapshot/restore for play-in-editor.
-*Why:* Draconic scenes already serialize the live world - `SaveScene` exists and "the cooked file
+*Why:* the engine's scenes already serialize the live world - `SaveScene` exists and "the cooked file
 IS the authored form"; there is no `EntityData`-style source object model to project from.
 Traktor's cook-from-source alternative (authoritative serialized `EntityData`, runtime entities a
 disposable projection rebuilt per edit) is architecturally cleaner for undo (snapshot the data,

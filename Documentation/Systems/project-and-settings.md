@@ -13,7 +13,7 @@ into three concrete stores and how projects open/close.
 | Store | File | Owner module | Holds |
 |---|---|---|---|
 | Shared project manifest | `<project>/Project.xml` | `engine.project` | name, engineVersion stamp, default scene/script/input-map/bus-layout refs, the GUI's sheets and loading screen. The SAME payload ships as `player.xml` in a dist (minus editor concerns). Versioned (`ProjectSettings`, data v10; a v9 manifest still reads, its old UI theme and loading document dropped); every save re-stamps `engineVersion` to the running engine. |
-| Per-user editor settings | `<user-data>/draconic/editor.settings.xml` (`~/.local/share` on Linux, `%LOCALAPPDATA%` on Windows) | `editor.core` | machine-wide state: `EditorExportSettings` (templates root), `RecentProjectsSettings` (the project-manager registry). |
+| Per-user editor settings | `<user-data>/editor.settings.xml` (`<user-data>` is `~/.local/share/gameengine` on Linux, under `%LOCALAPPDATA%` on Windows) | `editor.core` | machine-wide state: `EditorExportSettings` (templates root), `RecentProjectsSettings` (the project-manager registry). |
 | Per-project editor state | `<project>/Editor/editor.project.settings.xml` | `editor.app` (+ contributor modules) | `EditorDockLayoutSettings`, `EditorFavoritesSettings`, `EditorOpenPagesSettings`, `MaterialPreviewSettings` (from the material page), ... |
 
 All three persist through the same machinery: `foundation.settings::Settings` (typed `ISerializable`

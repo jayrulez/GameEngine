@@ -6,7 +6,7 @@
 
 miniaudio-backed audio in the value-pool component style: clips + sound cues as cooked assets,
 a data-driven bus mixer with effect chains, real 3D spatialization (attenuation / pan / doppler /
-distance low-pass), listener-driven reverb zones, and a Wren/AngelScript facade. Shipped end to end
+distance low-pass), listener-driven reverb zones, and an AngelScript/Luau facade. Shipped end to end
 (P1-P3) and user-verified on speakers. miniaudio types never leak above `foundation.audio`; there is
 no second-backend abstraction seam - what IS abstracted is a Null/headless mode (see below).
 

@@ -28,8 +28,20 @@ using namespace foundation::core;
 
 export namespace engine
 {
-    /// The full engine composition: every domain, in dependency order. Built once.
+    /// The full engine composition: every engine domain, in dependency order, then the domains
+    /// plugins added (AddPluginDomain). One object at a stable address, rebuilt in place when a
+    /// plugin domain is added or removed.
     [[nodiscard]] const EngineComposition& FullComposition();
+
+    /// Adds a plugin's domain to the full composition, and registers at once its component
+    /// reflection, its script facade and its resource modules' types (which factories then
+    /// include). A plugin's
+    /// scene managers do not come this way (they reach live scenes through
+    /// SceneModuleContributions), so a module with a scene installer is refused: 0. Otherwise
+    /// the token RemovePluginDomain takes. Call with no other thread reading the composition (a
+    /// host loads its plugins before it runs anything).
+    [[nodiscard]] u64 AddPluginDomain(const DomainModule& module);
+    void RemovePluginDomain(u64 token);
 
     /// The scene facet: every serializable component manager and settings-bearing scene system
     /// across all domains. `Instantiate(scratch)` installs the full manager set;

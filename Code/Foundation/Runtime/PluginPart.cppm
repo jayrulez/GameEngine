@@ -135,3 +135,18 @@ export namespace foundation::runtime
     };
 }
 
+// The generated registry of a binary that links plugins (util_link_plugins, cmake/Plugins.cmake)
+// defines this: the plugins compiled in, and their count in `count`. Only such a binary may call
+// it; it has C linkage so the generated, non-module source can define what this module declares.
+export extern "C" const foundation::runtime::LinkedPlugin* LinkedPlugins(foundation::core::usize* count);
+
+export namespace foundation::runtime
+{
+    // The plugins this binary links, as LinkedPlugins lists them.
+    [[nodiscard]] inline core::Span<const LinkedPlugin> LinkedPluginList()
+    {
+        core::usize count = 0;
+        const LinkedPlugin* plugins = LinkedPlugins(&count);
+        return core::Span<const LinkedPlugin>(plugins, count);
+    }
+}

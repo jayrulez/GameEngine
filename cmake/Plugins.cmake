@@ -19,6 +19,22 @@ file(WRITE "${UTIL_PLUGIN_MANIFESTS_READ}" "")
 # The part kinds in load order: a part links the one before it that the package has.
 set(UTIL_PLUGIN_PART_KINDS Engine Pipeline Tooling Editor)
 
+# The parts each host role loads. The C++ copy is RoleLoads (foundation.runtime);
+# Runtime.Tests compares the two through the file written here.
+set(UTIL_PLUGIN_ROLES player editor cook export mcp)
+set(UTIL_PLUGIN_ROLE_player_KINDS Engine)
+set(UTIL_PLUGIN_ROLE_editor_KINDS Engine Pipeline Tooling Editor)
+set(UTIL_PLUGIN_ROLE_cook_KINDS Engine Pipeline)
+set(UTIL_PLUGIN_ROLE_export_KINDS Engine Pipeline Tooling)
+set(UTIL_PLUGIN_ROLE_mcp_KINDS Engine Pipeline Tooling)
+set(UTIL_PLUGIN_ROLES_FILE "${CMAKE_BINARY_DIR}/plugin-roles.txt")
+set(_util_roles "")
+foreach(_role IN LISTS UTIL_PLUGIN_ROLES)
+    list(JOIN UTIL_PLUGIN_ROLE_${_role}_KINDS "," _kinds)
+    string(APPEND _util_roles "${_role}|${_kinds}\n")
+endforeach()
+file(WRITE "${UTIL_PLUGIN_ROLES_FILE}" "${_util_roles}")
+
 # util_read_plugin_manifest(<file> <prefix>)
 #
 # Sets <prefix>_ID (the plugin id), <prefix>_PARTS (the part kinds, as written) and
@@ -103,6 +119,8 @@ function(util_add_plugin dir)
         endif()
     endforeach()
     set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_NAME "${_name}")
+    set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_DEPENDS "${_plugin_DEPENDS}")
+    set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_MANIFEST "${_manifest}")
 
     # What util_add_plugin_part reads in each part's folder.
     set(PLUGIN_ID "${_plugin_ID}")
@@ -134,6 +152,12 @@ macro(util_add_plugin_part)
         message(FATAL_ERROR "util_add_plugin_part: call it from a part folder that util_add_plugin adds")
     endif()
     util_add_engine_library(${PLUGIN_PART} ALIAS Plugins::${PLUGIN_PART})
+    # The names PLUGIN_PART (Runtime/PluginEntry.h) builds the entry from; private, so a
+    # consumer of the part never inherits them.
+    target_compile_definitions(${PLUGIN_PART} PRIVATE
+        PLUGIN_PART_ENTRY_NAME=PluginPart_${PLUGIN_ID}_${PLUGIN_PART_KIND}
+        PLUGIN_PART_ID=u8\"${PLUGIN_ID}\"
+        PLUGIN_PART_KIND=${PLUGIN_PART_KIND})
     if(PLUGIN_PREVIOUS_PART)
         target_link_libraries(${PLUGIN_PART} PUBLIC ${PLUGIN_PREVIOUS_PART})
     endif()
@@ -144,3 +168,95 @@ macro(util_add_plugin_part)
         endif()
     endforeach()
 endmacro()
+
+# util_link_plugins(<target> ROLE <role> PLUGINS <id>...)
+#
+# Links into <target> the parts a host of <role> loads (UTIL_PLUGIN_ROLE_<role>_KINDS) of each
+# named plugin and of every plugin they depend on, and generates the binary's registry: the
+# LinkedPlugins function foundation.runtime declares, listing each plugin's manifest text and its
+# linked parts' entry points. Referencing the entries is what pulls each part's archive into a
+# static link, with no whole-archive or forced references. Linked is not enabled: the plugin host
+# loads only what the project enables.
+function(util_link_plugins target)
+    cmake_parse_arguments(ULP "" "ROLE" "PLUGINS" ${ARGN})
+    if(NOT ULP_ROLE OR NOT ULP_ROLE IN_LIST UTIL_PLUGIN_ROLES)
+        message(FATAL_ERROR "util_link_plugins(${target}): ROLE must be one of ${UTIL_PLUGIN_ROLES}")
+    endif()
+    # The dependency closure, dependencies first.
+    set(_ordered "")
+    set(_pending ${ULP_PLUGINS})
+    while(_pending)
+        list(POP_FRONT _pending _id)
+        if(_id IN_LIST _ordered)
+            continue()
+        endif()
+        get_property(_known GLOBAL PROPERTY UTIL_PLUGIN_${_id}_NAME SET)
+        if(NOT _known)
+            message(FATAL_ERROR "util_link_plugins(${target}): plugin '${_id}' is not added (util_add_plugin)")
+        endif()
+        get_property(_depends GLOBAL PROPERTY UTIL_PLUGIN_${_id}_DEPENDS)
+        set(_missing "")
+        foreach(_dependency IN LISTS _depends)
+            if(NOT _dependency IN_LIST _ordered)
+                list(APPEND _missing ${_dependency})
+            endif()
+        endforeach()
+        if(_missing)
+            list(PREPEND _pending ${_missing} ${_id})
+        else()
+            list(APPEND _ordered ${_id})
+        endif()
+    endwhile()
+
+    set(_declarations "")
+    set(_tables "")
+    set(_rows "")
+    set(_count 0)
+    foreach(_id IN LISTS _ordered)
+        get_property(_manifest GLOBAL PROPERTY UTIL_PLUGIN_${_id}_MANIFEST)
+        file(READ "${_manifest}" _xml)
+        set(_entries "")
+        set(_partCount 0)
+        foreach(_kind IN LISTS UTIL_PLUGIN_ROLE_${ULP_ROLE}_KINDS)
+            get_property(_part GLOBAL PROPERTY UTIL_PLUGIN_${_id}_${_kind})
+            if(_part)
+                target_link_libraries(${target} PRIVATE ${_part})
+                string(APPEND _declarations "extern \"C\" const foundation::runtime::PluginPart* PluginPart_${_id}_${_kind}();\n")
+                string(APPEND _entries "&PluginPart_${_id}_${_kind}, ")
+                math(EXPR _partCount "${_partCount} + 1")
+            endif()
+        endforeach()
+        if(_partCount EQUAL 0)
+            set(_entries "nullptr")
+        endif()
+        string(APPEND _tables "    constexpr char8_t kManifest_${_id}[] = u8R\"PLUGINXML(${_xml})PLUGINXML\";\n")
+        string(APPEND _tables "    const foundation::runtime::PluginPartEntryFn kParts_${_id}[] = {${_entries}};\n")
+        string(APPEND _rows "        {kManifest_${_id}, kParts_${_id}, ${_partCount}},\n")
+        math(EXPR _count "${_count} + 1")
+    endforeach()
+    if(_count EQUAL 0)
+        set(_list "    const foundation::runtime::LinkedPlugin* const kLinked = nullptr;\n")
+    else()
+        set(_list "    const foundation::runtime::LinkedPlugin kLinked[] = {\n${_rows}    };\n")
+    endif()
+    set(_source "${CMAKE_CURRENT_BINARY_DIR}/${target}_PluginRegistry.cpp")
+    file(CONFIGURE OUTPUT "${_source}" CONTENT "// Generated by util_link_plugins (cmake/Plugins.cmake) for ${target}, role ${ULP_ROLE}. Do not edit.
+
+#include \"Core/Prelude.h\"
+
+import foundation.core;
+import foundation.runtime;
+
+${_declarations}
+namespace
+{
+${_tables}${_list}}
+
+extern \"C\" const foundation::runtime::LinkedPlugin* LinkedPlugins(foundation::core::usize* count)
+{
+    *count = ${_count};
+    return kLinked;
+}
+" @ONLY)
+    target_sources(${target} PRIVATE "${_source}")
+endfunction()

@@ -8,6 +8,8 @@ target_link_libraries(${PLUGIN_PART}
            ThirdParty::ImGui Foundation::Policy)
 
 target_sources(${PLUGIN_PART}
+    PRIVATE
+        ImguiPart.cpp # the part's entry
     PUBLIC
         FILE_SET imgui_modules TYPE CXX_MODULES FILES
             ImguiRenderer.cppm

@@ -208,11 +208,16 @@ It returns a static part object (the `IRuntimePlugin` successor) whose `OnLoad` 
 registration explicitly. There is no registration by static initialiser, which is already the
 rule.
 
-- **Static (players, and the static editor and tools):** the build generates
-  `PluginRegistry.cpp` for each linked binary, listing the entry points of the plugins
-  linked into it. Referencing them pulls each part's archive in, exactly as `ShipMain.cpp` does for
-  one `CreatePlugin` today, with no whole-archive or forced references. `ShipMain.cpp` becomes the
-  generated registry plus `PlayerMain`.
+- **Static (players, and the static editor and tools):** `util_link_plugins(<target> ROLE <role>
+  PLUGINS <id>...)` links the parts that role loads of the named plugins and their dependencies,
+  and generates `<target>_PluginRegistry.cpp`, which defines `LinkedPlugins` (declared by
+  foundation.runtime with C linkage): for each plugin, its manifest's text and its linked parts'
+  entry points. Referencing the entries pulls each part's archive in, exactly as `ShipMain.cpp`
+  does for one `CreatePlugin` today, with no whole-archive or forced references; carrying the
+  manifest's text lets a player with no package files on disk still check versions, dependencies
+  and slots. `ShipMain.cpp` becomes the generated registry plus `PlayerMain`. A part's source
+  writes its entry as `PLUGIN_PART(&Load, &Unload)` (`Runtime/PluginEntry.h`); the build supplies
+  the symbol, id and kind from the manifest.
 - **Shared (desktop development):** the host loads a part's library and resolves the same symbol.
 - **Linked is not enabled.** The registry lists what is compiled in; the plugin host activates
   only the plugins the project enables for the running platform. A dormant plugin registers
@@ -317,14 +322,21 @@ that turns a non-empty `nativeModule` into the game's package entry):
   TerrainPlayground and WebScene (WebScene's tweak UI, `Code/Samples/WebScene/CMakeLists.txt:40`)
   must still build and show the panel, so X0 runs the wasm build. Tests: manifest round trip,
   refusals (bad id, unknown part kind, engine version unmet), the CMake helper declares the part.
-- **X1 - plugin host and context.** Today's `PluginHost` renamed `PluginLoader` (file and call
-  sites); `PluginPart`, `PluginContext`, the new `PluginHost` over `PluginLoader`; dependency order, version and slot checks; the generated static registry;
-  `IRuntimePlugin` and `CreatePlugin` retired at their call sites (no forwarders). Tests: order,
-  missing dependency disables dependents, slot conflict refused, dormant plugin registers
-  nothing, unload reverses everything.
+- **X1 - plugin host and context** (built 2026-11-03). Today's `PluginHost` renamed `PluginLoader` (file and call
+  sites); `PluginPart`, `PluginContext`, the new `PluginHost` over `PluginLoader`; dependency
+  order, version and slot checks; the generated static registry. Imgui's `Imgui.Engine` gets its
+  entry, whose load registers nothing yet (X2). Native code keeps `IRuntimePlugin` and
+  `CreatePlugin` until X5, which retires them (ruling 2026-11-03: native code has no id or
+  manifest before X5, and the entry symbol is named from the id). Tests: order, missing dependency
+  disables dependents, slot conflict refused, dormant plugin registers nothing, unload reverses
+  everything.
 - **X2 - Engine part contributions.** `AddDomain` and the composition built after load;
-  `AddRunService` called by `GameInstance::InstallRunServices`; facades. Tests: a plugin's
-  domain installs its scene systems, its run service reaches a script, unload removes both.
+  `AddRunService` called by `GameInstance::InstallRunServices`; facades. Where the role has a
+  window (player, editor), the context offers the client side (graphics device, shell, the data
+  mount), so a plugin such as Imgui sets itself up on load instead of each app adding its
+  subsystem by hand (the user's suggestion, 2026-11-03; whether every such host has a data mount
+  to hand over is to be checked). Tests: a plugin's domain installs its scene systems, its run
+  service reaches a script, unload removes both.
 - **X3 - project list and settings.** The `plugins` list, the version bump and the
   `nativeModule` migration; typed settings; missing plugins kept; Project Settings rows; MCP
   tools to list plugins and read and write their settings (`McpGuide.md` and the tool count in
@@ -336,7 +348,9 @@ that turns a non-empty `nativeModule` into the game's package entry):
   hosts.
 - **X5 - native code is a plugin.** NativeSample becomes a package (`Plugin.xml`,
   `NativeSample.Engine`); the scaffold generates the manifest; Build and Reload Native Module act
-  on the project's packages. Tests: the scaffold's output, the migration of an old project.
+  on the project's packages. `IRuntimePlugin` and `CreatePlugin` are deleted at every call site
+  (the editor's native module, the player, the ship and web stubs, the scaffold, NativeSample).
+  Tests: the scaffold's output, the migration of an old project.
 - **X6 - export.** Template plugin lists; template or per-project player; deploy files;
   platform refusals; the per-project build covering every enabled package; web left to a later
   phase if the wasm per-project build is too large for this spec (decide when reached). Tests:

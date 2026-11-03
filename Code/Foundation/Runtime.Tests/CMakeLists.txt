@@ -14,7 +14,8 @@ add_executable(Runtime.Tests
     TestsMain.cpp
     RuntimeTests.cpp
     PluginManifestTests.cpp
-    PluginHostTests.cpp)
+    PluginHostTests.cpp
+    PluginRegistryTests.cpp)
 
 target_link_libraries(Runtime.Tests PRIVATE Foundation::Runtime Foundation::Runtime.Client
     Foundation::Scene Foundation::Scene.Resource # the cross-boundary scene-contribution case
@@ -26,7 +27,14 @@ target_compile_definitions(Runtime.Tests PRIVATE
     TEST_PLUGIN_PATH="$<TARGET_FILE:Runtime.TestPlugin>"
     TEST_PLUGIN_PART_PATH="$<TARGET_FILE:Runtime.TestPluginPart>"
     PLUGIN_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Fixtures"
-    PLUGIN_MANIFESTS_READ="${UTIL_PLUGIN_MANIFESTS_READ}")
+    PLUGIN_MANIFESTS_READ="${UTIL_PLUGIN_MANIFESTS_READ}"
+    PLUGIN_ROLES_FILE="${UTIL_PLUGIN_ROLES_FILE}")
+
+# Two fixture packages, probe depending on probe_base, linked the way a cook links its plugins:
+# the generated registry lists both (the dependency closure), with the parts a cook loads.
+util_add_plugin(Fixtures/ProbeBase)
+util_add_plugin(Fixtures/Probe)
+util_link_plugins(Runtime.Tests ROLE cook PLUGINS probe)
 
 # The four-part fixture goes through the build's manifest reader too, so the pin in
 # PluginManifestTests.cpp always covers dependencies and every part kind.

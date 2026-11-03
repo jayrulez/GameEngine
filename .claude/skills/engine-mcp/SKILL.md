@@ -85,6 +85,5 @@ token), or for one run: `Tools.Editor <project> --mcp [--mcp-port <n>]`. The def
 
 ## First action after connecting
 
-`resources/read` -> `docs://McpGuide.md`, then follow it. Keep BOTH documents honest the
-way HANDOFF.md is kept honest: when tools change, the guide (and this skill, if wiring
-changed) updates in the same commit.
+`resources/read` -> `docs://McpGuide.md`, then follow it. Keep BOTH documents honest: when
+tools change, the guide (and this skill, if wiring changed) updates in the same commit.

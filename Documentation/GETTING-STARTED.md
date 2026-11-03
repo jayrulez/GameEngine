@@ -190,10 +190,8 @@ Documentation/
   GETTING-STARTED.md   This file.
   BUILDING.md          Requirements, presets and build notes.
   Systems/             The reference: one doc per shipped subsystem.
-  Specs/               Feature specs: what is being built and why. A spec is
-                       stamped BUILT when it ships and carries its review rulings.
-  Process/             CONVENTIONS.md (binding rules incl. code style),
-                       HANDOFF.md (review pass records).
+  Specs/               Feature specs not yet built. A built spec moves to Archive/.
+  Process/             CONVENTIONS.md (binding rules incl. code style).
   Guides/              How-tos (terrain authoring, adding a script facade, Emscripten setup).
   Plans/               The release backlogs (backlog-0.1.md, backlog-0.2.md),
                        design plans and weekly plans.

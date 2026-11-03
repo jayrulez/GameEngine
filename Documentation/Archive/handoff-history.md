@@ -1,5 +1,8 @@
 # Review handoff - Opus build phase
 
+> ARCHIVED 2026-11-02: the review record two agents kept while one built and the other reviewed
+> (baselines and review passes, which archived specs cite as "HANDOFF.md pass N"). No longer kept.
+
 ## Baseline
 
 Last Fable commit before the Opus build phase:

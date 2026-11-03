@@ -339,6 +339,8 @@ namespace
         foundation::runtime::SubsystemManager editorContext{DefaultAllocator()};
         foundation::runtime::SubsystemManager& Subsystems() noexcept override { return editorContext; }
         foundation::shell::IShell* Shell() noexcept override { return nullptr; }
+        foundation::core::TaskPool tasks{DefaultAllocator(), 0u}; // runs what it is given when pumped
+        foundation::core::TaskPool& Tasks() noexcept override { return tasks; }
         foundation::graphics::GraphicsDevice* Graphics() noexcept override { return nullptr; }
         foundation::graphics::RenderWindow* MainRenderWindow() noexcept override { return nullptr; }
         foundation::graphics::RenderWindow*

@@ -8,6 +8,16 @@
 
 ## Editor
 
+- **Four small editor findings from the UAT check** (user 2026-11-02):
+  - The Export dialog's "Add Files..." button (`#export-add-files`) is drawn over the "Exports go
+    to <path>" text at its bottom left, cutting the path in two.
+  - `pie_run` does not create its `screenshotDir`: a capture into a folder that is not there fails
+    ("could not write ..."). Make the folder, as `editor_screenshot` does its own (check).
+  - An Image asset's tile in the Assets panel shows a placeholder, not its picture.
+  - A delete (and likely an import) asked for during a cook waits for the cook and then runs, but
+    nothing says it is waiting; the old "queued until the current cook finishes" notice is gone.
+    Say so in the status bar or a toast.
+
 - **The editor's frame, what is left** (user 2026-11-02, after comparing the old UI and the GUI):
   The user finds the editor slower than the old one, which was snappy even in Debug. Measured so far
   (Debug, clang): on one page of rows built in both sandboxes (GUI_PERF_ROWS / GUI_PERF_MODE, timing

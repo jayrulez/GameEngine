@@ -8,6 +8,33 @@
 
 ## Editor
 
+- **UAT checks for the user** (user 2026-11-02, from retiring the old smoke checklist): what the
+  checklist held that only a person can judge, everything else having been checked, covered by
+  tests or made obsolete (week 2026-10-24, "The old smoke checklist retired"):
+  - Listening: a paused scene's sounds fade together while one-shots still play; four emitters
+    on one clip at 0.75, 1, 1.5 and 2 pitch sound as four notes (AudioPlayground); a bus layout's
+    muffled effects and quieter music; varied shots and the cave's reverb (AudioPlayground); a
+    sound cue's audition; a reverb zone and a source's reverb send; a named bus muffled alone; no
+    click when a voice is stolen.
+  - Hardware: the InputActions panel, a rebind kept over a restart and the Deck's touch zones; touch
+    in the Game tab on a touchscreen; a real gamepad's focus moving in a game's menus, and two pads
+    with the first unplugged (web); dead keys typed into a game's text field; Firefox's wheel
+    speed; a HiDPI mouse in the browser; F5, F12 and Ctrl+C reaching the browser while space and the
+    arrows do not scroll; iOS Safari, and a phone's adapter, compression formats, memory and frame
+    rate; a Windows run of the VG gradients; moving the editor between monitors of different scales.
+  - Looks: the PhysicsPlayground's character climbing, pushing and the hinge blade; a character's
+    capsule cyan grounded and purple airborne; the graph page's preview (the skeleton playing, the
+    active state ring, "blending in"); the clip and skeleton pages' wireframes and the chosen bone's
+    marker; the clip page's playhead; the particle page's emission gizmo and curve editing; the
+    WebScene content list and its ImGui panel (desktop and browser), the shadow toggle test with the
+    sun or its cascades off, and the SSR sliders; billboards placed in the camera preview inset;
+    several restored floating windows all drawing on Wayland.
+  - Out of the agent's reach: a local's value on hover while a run is paused (`editor_hover` does
+    not raise the code editor's hover), and keys typed into another panel never reaching a playtest
+    (`editor_key` goes through the editor's keymap only).
+  - Split-screen game UI (each half its own HUD, billboards per half) waits on a GUI block in the
+    Sandbox's two-view mode.
+
 - **An HDR image's preview is black** (user 2026-11-02, UAT): an `.hdr` imported as an Image
   (`kloofendal_48d_partly_cloudy_puresky_1k.hdr`) shows its facts (1024 x 512, RGBA32F, Linear) but
   the picture is black throughout; a PNG's picture shows. The page's comment says an HDR source

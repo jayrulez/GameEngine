@@ -197,7 +197,6 @@ Documentation/
   Guides/              How-tos (terrain authoring, adding a script facade, Emscripten setup).
   Plans/               The release backlogs (backlog-0.1.md, backlog-0.2.md),
                        design plans and weekly plans.
-  UAT/                 Manual smoke-test checklists.
   Archive/             Historical/superseded documents.
 ```
 

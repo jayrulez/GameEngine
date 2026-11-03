@@ -1318,8 +1318,6 @@ this is the list, with the section to read for each.
   Cooks-to now reads "BC6H" for HDR assets (2026-09-07).
 - Screen-Space GI on a lit scene (coloured wall near a floor bleeds; stable
   under camera motion) + the grain retest, still and moving.
-- The remaining smoke-checklist property-animation items not covered by the
-  live UAT rounds.
 
 ### Small follow-up
 

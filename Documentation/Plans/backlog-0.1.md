@@ -97,9 +97,10 @@
      than in the old UI (routing, hover, layout order). Count frames from an injected event to the
      changed picture in both sandboxes. The editor's third swapchain image (4f7a8931b, the user's
      ruling) adds a frame while the editor keeps up with vsync, little at 26 fps.
-  5. **Unscoped time.** About 5 ms of the printed frame's Update and 5.4 ms of its Render had no
-     profiler scope (the GUI host's input and context update, the pumps: MCP, the Samples tab,
-     tasks, export, the status bar). Scopes first, then measure.
+  5. ~~Unscoped time~~: done 2026-11-02 (0f9b7cab8 scopes the whole frame; the inspector's per-frame
+     relayout it found is fixed, 2192ddfc0). What a capture now shows on PaperKid's Start with a
+     model in the import window (Debug, about 21 ms): the 3D views about 10.7 ms, GUI.Encode
+     5.0 ms (item 2), Editor.Pages 1.8 ms, GUI.Layers 0.85 ms (item 1).
 
 - **Terrain and vegetation tools: fixes and a regression check** (user 2026-11-01):
   - Sculpting (and maybe the vegetation tool) still acts when the pointer is over UI: a press or

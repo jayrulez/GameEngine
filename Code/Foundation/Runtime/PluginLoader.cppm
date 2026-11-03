@@ -7,7 +7,8 @@
 // and drives the load/unload contract against a SubsystemManager. Statically-created
 // plugins are registered with Add() (caller keeps ownership of the object);
 // shared-library plugins with Load() (the loader owns the library handle and
-// closes it on teardown). It records what each plugin registers and reverses it on unload.
+// closes it on teardown). It records what each plugin registers and reverses it on unload;
+// PluginHost, which decides what a project loads, loads through it.
 
 module;
 #include "Core/Prelude.h"
@@ -17,6 +18,7 @@ export module foundation.runtime:plugin_loader;
 import foundation.core;
 import :subsystem_manager;
 import :plugin;
+import :plugin_part;
 
 namespace core = foundation::core;
 
@@ -62,10 +64,46 @@ export namespace foundation::runtime
             {
                 return nullptr;
             }
-            Entry entry{plugin, core::DynamicLibrary{}, {}, {}, {}};
+            Entry entry{plugin, nullptr, nullptr, core::DynamicLibrary{}, {}, {}, {}};
             RecordedOnLoad(entry);
             m_entries.PushBack(core::Move(entry));
             return plugin;
+        }
+
+        // Loads a part linked into this binary: calls its load with `context` (borrowed; it must
+        // outlive the part's unload) under the recording, like a plugin's OnLoad.
+        void AddPart(const PluginPart& part, PluginContext& context)
+        {
+            Entry entry{nullptr, &part, &context, core::DynamicLibrary{}, {}, {}, {}};
+            RecordedOnLoad(entry);
+            m_entries.PushBack(core::Move(entry));
+        }
+
+        // Loads a part from a shared library: resolves `symbol` (PluginPartSymbol), takes the part
+        // it returns and loads it as AddPart does. The library is closed when the loader unloads.
+        // NotFound for a missing library or symbol; Internal for an entry returning null.
+        core::Result<const PluginPart*> LoadPart(core::StringView path, core::StringView symbol,
+                                                 PluginContext& context)
+        {
+            core::DynamicLibrary library;
+            if (core::Status status = library.Load(path); !status)
+            {
+                return core::Err(status.Code());
+            }
+            const auto entryPoint = library.GetSymbol<PluginPartEntryFn>(symbol);
+            if (entryPoint == nullptr)
+            {
+                return core::Err(core::ErrorCode::NotFound);
+            }
+            const PluginPart* part = entryPoint();
+            if (part == nullptr || part->load == nullptr)
+            {
+                return core::Err(core::ErrorCode::Internal);
+            }
+            Entry entry{nullptr, part, &context, core::Move(library), {}, {}, {}};
+            RecordedOnLoad(entry);
+            m_entries.PushBack(core::Move(entry));
+            return part;
         }
 
         // Loads a plugin from a shared library: resolves the factory, creates the
@@ -90,7 +128,7 @@ export namespace foundation::runtime
                 return core::Err(core::ErrorCode::Internal);
             }
 
-            Entry entry{plugin, core::Move(library), {}, {}, {}};
+            Entry entry{plugin, nullptr, nullptr, core::Move(library), {}, {}, {}};
             RecordedOnLoad(entry);
             m_entries.PushBack(core::Move(entry));
             return plugin;
@@ -113,6 +151,10 @@ export namespace foundation::runtime
                 {
                     m_entries[i].plugin->OnUnload(*m_subsystems);
                 }
+                else if (m_entries[i].part != nullptr && m_entries[i].part->unload != nullptr)
+                {
+                    m_entries[i].part->unload(*m_entries[i].context);
+                }
                 ReverseRecorded(m_entries[i]);
                 if (!closeLibraries)
                 {
@@ -125,7 +167,9 @@ export namespace foundation::runtime
     private:
         struct Entry
         {
-            IRuntimePlugin* plugin;
+            IRuntimePlugin* plugin;     // a game's native module, or
+            const PluginPart* part;     // a package's part,
+            PluginContext* context;     // with the context its load and unload are handed
             core::DynamicLibrary library;
             // Everything OnLoad registered, recorded by the ambient observers below and
             // reversed on unload, so the plugin never hand-mirrors its registrations.
@@ -161,7 +205,14 @@ export namespace foundation::runtime
             {
                 m_recorders[i]->Arm(entry.recorded[i]);
             }
-            entry.plugin->OnLoad(*m_subsystems);
+            if (entry.plugin != nullptr)
+            {
+                entry.plugin->OnLoad(*m_subsystems);
+            }
+            else
+            {
+                entry.part->load(*entry.context);
+            }
             for (core::usize i = m_recorders.Size(); i-- > 0;)
             {
                 m_recorders[i]->Disarm();

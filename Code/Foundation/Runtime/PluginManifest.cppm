@@ -103,6 +103,20 @@ export namespace foundation::runtime
         return PluginVersion{fields[0], fields[1], fields[2]};
     }
 
+    // Whether `version` is `minimum` or later (a dependency's version against what a plugin asks).
+    [[nodiscard]] constexpr bool VersionAtLeast(PluginVersion version, PluginVersion minimum) noexcept
+    {
+        if (version.major != minimum.major)
+        {
+            return version.major > minimum.major;
+        }
+        if (version.minor != minimum.minor)
+        {
+            return version.minor > minimum.minor;
+        }
+        return version.patch >= minimum.patch;
+    }
+
     // Whether an engine at `engine` satisfies a plugin built for `required`: the same major, and
     // at least the required minor and patch. Before 1.0 a minor release may break plugins, so
     // there the minor must match too.

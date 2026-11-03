@@ -13,4 +13,6 @@ target_sources(Runtime
             SubsystemManager.cppm
             Plugin.cppm
             PluginLoader.cppm
-            PluginManifest.cppm)
+            PluginManifest.cppm
+            PluginPart.cppm
+            PluginHost.cppm)

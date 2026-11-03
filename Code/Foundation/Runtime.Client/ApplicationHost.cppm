@@ -150,15 +150,31 @@ export namespace foundation::runtime
                 m_stepper.step = m_settings.fixedTimeStep;
                 m_stepper.maxSteps = m_settings.maxFixedStepsPerFrame;
                 const core::u32 fixedSteps = m_stepper.Advance(scaledDelta);
-                for (core::u32 i = 0; i < fixedSteps; ++i)
+                if (fixedSteps > 0)
                 {
-                    m_app->OnFixedUpdate(*this, m_settings.fixedTimeStep);
+                    PROFILE_SCOPE("Update.Fixed");
+                    for (core::u32 i = 0; i < fixedSteps; ++i)
+                    {
+                        m_app->OnFixedUpdate(*this, m_settings.fixedTimeStep);
+                    }
                 }
-
-                m_tasks.Pump(); // long work's completions, before this frame's update reads them
-                m_subsystems.Update(scaledDelta);
-                m_app->OnUpdate(*this, deltaTime);
-                m_subsystems.PostUpdate(scaledDelta);
+                // Each phase scoped, so nothing in Update goes unaccounted for in a frame capture.
+                {
+                    PROFILE_SCOPE("Update.Tasks");
+                    m_tasks.Pump(); // long work's completions, before this frame's update reads them
+                }
+                {
+                    PROFILE_SCOPE("Update.Subsystems");
+                    m_subsystems.Update(scaledDelta);
+                }
+                {
+                    PROFILE_SCOPE("Update.App");
+                    m_app->OnUpdate(*this, deltaTime);
+                }
+                {
+                    PROFILE_SCOPE("Update.PostSubsystems");
+                    m_subsystems.PostUpdate(scaledDelta);
+                }
             }
 
             // Render every window uniformly (main == windows[0]).
@@ -181,7 +197,10 @@ export namespace foundation::runtime
                     {
                         continue;
                     }
-                    m_app->OnRenderWindow(*this, frame);
+                    {
+                        PROFILE_SCOPE("Render.App");
+                        m_app->OnRenderWindow(*this, frame);
+                    }
                     {
                         PROFILE_SCOPE("Render.Present"); // record submit + queue present
                         rw->EndFrame(frame);

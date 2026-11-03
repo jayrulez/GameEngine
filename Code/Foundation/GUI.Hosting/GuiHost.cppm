@@ -34,10 +34,12 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE (compiles to nothing when disabled)
 
 export module foundation.gui.hosting:gui_host;
 
 import foundation.core;
+import foundation.profiler; // PROFILE_SCOPE
 import foundation.rhi;
 import foundation.shell;
 import foundation.graphics;
@@ -480,12 +482,31 @@ export namespace foundation::gui
         {
             // What the player uses now, from this frame's devices, before the panes' bridges pass
             // it on with their input.
-            foundation::input::ShellInputSource devices(m_shell.Input());
-            m_inputKind.Update(devices);
-            m_router->Update();
-            ReportWindowEvents();
-            RouteInput();
-            m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
+            {
+                PROFILE_SCOPE("GUI.Input");
+                {
+                    PROFILE_SCOPE("GUI.Input.Kind");
+                    foundation::input::ShellInputSource devices(m_shell.Input());
+                    m_inputKind.Update(devices);
+                }
+                {
+                    PROFILE_SCOPE("GUI.Input.Router");
+                    m_router->Update();
+                }
+                {
+                    PROFILE_SCOPE("GUI.Input.WindowEvents");
+                    ReportWindowEvents();
+                }
+                {
+                    PROFILE_SCOPE("GUI.Input.Route");
+                    RouteInput();
+                }
+            }
+            {
+                PROFILE_SCOPE("GUI.Context"); // actions, effects, mutations, accessibility
+                m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
+            }
+            PROFILE_SCOPE("GUI.Panes"); // each pane styled and laid out, then the hosted content placed
             for (const Attached& attached : m_attached)
             {
                 GuiWindowData& data = *attached.Data;
@@ -547,9 +568,12 @@ export namespace foundation::gui
                 m_bakesRecorded = true;
             }
             // Record what the window's nodes show from outside the GUI, before the GUI samples it.
-            for (const Hosted& hosted : m_contents)
-                if (hosted.Window == frame.window && hosted.Content->HostedNode()->IsTreeVisible())
-                    hosted.Content->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
+            {
+                PROFILE_SCOPE("GUI.Hosted");
+                for (const Hosted& hosted : m_contents)
+                    if (hosted.Window == frame.window && hosted.Content->HostedNode()->IsTreeVisible())
+                        hosted.Content->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
+            }
             // Log every size a window's drawing depends on, once per frame size: on a scaled display
             // the window's units, its pixels, the swapchain and the root's viewport must agree for the
             // drawing to fill the window.
@@ -569,8 +593,16 @@ export namespace foundation::gui
             vg::VGBatch& batch = data->Canvas->GetBatch();
             const i32 slot = static_cast<i32>(frame.frameIndex);
             data->Renderer.BeginFrame(slot);
-            const vg::renderer::VGRenderSlice slice = data->Renderer.Prepare(batch, slot, frame.width, frame.height);
-            data->Renderer.RenderLayers(*frame.encoder, slot, slice);
+            vg::renderer::VGRenderSlice slice;
+            {
+                PROFILE_SCOPE("GUI.Prepare"); // the batch's vertices, textures and bind groups for the GPU
+                slice = data->Renderer.Prepare(batch, slot, frame.width, frame.height);
+            }
+            {
+                PROFILE_SCOPE("GUI.Layers"); // offscreen layers, each a pass of its own
+                data->Renderer.RenderLayers(*frame.encoder, slot, slice);
+            }
+            PROFILE_SCOPE("GUI.Encode"); // the window's pass: every draw command
             const rhi::ClearColor clear = ClearFor(data->Encoded);
             rhi::TextureView* view = data->Encoded ? frame.backbufferAlternateView : frame.backbufferView;
             // The targets follow the backbuffer this frame draws into, not the window: while a window

@@ -1169,17 +1169,22 @@ namespace editor::app
 
     void EditorApplication::OnUpdate(runtime::IApplicationHost& host, f32 dt)
     {
-        if (m_mcp)
-            m_mcp->Pump(); // a waiting agent call is answered here: tools touch main-thread state
-        if (m_releaseFiles)
-            (void)m_releaseFiles->Pump(); // --release-files <folder>: before the client asks again
-        if (m_manager)
-            m_manager->Tick(); // the Samples tab's fetches and downloads, which go on while a project is open
-        
+        // Each step is scoped, so a frame capture accounts for the whole update.
+        {
+            PROFILE_SCOPE("Editor.Pumps");
+            if (m_mcp)
+                m_mcp->Pump(); // a waiting agent call is answered here: tools touch main-thread state
+            if (m_releaseFiles)
+                (void)m_releaseFiles->Pump(); // --release-files <folder>: before the client asks again
+            if (m_manager)
+                m_manager->Tick(); // the Samples tab's fetches and downloads, which go on while a project is open
+        }
+
         // The embedded runtime's frame first (fixed steps in BeginFrame, interpolation in Update):
         // pages then read fresh state. EndFrame closes after the scene bracket (OnRenderWindow).
         if (m_embeddedApp)
         {
+            PROFILE_SCOPE("Editor.Runtime");
             const f32 scaled = dt * m_runtimeContext.TimeScale();
             m_runtimeContext.BeginFrame(dt);
             m_runtimeContext.Update(scaled);
@@ -1187,27 +1192,43 @@ namespace editor::app
             // Every game instance's script ticks once a frame here, however many Game tabs.
             m_embeddedApp->OnUpdate(*m_embeddedHost, dt);
         }
-        UpdateCaptures(host, dt);
-        if (editor::ThumbnailStage* stage = m_session.Stage())
-            stage->Update(); // take and stage the next queued GPU thumbnail
+        {
+            PROFILE_SCOPE("Editor.Captures");
+            UpdateCaptures(host, dt);
+            if (editor::ThumbnailStage* stage = m_session.Stage())
+                stage->Update(); // take and stage the next queued GPU thumbnail
+        }
         // Report cook and job progress on the status line, and start an export that was waiting on
         // its cook.
         EditorApplication* self = this;
-        m_cookService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
-        if (m_export)
-            m_export->Pump();
-        // The editor's long work: the import previews' reads, done off this thread; their
-        // completions run here, their lines go to the status bar as the job service's do.
-        m_context.Tasks().Pump(Function<void(const TaskHandle&, StringView)>{[self](const TaskHandle&, StringView line) { self->m_context.SetStatus(line); }});
-        UpdateStatusBar();
+        {
+            PROFILE_SCOPE("Editor.Cook");
+            m_cookService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
+            if (m_export)
+                m_export->Pump();
+        }
+        {
+            // The editor's long work: the import previews' reads, done off this thread; their
+            // completions run here, their lines go to the status bar as the job service's do.
+            PROFILE_SCOPE("Editor.Tasks");
+            m_context.Tasks().Pump(Function<void(const TaskHandle&, StringView)>{[self](const TaskHandle&, StringView line) { self->m_context.SetStatus(line); }});
+            UpdateStatusBar();
+        }
         if (foundation::resource::ResourceManager* resources = m_session.Resources())
         {
+            PROFILE_SCOPE("Editor.Resources");
             resources->Pump();           // async loads finish
             resources->CollectGarbage(); // products a hot reload replaced go
         }
-        DrainLog();
+        {
+            PROFILE_SCOPE("Editor.Log");
+            DrainLog();
+        }
         if (m_profiler)
+        {
+            PROFILE_SCOPE("Editor.Profiler");
             m_profiler->Update(); // take the frames recorded since the last update, while recording
+        }
         if (m_assets)
         {
             PROFILE_SCOPE("Editor.Assets");
@@ -1227,15 +1248,24 @@ namespace editor::app
                 (void)DropFiles(paths.AsSpan(), ignored);
             }
         }
-        m_window.Update(dt);
+        {
+            PROFILE_SCOPE("Editor.Window");
+            m_window.Update(dt);
+        }
         {
             PROFILE_SCOPE("Editor.Pages");
             m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
         }
         if (m_importWindow)
+        {
+            PROFILE_SCOPE("Editor.ImportWindow");
             m_importWindow->OnUpdate(host, dt); // the same for the import window's preview (a model's view)
+        }
         if (m_home)
+        {
+            PROFILE_SCOPE("Editor.Home");
             m_home->Refresh();
+        }
     }
 
     // Updates the status bar: the running job (its title, progress and step count), else a cook
@@ -1320,18 +1350,33 @@ namespace editor::app
         {
             if (m_sceneRenderer != nullptr)
                 m_sceneRenderer->BeginRendering(*frame.encoder, frame.frameIndex);
-            m_pages->Render(host, frame);
+            {
+                PROFILE_SCOPE("Editor.PagesRender");
+                m_pages->Render(host, frame);
+            }
             if (m_importWindow)
+            {
+                PROFILE_SCOPE("Editor.ImportWindowRender");
                 m_importWindow->OnRenderWindow(host, frame); // the import window's model preview
+            }
             if (editor::ThumbnailStage* stage = m_session.Stage())
                 stage->Render(frame); // a thumbnail in the same bracket
             if (m_sceneRenderer != nullptr)
+            {
+                PROFILE_SCOPE("Editor.SceneEnd");
                 m_sceneRenderer->EndRendering();
-            m_pages->AfterSceneRender(host, frame); // overlays on the composed targets (the Game tab's UI)
-            if (m_embeddedApp)
-                m_runtimeContext.EndFrame();
+            }
+            {
+                PROFILE_SCOPE("Editor.AfterScene");
+                m_pages->AfterSceneRender(host, frame); // overlays on the composed targets (the Game tab's UI)
+                if (m_embeddedApp)
+                    m_runtimeContext.EndFrame();
+            }
         }
-        m_window.Render(frame);
+        {
+            PROFILE_SCOPE("Editor.WindowRender");
+            m_window.Render(frame);
+        }
         // A window screenshot: this window's finished backbuffer, the GUI included, when one is armed;
         // OnUpdate writes it next frame.
         if (frame.valid && frame.window != nullptr && frame.encoder != nullptr && host.Graphics() != nullptr && host.Graphics()->Raw() != nullptr)

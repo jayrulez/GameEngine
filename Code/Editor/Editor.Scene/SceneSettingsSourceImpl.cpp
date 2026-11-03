@@ -95,7 +95,12 @@ namespace editor
     void SceneSettingsSource::Refresh()
     {
         Bind();
-        NotifyValuesChanged();
+        // Called every frame while the settings show: the grid hears of it only when a value moved.
+        // Both sources are looked at, so each remembers what it showed.
+        const bool own = m_own->TakeChanges();
+        const bool profile = m_profile->TakeChanges();
+        if (own || profile)
+            NotifyValuesChanged();
     }
 
     Guid SceneSettingsSource::ProfileOf(StringView path) const

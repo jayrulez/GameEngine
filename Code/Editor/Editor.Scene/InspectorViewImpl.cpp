@@ -328,9 +328,11 @@ namespace editor
         ShowPaste();
         PullTransforms();
         RefreshExtras();
+        // Each frame: the grid hears only of a source whose values moved, so an entity at rest costs
+        // its rows nothing.
         if (m_grid != nullptr && !m_grid->IsEditing())
             for (const UniquePtr<ComponentSection>& section : m_components)
-                section->source->Refresh();
+                section->source->RefreshIfChanged();
     }
 
     void SceneInspectorView::Clear()
@@ -474,7 +476,7 @@ namespace editor
         for (usize i = 0; i < m_entities.Size(); ++i)
             m_transforms[i] = scene.GetLocalTransform(scene.FindEntity(m_entities[i]));
         if (m_transform)
-            m_transform->Refresh();
+            m_transform->RefreshIfChanged();
     }
 
     void SceneInspectorView::BuildComponents()

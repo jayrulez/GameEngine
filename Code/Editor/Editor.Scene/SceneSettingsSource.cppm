@@ -37,7 +37,8 @@ export namespace editor
         SceneSettingsSource& operator=(const SceneSettingsSource&) = delete;
 
         [[nodiscard]] const TypeInfo& Type() const noexcept { return *m_type; }
-        /// Finds the values again (a block or a profile may have moved) and tells the grid.
+        /// Finds the values again (a block or a profile may have moved) and tells the grid when one
+        /// changed.
         void Refresh();
 
         // === IPropertySource ===

@@ -771,6 +771,51 @@ TEST_CASE("inspector: a transform edit and a component edit are each one undo st
     page->OnClose();
 }
 
+TEST_CASE("inspector: a frame where nothing moved costs the grid no layout; a value moved from outside reaches it")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    Shown shown(*page);
+    const auto frame = [&]()
+    {
+        page->OnUpdate(bed.host, 1.0f / 60.0f);
+        shown.styles.ApplyTree(*shown.root);
+    };
+    const auto waiting = [&]() { return shown.root->IsLayoutDirty() || shown.root->HasLayoutDirtyDescendant(); };
+    const auto settle = [&]()
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            frame();
+            (void)shown.root->UpdateLayout();
+        }
+    };
+
+    // An entity selected: the inspector looks at it every frame.
+    page->EditContext().EntitySelection().Set(bed.crate);
+    settle();
+    frame();
+    CHECK_FALSE(waiting()); // the inspector found nothing new, so nothing is laid out again
+
+    scene::Scene& scene = *page->ScenePtr();
+    const scene::EntityHandle crate = scene.FindEntity(bed.crate);
+    auto moved = scene.GetLocalTransform(crate);
+    moved.position.x = 12.5f; // moved from outside the inspector (a gizmo's drag, a simulation)
+    scene.SetLocalTransform(crate, moved);
+    frame();
+    CHECK(waiting()); // the grid heard of it and shows it
+    (void)shown.root->UpdateLayout();
+    gui::Variant shownX = gui::ReadPropertyValue(page->Inspector()->Sections(), page->Inspector()->PathOf(u8"Transform", u8"position.x").AsView(), gui::PropertyKind::Float).Value;
+    CHECK(shownX.AsFloat() == doctest::Approx(12.5));
+
+    // The scene selected: its settings are looked at every frame the same way.
+    shown.Click(*page->Hierarchy()->Tree(), 0);
+    settle();
+    frame();
+    CHECK_FALSE(waiting());
+    page->OnClose();
+}
+
 TEST_CASE("inspector: several entities edited at once; a component's header has its verbs; read only while the page simulates")
 {
     Bed bed;

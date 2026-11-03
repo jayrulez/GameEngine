@@ -142,6 +142,21 @@
 
 ## Engine
 
+- **Export pruning misses assets a scene hands its scripts** (user 2026-11-02, from the UAT
+  check): a behaviour's asset-valued property set in a scene (an override of asset kind, a guid)
+  is not followed by the reachability scan (`SceneReferenceScanner`), so a pruned export drops what
+  it names. Sky Hopper's Level 1 gives its Crab a walk clip and its Skull a model that way; a pruned
+  Linux export dropped both and the player logged "bind failed" for each. Follow the overrides in the
+  scan, with a test of a scene whose only reference to an asset is a behaviour's property. Apart
+  from it, by design: what a script loads by name (Sky Hopper's Levels 2 to 5, its sounds) needs
+  Always Export (`Systems/export-reachability.md`, the unbuilt script-load lint, Phase 4).
+- **A VG gradient's lookup texture uploaded once a frame, each upload waiting** (user 2026-11-02,
+  from the UAT check): VGSandbox makes a new 256x1 lookup texture about once a frame (a new image
+  instance each time), and `VGRenderer::GetOrCreateCachedTexture` uploads each through a transfer
+  batch of its own that it submits and waits on. Find why the ramp is new each frame (an animated
+  gradient, or a cache that misses), keep one per ramp, and put the frame's uploads in one transfer
+  or the frame's own encoder; then check whether the GUI's animated gradients do the same.
+
 - **Terrain lit as the forward lights** (user 2026-10-31): `terrain.ps.hlsl` lights with a
   hard-coded ambient (`float3(0.28, 0.30, 0.34)`) and a sun term of `ndl * shadow` with no colour or
   intensity, so terrain ignores the scene's sky, ambient and key light while everything on it
@@ -296,6 +311,14 @@ alone (`StyleValue.cppm`, ParseFilters): a list naming any other function does n
 
 The release itself and the work around it: builds and packaging, the samples, the docs, the
 website and the flagship game.
+
+- **`--screenshot` in the framework samples** (user 2026-11-02, from the UAT check): the samples
+  built on `SampleApp` (VGSandbox, the RHI samples, WebTriangle) take the `--screenshot` flags, but
+  none calls `CaptureBackbuffer`, as the framework asks (since 8ad96bca7, 2026-10-16), so no picture
+  is written and with `--screenshot-exit` the run never ends. Let the framework capture by itself
+  (or give each sample the call), with a test that a sample run with the flags writes its PNG and
+  exits. It blocks the UAT's VG gradient and blend checks (pad, reflect, radial rings, screen blend,
+  the SVG badge).
 
 - **Documentation cleaned up and made proper, for the 0.1 release** (user 2026-10-09): the
   documentation as a user of the engine meets it, current and organised (getting started, the

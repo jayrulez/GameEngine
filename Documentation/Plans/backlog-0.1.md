@@ -8,6 +8,22 @@
 
 ## Editor
 
+- **An HDR image's preview is black** (user 2026-11-02, UAT): an `.hdr` imported as an Image
+  (`kloofendal_48d_partly_cloudy_puresky_1k.hdr`) shows its facts (1024 x 512, RGBA32F, Linear) but
+  the picture is black throughout; a PNG's picture shows. The page's comment says an HDR source
+  previews clamped (`ImageEditorPageImpl.cpp`).
+- **The skeleton page does not follow a reimport** (user 2026-11-02, UAT): with the Crab's skeleton
+  page open, a bone renamed in `Crab.gltf` and reimported reaches the skeleton asset and recooks,
+  but the page keeps the old bones until `page_reload`. The page should rebuild when its object
+  changes (`SkeletonPageImpl` OnObjectChanged), with a test.
+- **Three smaller findings from the UAT check** (user 2026-11-02):
+  - The script page stays dirty ("Enemy *", Save enabled) after undo returns to the saved text; the
+    undo stack has no clean point there.
+  - The debugger's Locals show garbage for a local declared further down the function while paused
+    above it (`dx = 3.27e-41`); say it is not declared yet, or leave it out.
+  - `editor_hover` does not raise the code editor's hover popups (a type name's API hover, a local's
+    value while paused), so an agent cannot check them; the hover reaches the code editor's own
+    hover path.
 - **Four small editor findings from the UAT check** (user 2026-11-02):
   - The Export dialog's "Add Files..." button (`#export-add-files`) is drawn over the "Exports go
     to <path>" text at its bottom left, cutting the path in two.

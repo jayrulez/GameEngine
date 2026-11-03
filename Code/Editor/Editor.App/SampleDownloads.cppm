@@ -3,7 +3,7 @@
 
 // Editor::App - :sample_downloads partition.
 //
-// The sample games the project manager's Samples tab offers (Documentation/Specs/project-manager.md,
+// The sample games the project manager's Samples tab offers (Documentation/Archive/project-manager-history.md,
 // P5): the catalog a release publishes (samples.json, from scripts/pack-samples.py), and one
 // sample's download. A download streams the release's zip to a file beside where it goes, hashing
 // it as it arrives, checks the SHA-256 the catalog gives, then extracts it into its folder and

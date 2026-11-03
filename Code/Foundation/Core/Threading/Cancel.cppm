@@ -3,7 +3,7 @@
 
 // Core - :cancel partition
 //
-// Cooperative cancelling (Specs/task-layer.md D1). Whoever may cancel holds a CancelSource; the
+// Cooperative cancelling (Archive/task-layer-history.md D1). Whoever may cancel holds a CancelSource; the
 // work it started holds a CancelToken, a cheap copy that asks IsCancelled() at its checks and
 // returns ErrorCode::Cancelled when told. Work that runs where its canceller cannot reach (a cook in
 // the pipeline, started by an editor window) takes a token, so the canceller needs no knowledge of

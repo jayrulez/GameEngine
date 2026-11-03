@@ -98,7 +98,7 @@ the ports bug) does not depend on this; only the collision preview does.
 
 ## Not to be confused with
 
-- `Documentation/Specs/camera-preview.md` (task #118, BUILT) - the floating in-viewport
+- `Documentation/Archive/camera-preview-history.md` (task #118, BUILT) - the floating in-viewport
   live preview of a SELECTED CameraComponent's view. Different feature; this is about the
   bespoke-page authoring viewport substrate.
 - The week-2026-08-22 seeded "editor extensibility seams" item (inspector action-row +

@@ -17,9 +17,9 @@
 > resource-reference control, upgraded from a bare button to a 3-control slot with
 > drag-drop. Cross-cutting: it is the widget EVERY `resource::Ref<T>` inspector
 > field uses, so it lands on the reflected-inspector track
-> (Documentation/Specs/reflected-inspector.md) and its "Edit" action is an
+> (Documentation/Archive/reflected-inspector-history.md) and its "Edit" action is an
 > activation path for the property-animation panel
-> (Documentation/Specs/property-animation-editor.md, amendment A1). Not built yet.
+> (Documentation/Archive/property-animation-editor-history.md, amendment A1). Not built yet.
 
 ## Goal
 

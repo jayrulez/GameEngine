@@ -9,7 +9,7 @@
 The tier-2 half of the 0.1 custom-shader item: visual nodes (texture sample, math, blend, ... to a
 surface output) that GENERATE a surface shader, fed through the same cook (variants, entry
 points, bytecode packs), on the NodeGraph UI and the AnimationGraphPage pattern. It builds on
-0.1's surface shaders (`Specs/custom-shaders.md`): a graph is a surface function written for you.
+0.1's surface shaders (`Archive/custom-shaders-history.md`): a graph is a surface function written for you.
 
 ## An orthographic view that sees behind its eye: revisit (user 2026-10-13; after 0.1)
 
@@ -45,7 +45,7 @@ backend, with a test of each; the payoff is games' orthographic cameras seeing b
 
 ## The profiler: a live connection to a running player (user 2026-10-13; after 0.1)
 
-0.1's profiler (`Specs/profiler.md`) profiles an exported game through capture files (a key or
+0.1's profiler (`Archive/profiler-history.md`) profiles an exported game through capture files (a key or
 `--profile-capture` in the player, opened in Perfetto). Add a live view: the editor connects to
 a running player (a desktop player, the Steam Deck, a phone) over the network and its Profiler
 panel shows that player's frames as it shows the editor's, as Traktor's target connection and
@@ -153,7 +153,7 @@ the box reflects the sky instead; parallax on and off move the reflection.
 
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 
-The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API
+The lab's inspector (`Archive/gui-lab-evolution-history.md`, E8e) answers its questions through a C++ API
 over the core (`foundation.gui.inspector`: the tree, a node described with its states, box,
 reflected properties, commands and listeners, a selector query, a property set as markup sets
 it, and `StyleManager::ExplainStyle` for where each style came from). Serve the same answers as
@@ -163,20 +163,9 @@ then nothing hosts a GUI an agent would ask about); then a standalone phase: the
 place in `McpGuide.md` and the engine's tool count, and a session that finds a node, explains its
 styles and edits it.
 
-## Shader blocks: no meaning in a spare or borrowed lane (user 2026-10-29)
-
-"Just slotting unrelated things in unused blocks". Specced 2026-10-29 as
-`Specs/shader-blocks-cleanup.md` (the full audit, 26 findings, in phases). Audit the engine's shader constant blocks and
-give each meaning a named place, the block growing where it must. Seen 2026-10-29: the wind in PBR's
-material buffer's spare lanes (offsets 24, 28, 60; `Specs/wind-for-every-shader.md` moves the wind
-out); the forward clock in `IblParams.zw`; `Tint.a` as a faded instance set's rank; `ShadowWind`
-carrying the wind clock in `.x` and the instance fade window in `.yz`; the pick view's fade end in
-`PickCamera.w`. Each with its C++ side (the structs the renderer fills) and a test that the layouts
-on both sides agree.
-
 ## The shader page: the cooked code, and project include files (2026-10-12; after 0.1)
 
-What custom shaders left after 0.1 (`Specs/custom-shaders.md`, phase 8): a toggle on the shader
+What custom shaders left after 0.1 (`Archive/custom-shaders-history.md`, phase 8): a toggle on the shader
 page showing the cooked SPIR-V or WGSL of a chosen variant (the parity doc's "live disassembly",
 from the cook's own output), and a project's own `.hlsli` include files with their dependency
 tracking (today `#include` reaches the engine's shader library only).
@@ -192,7 +181,7 @@ GPU), and let it take a certificate and key for its browser gateway (`--tls-cert
 last 90 days or less and a host restarted to renew drops its players. Never a project or player
 setting: a private key must not ship in an export. Until then a TLS proxy in front of the gateway
 is the documented way (`Documentation/Shipping/Hosting.md`). From the TLS spec's open host-side
-question (`Specs/tls-http-wss.md`, P5).
+question (`Archive/tls-http-wss-history.md`, P5).
 
 ## A sound cue's thumbnail: its variants' waveforms stacked (user 2026-10-26)
 
@@ -215,7 +204,7 @@ touch/input + build"). The pieces:
   resume, a lost surface on going to the background), touch (already normalized, with `pointerX/Y`,
   the contract the web and desktop shells keep) and the back button.
 - **Rendering.** Vulkan (the RHI's backend); the surface's `currentTransform` drives the present
-  transform (`Specs/present-transform.md` section "Native, later": `preTransform = currentTransform`,
+  transform (`Archive/present-transform-history.md` section "Native, later": `preTransform = currentTransform`,
   the extent swapped, the content turned), so the compositor does no rotation work.
 - **Build and export.** An Android export template (NDK, Gradle, an APK or AAB), the player and its
   sidecars as the desktop and web templates are; an export preset (Android) with its icon, its

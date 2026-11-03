@@ -99,7 +99,7 @@ if (-not (Test-Path (Join-Path $Symbols "Tools.Editor.pdb"))) {
     Write-Warning "no Tools.Editor.pdb in $Bin - a crash in this dist cannot be resolved"
 }
 
-# The data the editor reads, whole folders (Specs/data-layout.md): Engine (what the runtime reads: the
+# The data the editor reads, whole folders (Archive/data-layout-history.md): Engine (what the runtime reads: the
 # shader sources an export cooks a game's pack from, the GUI's font), Editor (its sheets, page markup,
 # icons, fonts and code languages), Branding (the splash, the logo and the window icons) and Templates
 # (what a new project starts with), and the marker. Not Samples, Tests, SampleProjects or Output, and

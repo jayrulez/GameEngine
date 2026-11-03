@@ -4,7 +4,7 @@
 // Editor App - :import_dialog partition
 //
 // The import window, over its markup (Data/Editor/Import.xml): one window for one file or many, in
-// three panes (Specs/import-window.md). The files, grouped by the importer each resolves to and
+// three panes (Archive/import-window-history.md). The files, grouped by the importer each resolves to and
 // headed by that importer's Label(), each kept or dropped, with its asset type's icon, its size,
 // its state while it needs attention (reading, failed), and one selected. The selected file's
 // preview, with a line of facts under it. Its settings: its importer (a choice when several

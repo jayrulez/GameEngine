@@ -3,7 +3,7 @@
 
 // Editor::App - :project_manager_view partition.
 //
-// The project manager (Documentation/Specs/project-manager.md): the window's whole screen at startup
+// The project manager (Documentation/Archive/project-manager-history.md): the window's whole screen at startup
 // when no project is given, and after File > Close Project. Its frame is markup
 // (Data/Editor/ProjectManager.xml): a header with the Projects and Samples tabs; on Projects a
 // toolbar (New Project, Open Folder, a search, the sort, list or grid) over the projects as rows or

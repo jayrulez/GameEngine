@@ -344,7 +344,7 @@ export namespace editor
         [[nodiscard]] EditorPageRegistry& Pages() noexcept { return m_pageRegistry; }
         /// The import window's previews, by asset type: a domain registers one beside its page.
         [[nodiscard]] ImportPreviewRegistry& ImportPreviews() noexcept { return m_importPreviews; }
-        /// The editor's long work off the frame (Specs/task-layer.md): the import previews' reads,
+        /// The editor's long work off the frame (Archive/task-layer-history.md): the import previews' reads,
         /// cooks, imports, exports. The host pumps it each frame, which runs the completions.
         [[nodiscard]] TaskPool& Tasks() noexcept { return m_tasks; }
         /// The lane that changes the project, one task at a time so nothing races the content

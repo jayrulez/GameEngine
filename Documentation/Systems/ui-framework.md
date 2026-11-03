@@ -4,7 +4,7 @@
 > outside that folder links it, and it builds only with `-DOPTION_BUILD_DEPRECATED=ON`. The engine, the editor and the games are on foundation.gui
 > (`Systems/gui-port.md`).
 > Verified: 2026-08-16 @ 993d57d2
-> Track: ui-core-audit.md (Backlog) / Specs/ui-box-model.md / Specs/ui-theme-migration.md
+> Track: ui-core-audit.md (Backlog) / Archive/ui-box-model-history.md / Archive/ui-theme-migration-history.md
 
 The retained-mode UI framework itself - box model, focus, styling/theming, and the frame
 pipeline. Ported from Sedulous.UI and then taken "good to great" by the 2026-08 core audit
@@ -25,7 +25,7 @@ game tier that once did is in `Archive/game-ui-history.md`); this doc covers the
   `.vfs`. (The cooked documents and themes, `.resource` and `ui.pipeline`, went with the game
   tier: games use foundation.gui.)
 
-## Box model (border-box; Specs/ui-box-model.md)
+## Box model (border-box; Archive/ui-box-model-history.md)
 
 - `BoxMetrics{Margin, Padding, Border}` resolved ONCE per view by
   `View::ResolveBoxMetrics()`: padding = max of the ViewGroup padding field
@@ -55,7 +55,7 @@ game tier that once did is in `Archive/game-ui-history.md`); this doc covers the
   are legal - virtualization realizes rows in OnLayout). `Queue*` lambdas capture
   `RefPtr` so pending actions co-own their views.
 
-## Styling + theming (Specs/ui-theme-migration.md)
+## Styling + theming (Archive/ui-theme-migration-history.md)
 
 Themes are `.sss` text. The four built-in looks (Dark, Light, RoundedDark, plus the
 toolkit fragments) live as in-tree sheets embedded at configure time

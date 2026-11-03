@@ -328,7 +328,7 @@ Where it goes (the lanes already exist):
     cannot carry the required semantics (deferral, marshalling, safety) - never for
     stability, never as a blocker to a clean break.
   - **Spec 1 - networking extraction**: no open holdovers; spec written
-    (Documentation/Specs/networking-extraction.md).
+    (Documentation/Archive/networking-extraction-history.md).
   - **Spec 2 - messaging**: user direction - the bus TYPE does not belong in
     foundation.scene; it moves to its own Messaging module (start of the cleanup; does not
     itself resolve the instance-less-scene ownership). Fable's proposed resolution for the

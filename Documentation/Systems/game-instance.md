@@ -94,7 +94,7 @@ never touches a player's save). The run's contexts get it as the `run.save` serv
 `Save` facade resolves (`Save::setInt("best.level2", 4210)`, `Save::getInt(key, fallback)`, the
 same for float, bool and string, plus `has`, `remove`, `clear` and `flush`). `StopScript` writes
 whatever changed; `flush` writes at once. Writes are whole and atomic (`WriteFileAtomic`), so a crash
-never leaves a torn save. Spec: `Documentation/Specs/save-data.md`.
+never leaves a torn save. Spec: `Documentation/Archive/save-data-history.md`.
 
 ## Standalone vs editor + headless
 

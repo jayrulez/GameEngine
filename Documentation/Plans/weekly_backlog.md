@@ -13,6 +13,96 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Specs not started, kept as specs (2026-11-02)
+
+Proposed and still wanted; each spec holds its design:
+- `Specs/2d-games.md`: 2D inside the 3D world, L0 to L7 (sprite fixes, sort layers, sprite sheets, a
+  plane lock, a sample, tilemaps, editor tooling). Its orthographic camera came with render textures.
+- `Specs/whiteboxing.md`: parametric blockout pieces driving a mesh and a collider, P0 to P3.
+- `Specs/script-run-modules.md`: one script module per run, hot reload that migrates live state, P0
+  to P2. Its origin was a fault seen on the Sedulous side; whether it is wanted here is the user's.
+
+## Left over from the specs archived 2026-11-02
+
+The specs were checked against the code and the history and moved to `Documentation/Archive/`;
+what each left open and no backlog held is here, by spec (the archived spec has the detail).
+Marked "(to check)" where the check was by reading, not running.
+
+- **async-resource-loading:** P4, the web pass (measure Pump in WebScene, chunk the worst decode);
+  a scene load's progress per batch rather than the manager's whole (`GameInstance.cppm`); the
+  model composite resource.
+- **asset-variants:** ETC2, RDO knobs, GPU encoding, a per-asset per-platform override page; the
+  "Future" refinements (a shared store, salting, a recook hash log, better downsamplers).
+- **color-pipeline:** its "Known gaps": post-tonemap passes writing linear into a plain UNORM target
+  (to check), the ImGui extension's raw byte colours, the terrain shader's fallback ramp constants.
+- **custom-shaders:** the built-in depth and shadow pipelines' "vertex attribute not consumed"
+  validation warnings.
+- **data-layout:** whether the editor's distribution carries `Data/SampleProjects`; `cube_sky`'s
+  source and licence (the user's to look up).
+- **editor-actions:** layer 7: (a) the assets browser publishes `EditorContext::AssetSelection()`,
+  AssetsView's hand-bound Open/Rename/Duplicate become actions; (b) `project.import/cook/rebuild`;
+  (c) `asset.*`; (d) `scene.entity.copyId`, `particle.emitter.*`, `animGraph.node.*`.
+- **editor-gui:** ruling 17, a "System" theme following the platform; ruling 21, wireframe shading;
+  ruling 15, vector fields stacked.
+- **editor-gui-catalog:** its in-scope defects (a gradient stop's colour, undo merging, u8 wrap,
+  Return-then-type, the collision shape's undo) were to land with tests in X3 to X6; only the
+  engine-version one has a test found (to check the rest).
+- **editor-lists-and-asset-slots:** P4, the generic asset page reflection-first (a `Ref<T>` as a typed
+  slot, enums as a dropdown, the list widget); Editor.Generic is still serialize-scanned. It also
+  carries reflection-track's P4.
+- **engine-composition:** Pipeline.Registration still lists resource types by hand
+  (`RegistrationImpl.cpp`) (to check).
+- **game-native-code:** an end-to-end check in CI that builds, exports and runs the NativeSample.
+- **game-ready-scripting2:** the ScriptName sweep (components keep their suffix, as
+  `TwoBoneIkComponent::of`); a bus's dynamic `subscribe` (build on need). Its UI parts are obsolete.
+- **i18n:** the library is built; left: (1) a string table asset and pipeline (CSV); (2) integration:
+  the game host's and the editor's language, the script surface, `languageChanged`, the setting, the
+  editor's own strings; (3) a font bake's charset from the tables.
+- **import-window:** W4's wireframe view; a sound's bit depth among its facts; gain over 1 on "As
+  imported".
+- **lamplight:** P5's Integration.Mcp check (nothing in `Code/Integration` reads Lamplight, and
+  AGENTS.md's list leaves it out); level 5 played through by the user.
+- **masquerade:** P6: installed on the Deck; P4's two-machine and browser playtest and P5's look and
+  sound check are the user's.
+- **mcp-agent-access:** the Agent panel (a chat window in the editor); P2G, a game host in the
+  player (`game_step`, `game_send_event`), largely met by the editor's PIE tools; P3: skills
+  (`SkillAsset`, `skill_create`, prompts), progress over SSE, resource subscriptions.
+- **mesh-lod:** weight-aware simplification, per-instance LOD buckets, cross-fades, LOD-aware physics
+  cooking.
+- **model-viewer:** model thumbnails on the tabs, once the tab bar takes icons.
+- **msaa:** P2: play-in-editor applying MSAA per view; measured costs, then the default; P3: the
+  camera preview inset taking the main view's count; an alpha-to-coverage spike; the probes on
+  Windows; DX12's sample-count queries cached.
+- **paperkid:** the streak bonus the plan names was never built.
+- **phong-material:** phase 4, Ed1's creature reimported for the user's look (tabled until after the
+  Ed1 animation graph test).
+- **property-animation:** review pass 10's test debt: an animator PingPong test (none exists), a
+  negative speed, a Serialize round trip.
+- **property-animation-editor:** ruling 1 (the commit returns the key remap); A4 (the loop default
+  seeded from the animator); a dirty prompt as the scene page closes (needs a close veto); P3 polish
+  (copy and paste keys, scale and ease, handle modes, a path in the viewport, box select in the curve
+  view); P4's activation affordances.
+- **reflection-track:** P3, the runtime gameplay surface; the particle facade (as consumers ask).
+- **run-context:** P4 (optional), the run host installing script services from the run.
+- **sample-gui-ports:** the exported players and the touch guide checked on the GUI; P8, UISandbox
+  retired (the user's call).
+- **save-data:** save slots ("not now").
+- **scene-authoring-tools:** P1, a headless batched `scene_edit` / `prefab_edit` / `scene_outline`;
+  P2, `page_edit` / `page_outline` (batched, one undo step per call); P3, list operations and
+  script attach and override. Live single edits shipped as the per-operation tools.
+- **scene-format-reference:** P2: pregeneration, a checked-in copy and its golden test; the editor's
+  distribution staging `Documentation/Shipping` (`scripts/build-editor-dist.sh` stages none, so a
+  distributed editor serves no `docs://`).
+- **shared-libraries:** clang-cl unverified; section 7's SDK and exporter link driver.
+- **source-path-p3-p4:** P4, a source-path lint.
+- **terrain-holes:** holes from an image's alpha or a sibling `_holes.png`; a "fill all" action; a
+  hole-aware CDLOD morph; the holes drawn over the heightfield page.
+- **terrain-vegetation:** per-view fade prefixes.
+- **vegetation-colliders:** its "not now": other shapes, streaming colliders, breakable vegetation.
+- **vg-and-gui-lab:** its open limits: refusing to unload a library while its widgets live, the entity
+  anchor, restyle scope and partial redraw, G5's formats and observable properties, G7's key repeat
+  and keymap gaps, a binding that must not yield (to check against the GUI's backlog-0.2 entries).
+
 ## Queued 2026-11-02 (user, after profiling the import preview): a time budget for GPU mesh uploads
 
 The renderer puts a mesh on the GPU the first time it draws it, on the main thread inside the frame
@@ -93,7 +183,7 @@ how these relate to the MCP-driven checks (`editor_click`, `editor_find`) done b
 To discuss: a native module's reload (game-native N6, Project > Reload Native Module,
 `EditorNativeModule.cppm`) stops every run, snapshots the open scenes through the wire format and
 restores them on the new module; a running game's state is not carried, by the spec's ruling
-(`Specs/game-native-code.md`, N6: run-bracketed reload only). Another design also reloads with
+(`Archive/game-native-code-history.md`, N6: run-bracketed reload only). Another design also reloads with
 play stopped, but captures the live components, restores their state through reflection and rolls
 back to the old binary when the new one fails to load or validate. Questions: whether a reload
 that fails to stage or load the new module should roll back to the old one (today it leaves none
@@ -104,7 +194,7 @@ the DataVersion gates).
 ## Queued 2026-10-30 (user, during the run spec): the scene event bus, and whether it is needed
 
 To discuss: whether a scene needs an event bus of its own at all, now that the run owns one
-(`IRun::Events()`, Specs/run-context.md D12). Today a scene BORROWS a bus by injection
+(`IRun::Events()`, Archive/run-context-history.md D12). Today a scene BORROWS a bus by injection
 (`Scene::SetEventBus`, `SceneManager::SetSceneEventBus`, `Scene::Events()`): a run injects its
 own, and the editor's scene page injects a page bus with no run (`ScenePageImpl.cpp:90`,
 `m_pageEvents`) so behaviours simulate on a page. What reads it: the scripts' `scene.events`
@@ -123,7 +213,7 @@ fixed step beside it, which scenes copy) is application configuration that rides
 Questions: where it belongs (the application host, a time service the manager holds, the
 application itself), what reads it today (the host's tick, `SceneSubsystem` seeding scenes, the
 input runtime's per-action time scale), and whether the run spec's run tier changes the answer.
-Left out of `Specs/run-context.md` ("Not in scope") and `Specs/subsystem-manager-rename.md`.
+Left out of `Archive/run-context-history.md` ("Not in scope") and `Archive/subsystem-manager-rename-history.md`.
 
 ## Queued 2026-10-10 (the backlog audit, the instance fade)
 
@@ -165,11 +255,11 @@ the original sketch covered and the build left out, untracked until the audit:
   scene loads (`PlayerApplication::PushSplash`, since 3aff5736, 2026-08-02), but a script's
   `loadScene` / `loadSceneAsync` and the editor's Play show nothing. When built: a loading screen
   belongs to the RUN that is loading, not the shared screen tier, or every editor Game tab shows it
-  (Documentation/Specs/run-screens.md: each run has its own tier with run screens on; the overlay
+  (Documentation/Archive/run-screens-history.md: each run has its own tier with run screens on; the overlay
   API, `PushScreenOverlay` / `RemoveScreenOverlay`, has no run yet and only the shared tier's
   overlay layer; give it a run as `ScreensFor` has, keeping truly global overlays, a debug badge,
   shared). Check what Sedulous does first.
-- **Save data follow-ups** (2026-10-04, Documentation/Specs/save-data.md "Not now"; the web backend
+- **Save data follow-ups** (2026-10-04, Documentation/Archive/save-data-history.md "Not now"; the web backend
   was built 2026-10-04, d7237f84): an MCP tool to read or clear the play-in-editor save, so an agent testing a "best
   score" can start from nothing without editing `Editor/` by hand; the player's audio volumes still
   written at shutdown only, not through the atomic write at the moment they change.
@@ -389,7 +479,7 @@ Open questions for week start:
 
 ## Seeded: erosion + hole cutting for terrain (user 2026-08-26)
 
-> Checked 2026-10-10: hole cutting is BUILT (`Specs/terrain-holes.md` P0-P2, 2026-09-23: a
+> Checked 2026-10-10: hole cutting is BUILT (`Archive/terrain-holes-history.md` P0-P2, 2026-09-23: a
 > per-sample cut plane, the Cut Holes brush, the alpha-tested rim; 0da5fcb7, c0a2ed66, efa2266a),
 > differing from the sketch below (a per-sample plane, not a 1-bit sidecar; holed chunks get their
 > own index buffers). Its small leftovers: a hole overlay on the heightfield page, and the spec's
@@ -448,7 +538,7 @@ passes through a holed cell but hits an unholed one.
 ## Left over from terrain vegetation (built through P2; checked 2026-10-10)
 
 The seed of 2026-08-26 (grass / vegetation / foliage for terrain) was built to
-`Specs/terrain-vegetation.md` P0-P2: splat-driven grass as per-chunk instanced sets (95db51e0),
+`Archive/terrain-vegetation-history.md` P0-P2: splat-driven grass as per-chunk instanced sets (95db51e0),
 the painted density mask and wind (a477bd3f, b834ae39), the prop scatter brush (12998377), and
 since then solid layers with trunk capsules (8f0f6ead). What the spec left as P3, each its own
 seed:
@@ -460,7 +550,7 @@ seed:
 ## Left over from root motion and IK (built 2026-10-05; checked 2026-10-10)
 
 The seeds of 2026-08-26 for root motion and inverse kinematics were built to their specs
-(`Specs/root-motion.md` P0-P3, `Specs/inverse-kinematics.md` P0-P4: the clip bake and strip, the
+(`Archive/root-motion-history.md` P0-P3, `Archive/inverse-kinematics-history.md` P0-P4: the clip bake and strip, the
 graph's blended deltas, the Entity / Character / Script modes, the editor's travel views; the
 two-bone and aim solvers, foot IK, the components, bone pickers and gizmos, the proofs in
 PaperKid, Sky Hopper and Snowline). What the seeds or the specs left open:
@@ -1143,8 +1233,8 @@ ThirdParty rebuild confirmation.
 and I10 are done):** I4 memory ballooning (the root cause fixed and instrumented; cache eviction
 and the partial header parse remain), I8 Linux exported-player colors (hardened: the swapchain
 format is logged and the tonemap encodes for a non-sRGB target, 1b552069; the user's retest is
-owed), I11 scene-pass MSAA (shipped; `Specs/msaa.md` leaves re-running the GTAO / SSR / TAA / FXAA
-probes with MSAA on).
+owed), I11 scene-pass MSAA (shipped, its probes rerun with the effect stack at 4x, MsaaProbeTests; what
+it left is under "Left over from the specs archived 2026-11-02").
 
 **Deferred-by-design (do NOT build without a user go-ahead):** GPU particle
 sim, post 4/5 (1-3 VERIFIED 2026-09-03 - unblocked, still needs the

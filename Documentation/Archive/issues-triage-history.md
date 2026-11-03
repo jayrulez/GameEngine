@@ -166,7 +166,7 @@ code-standard-cleanup-scale track, not a bug fix:
 - Each module phase: behavior-identical, both compilers, ASAN green; the
   tag report grows a row per converted system.
 
-## I6. Texture compression missing - SPECCED 2026-08-15, see Documentation/Specs/asset-variants.md
+## I6. Texture compression missing - SPECCED 2026-08-15, see Documentation/Archive/asset-variants-history.md
 
 > The sketch below is SUPERSEDED by the full spec (per-target variant axis +
 > BCn/ASTC encoders, both dependencies user-approved). Kept for history.
@@ -255,7 +255,7 @@ forward + depth-prepass + debug-draw pipelines, and a quality setting
 consumers all resolve-aware. The OTHER half of the same comparison (no
 mips) was the dominant term and is FIXED (texture cook v2 generates full
 chains; model imports default mips ON + trilinear); MSAA is the remaining
-polish. Belongs to the renderer track alongside the post-stack work. SPEC WRITTEN (2026-08-12): Documentation/Specs/msaa.md - decisions settled (per-view, 4x web ceiling, MSAA prepass + first-sample depth resolve for the 1x post consumers, single end-of-forward resolve, MSAA/TAA independent); ready for Opus.
+polish. Belongs to the renderer track alongside the post-stack work. SPEC WRITTEN (2026-08-12): Documentation/Archive/msaa-history.md - decisions settled (per-view, 4x web ceiling, MSAA prepass + first-sample depth resolve for the 1x post consumers, single end-of-forward resolve, MSAA/TAA independent); ready for Opus.
 
 ## WebGpuDevice::Destroy misses device-internal objects (small leak) - CLOSED 2026-08-25
 

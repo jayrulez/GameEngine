@@ -245,7 +245,7 @@ Modal entity-tree picker replaces the flat menu.
 Baseline: 44827741. Post-record Fable doc commits e835c561 (this record) +
 48fdb80d (UAT audit pass) are also reviewed-by-construction, so the NEXT
 review pass starts at 48fdb80d. Opus resumes from here (MSAA P1g first,
-then property animation per Documentation/Specs/property-animation.md).
+then property animation per Documentation/Archive/property-animation-history.md).
 
 ## Review pass 8 (2026-08-15, Fable): MSAA P1g/P2 + asset-variants P1+P2core + UAT fixes - PASS
 

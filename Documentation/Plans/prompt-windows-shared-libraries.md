@@ -18,9 +18,9 @@ Everything below landed on master from a Linux session on 2026-09-04 and is
 verified on Linux only (clang, gcc, ASAN, and the shared-library lane).
 Windows is the ONE open item. Read these first, in this order:
 
-1. `Documentation/Specs/shared-libraries.md` - the design, the identity and
+1. `Documentation/Archive/shared-libraries-history.md` - the design, the identity and
    rendezvous rules, phases P1-P5, the Traktor audit. P5 (Windows) is yours.
-2. `Documentation/Specs/game-native-code.md` - plugins in dev, the ship link,
+2. `Documentation/Archive/game-native-code-history.md` - plugins in dev, the ship link,
    hot reload, scene contributions, record preservation. N5-Windows is yours.
 3. `Documentation/Plans/week-2026-08-29.md`, the "MERGED" entry at the end -
    the summary of what is on master.

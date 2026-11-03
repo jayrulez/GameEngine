@@ -5,7 +5,7 @@
 > Track: [[editor-track]]
 
 The editor's long work runs on one `TaskPool` (`Code/Foundation/Core/Threading/TaskPool.cppm`, the task
-layer of `Documentation/Specs/task-layer.md`), owned by the `EditorContext` (`Context().Tasks()`) and
+layer of `Documentation/Archive/task-layer-history.md`), owned by the `EditorContext` (`Context().Tasks()`) and
 pumped once a frame by the application, which runs the completions and sends the tasks' log lines to the
 status bar. It is THE structural way editor code gets work off the UI thread. The context makes two lanes
 on it; the pool's shared lane runs the rest side by side.

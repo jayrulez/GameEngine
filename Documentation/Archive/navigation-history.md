@@ -39,7 +39,7 @@ reference.
   CollectNavigationGeometry (in-zone static meshes -> zone-local triangle soup) +
   BakeNavigationZone (collect + Recast bake + write the NavigationZoneAsset
   sidecar). Test both compilers: a scene ground mesh bakes to a loadable, pathable
-  navmesh. Fable ruled the P4b shape (Documentation/Specs/navigation-editor-ui.md,
+  navmesh. Fable ruled the P4b shape (Documentation/Archive/navigation-editor-ui-history.md,
   FABLE RULINGS): NO viewport tool - the Bake is a one-shot inspector action; debug
   draw is engine-side + settings-gated (physics precedent).
   - P4b-1/2 DONE (55a859d9): NavigationMesh::DebugTriangles (live dtNavMesh surface)

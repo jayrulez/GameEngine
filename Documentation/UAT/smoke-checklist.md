@@ -492,7 +492,7 @@ clamped to the target.
 - Note: the "UI: default font ... Roboto-Regular.ttf not loaded" warning is unrelated
   (game-UI subsystem font not packed for WebScene; WebScene draws no game-UI text).
 
-## 2026-08-15 - mobile-web smoke (precursor for Specs/asset-variants.md P3)
+## 2026-08-15 - mobile-web smoke (precursor for Archive/asset-variants-history.md P3)
 
 Mobile-web is now IN SCOPE. Today's web build uses uncompressed RGBA textures,
 which every WebGPU device accepts - so this smoke isolates input/surface/memory

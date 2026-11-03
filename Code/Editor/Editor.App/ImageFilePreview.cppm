@@ -3,7 +3,7 @@
 
 // Editor App - :image_file_preview partition
 //
-// The import window's preview of a picture file (Specs/import-window.md W2): the image pages'
+// The import window's preview of a picture file (Archive/import-window-history.md W2): the image pages'
 // ImagePreview over a bar of its own (fit, 1:1, the zoom, the channels, the pixel under the
 // pointer), with the facts the file's header gives: its size, its channels and depth as stored,
 // and whether its alpha is used. It decodes the file as a task on the editor's pool, saying it

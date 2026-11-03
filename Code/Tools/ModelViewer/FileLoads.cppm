@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // ModelViewer - `modelviewer:loads`: model files read off the main thread, and cooked there too when
-// given the open model's cache, on a task pool (Specs/task-layer.md): the loads' own, or one a window
+// given the open model's cache, on a task pool (Archive/task-layer-history.md): the loads' own, or one a window
 // shares between its loads so no two cooks run into one cache folder at once. Reading the file is most of the cost of opening a model (a large
 // FBX can take a tenth of a second or more, while the cook and bind after it take a few
 // milliseconds), so the window requests the read here and keeps drawing. The main thread takes each

@@ -242,7 +242,7 @@ churn across consumers - fold into P4's connection-token work).
 - NOTE: Button/CheckBox per-draw truncation still uncached - fold into the
   shared ShapedTextBlock (P4), which subsumes these per-control caches.
 
-**P2 - the box model** - SPEC LOCKED (Documentation/Specs/ui-box-model.md)
+**P2 - the box model** - SPEC LOCKED (Documentation/Archive/ui-box-model-history.md)
 + **CRISP CHROME FRAMEWORK-WIDE 2026-08-16** (user-spotted: baked icons were
 editor-only WIRING - ThemeIconSet in foundation.ui shares one bakeable
 BakedSVGDrawable per chrome glyph (+ tinted variants); all 4 themes acquire

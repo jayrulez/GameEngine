@@ -456,7 +456,7 @@ namespace engine::runtime
         {
             return;
         }
-        // The host's pause (the editor's toolbar; Specs/run-context.md, D6) holds the game still
+        // The host's pause (the editor's toolbar; Archive/run-context-history.md, D6) holds the game still
         // with its scene: no update for the Game class, and the run's clock does not count. A
         // game's own pause (time scale 0) is the game's business and still ticks it.
         if (State() == foundation::run::RunState::Paused)

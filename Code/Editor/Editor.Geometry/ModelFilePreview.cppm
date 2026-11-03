@@ -3,7 +3,7 @@
 
 // Editor::Geometry - :model_file_preview partition.
 //
-// The import window's preview of a model file (Specs/import-window.md W4): the model as the model
+// The import window's preview of a model file (Archive/import-window-history.md W4): the model as the model
 // viewer shows it, live in a PreviewViewport (orbit, zoom, Frame), with its clips (a picker, play
 // and pause) and its skeleton drawn over it on request; and the facts the file gives (meshes,
 // triangles, materials, textures, bones, clips). It opens through Editor.ModelPreview's OpenModel

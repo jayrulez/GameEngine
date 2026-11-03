@@ -23,7 +23,7 @@ executable needs at runtime that is not a project asset lives under it, at fixed
     Data/SampleProjects/<Project>          the sample games (projects, opened like any other)
     Data/Output/<Sample>                   per-sample cooked-output databases (written, not shipped)
 
-The folders say who reads them (Specs/data-layout.md): an editor distribution copies Engine,
+The folders say who reads them (Archive/data-layout-history.md): an editor distribution copies Engine,
 Editor (less its design mock), Branding and Templates whole; an exported game stages only its
 shader pack; Samples, Tests, SampleProjects and Output ship nowhere.
 

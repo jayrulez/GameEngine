@@ -14,4 +14,4 @@ Rust and wasm shapers, the generator scripts, the ragel inputs and the Unicode d
 
 Built with no FreeType, glib, ICU, Graphite or platform shaper: its built-in Unicode data and
 OpenType shaping. Used only behind the engine's own ITextShaper (Fonts.HarfBuzz); no HarfBuzz type
-or header crosses that interface (Specs/vg-and-gui-lab.md, F3).
+or header crosses that interface (Archive/vg-and-gui-lab-history.md, F3).

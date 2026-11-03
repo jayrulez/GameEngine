@@ -124,7 +124,7 @@ retired 2026-08-19).
 
 - **P3 - commands/orders layer** (script-facing: receive-RPC-into-script, spawn-a-networked-entity
   from script, ownership + orders, demo content): slices 1 to 3 (`Net.on`, `Net.spawn`, players and owners) built 2026-10-14, the demo slice is
-  progress for Masquerade (`Specs/masquerade.md`, P0). Plan: `Documentation/Plans/networking-commands.md`.
+  progress for Masquerade (`Archive/masquerade-history.md`, P0). Plan: `Documentation/Plans/networking-commands.md`.
 - Backlog (web WebSocket client, replication refinements, transport/deployment, matchmaking/
   services hooks): `Documentation/Backlog/networking-followups.md`.
 - **Beef port / unification with the legacy Sedulous.Net**: RULED 2026-09-09 - Raptor's stack is

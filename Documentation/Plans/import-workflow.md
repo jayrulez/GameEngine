@@ -1,6 +1,6 @@
 # Import workflow - the review-and-commit import dialog
 
-> 2026-11-01: continued by Specs/import-window.md (three panes, previews from a registry, settings
+> 2026-11-01: continued by Archive/import-window-history.md (three panes, previews from a registry, settings
 > an importer declares, reimport), agreed with the user over a mockup.
 
 > STATUS 2026-08-31: P1 SHIPPED (37b44451) for the MODEL importer -

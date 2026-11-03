@@ -4,7 +4,7 @@
 > Superseded by: Documentation/Systems/gui-port.md (the engine's GUI, Engine.GUI)
 > Track: [[game-ui-subsystem]] / [[game-ui-p1-progress]]
 
-NON-AUTHORITATIVE. Engine.UI and Engine.UI.Script were deleted (Specs/engine-ui-removal.md); the
+NON-AUTHORITATIVE. Engine.UI and Engine.UI.Script were deleted (Archive/engine-ui-removal-history.md); the
 games, the samples and the editor are on the engine's GUI. Kept for the history of the design.
 
 The game-facing UI runtime: `foundation.ui`'s retained-mode control framework driven as an engine
@@ -115,7 +115,7 @@ Play-in-editor works by construction (the same event stream through the viewport
 - **Images** - `<ImageView source="{guid}"/>` shows a texture asset: the subsystem is its context's
   `IResourceProvider` and binds the id through the application's resource manager, one image key per
   texture, registered on every VG renderer before it draws. A render texture a camera targets is a
-  texture too, so a HUD shows a live minimap or monitor (Specs/render-textures.md). Script:
+  texture too, so a HUD shows a live minimap or monitor (Archive/render-textures-history.md). Script:
   `ui::findImage(id).setSource(textureId)`, and `SceneRender.of(scene).setCameraTarget(camera,
   textureId)` on the render side. `corner-radius="8"` (or four values, top-left first) rounds the
   picture's corners.

@@ -10,4 +10,4 @@ own unity source (Source/SheenBidi.c with SB_CONFIG_UNITY) as C. Left out: the t
 generate the tables, and the build files (meson, make, CMake, pkg-config).
 
 Used only behind the engine's own bidi interface (Fonts.Bidi): no SheenBidi type or header crosses
-it (Specs/vg-and-gui-lab.md, F3).
+it (Archive/vg-and-gui-lab-history.md, F3).

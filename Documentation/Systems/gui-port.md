@@ -9,7 +9,7 @@ text, Core's reflection for scripts), designed concern by concern from a survey 
 Godot, browsers and others rather than ported from one. It began as an experimental lab
 (`Code/Experimental`, 2026-10) and moved into Foundation once the engine hosted it. It lives beside
 foundation.ui (the Sedulous-derived framework, deprecated in `Code/Deprecated/UI` with the UISandbox); the games, the samples and
-the editor are on it, and Engine.UI is gone (Specs/engine-ui-removal.md).
+the editor are on it, and Engine.UI is gone (Archive/engine-ui-removal-history.md).
 
 ## Where it is
 
@@ -32,8 +32,8 @@ the editor are on it, and Engine.UI is gone (Specs/engine-ui-removal.md).
 
 ## The design record
 
-The design and its rulings are in the specs, in order: `Specs/vg-and-gui-lab.md`,
-`Specs/gui-lab-evolution.md`, `Specs/gui-lab-evolution-2.md` and `Specs/gui-lab-evolution-3.md`
+The design and its rulings are in the specs, in order: `Archive/vg-and-gui-lab-history.md`,
+`Archive/gui-lab-evolution-history.md`, `Archive/gui-lab-evolution-2-history.md` and `Archive/gui-lab-evolution-3-history.md`
 (section E: the engine's GUI, the move out of Experimental and what follows). They name the code
 by its paths and modules at the time (`Code/Experimental`, `experimental.gui`). The early eepp
 analysis is in `Documentation/Archive/gui-port-design-history.md`.

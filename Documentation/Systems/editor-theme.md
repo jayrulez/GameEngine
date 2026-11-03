@@ -8,7 +8,7 @@ The editor's look is written in one place: its sheet, `Data/Editor/editor.css`, 
 the editor's sheet reads a token, never a literal, so changing a token changes everything that
 reads it. This page lists every token, the values it takes in the dark and light schemes, and how
 a user overrides any of them. The design behind it is
-[Specs/editor-gui.md](../Specs/editor-gui.md), section 3.1.
+[Archive/editor-gui-history.md](../Archive/editor-gui-history.md), section 3.1.
 
 A test (`Editor.App.Tests`, EditorThemeDocTests.cpp) fails on a token the sheets declare that this
 page does not name, so the two stay in step.

@@ -329,7 +329,7 @@ turning. Distances from the camera (fades, sorts, the shadow reach) measure from
 both projections. SSR and SSGI march parallel rays under orthographic: they read the projection's
 kind off the inverse projection they already take (`InverseIsOrthographic`, its w column zero)
 and interpolate a ray's depth itself rather than 1/w along the segment (`DepthKey`). Every
-effect runs for an orthographic view (`Specs/orthographic-views.md`).
+effect runs for an orthographic view (`Archive/orthographic-views-history.md`).
 
 What is convention-free and stayed as it was: everything that reconstructs position through an
 inverse projection (GTAO/SSAO/SSR/SSGI/decals via `InvProj`/`InvViewProj`), the soft-particle
@@ -477,7 +477,7 @@ Which entity is under a pixel (or inside a rect) of a view, answered by the GPU 
 ### 9.y Terrain vegetation (2026-09-21)
 
 Grass and props over a terrain are per-chunk INSTANCED SETS through the MeshRenderer's
-MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-vegetation.md`.
+MultiMesh path - no renderer of their own. Spec: `Documentation/Archive/terrain-vegetation-history.md`.
 
 - **Data.** `TerrainVegetationComponent` (Engine.Vegetation) on the terrain entity (or a child
   of it; the manager walks the ancestry for the `TerrainComponent`): TWO lists since
@@ -570,7 +570,7 @@ MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-ve
   pack carries the lattice): a world-space sway in `wind.hlsli`, `sin(time * Wind.Speed + hash(world
   XZ)) * Wind.Strength * mask^2` with `mask = saturate(localY / Wind.Height)` (roots at local y <= 0
   stay, tips move), applied to the current and the previous-frame position so motion vectors follow
-  it. Since 2026-10-29 (Specs/wind-for-every-shader.md) the three parameters are an EFFECT's, not
+  it. Since 2026-10-29 (Archive/wind-for-every-shader-history.md) the three parameters are an EFFECT's, not
   PBR's: `wind.hlsli` declares `effect Wind : WIND { float Strength = 0 [0, 2] (gate); float Speed
   = 1 [0, 20]; float Height = 1 [0.01, 100]; }`, which expands to `ConstantBuffer<WindEffect> Wind :
   register(b1, space2)`, binding 1 of the material's set, whatever the material's own layout. A

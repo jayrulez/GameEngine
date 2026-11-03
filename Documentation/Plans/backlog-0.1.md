@@ -236,7 +236,7 @@
   roughness 0.8, the specular colour, its texture and the shininess never read. Bistro's FBX binds
   its `*_Specular.dds` to Phong's SpecularColor slot, and its README says those maps pack occlusion
   (R), roughness (G) and metalness (B), so all of its maps are dropped. Wanted: the spec-gloss
-  style conversion for real specular maps. The FBX half is now `Specs/phong-material.md`: legacy
+  style conversion for real specular maps. The FBX half is now `Archive/phong-material-history.md`: legacy
   Phong and Lambert materials import as authored, onto a built-in Phong material that keeps their
   specular. The import option once wanted here, to read Phong's specular slot as packed ORM, is
   dropped (user, 2026-10-27: no importer case for one asset's convention); Bistro's materials are

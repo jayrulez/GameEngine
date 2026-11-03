@@ -319,7 +319,7 @@ shaders track's WGSL path)*
       (uniform CLI+editor export incl. the WEB target); i18n foundation layer SHIPPED
       (v2 ruling: foundation-only, no subsystem). Save-game still open
       (correction 2026-10-17: the i18n layer was never built; this sync counted its v2 spec as
-      shipped. The revised spec is Specs/i18n.md.)
+      shipped. The revised spec is Archive/i18n-history.md.)
 - [~] Gameplay sample — **PaperKid** (P1 playable in-editor) exercises input-actions +
       physics + audio + script-behaviors + prefabs + game-UI; networking is the one subsystem
       it does not touch (the net demo scripts remain that seed)

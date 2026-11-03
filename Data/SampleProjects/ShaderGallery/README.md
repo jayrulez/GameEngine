@@ -2,7 +2,7 @@
 
 The custom shaders sample: a hall of lesson shaders to fly through, each on its own plinth, each
 `.hlsl` a short commented lesson that builds on the one before. Surface shaders first (the kind to
-start with), then the low-level kind. The plan: `Documentation/Specs/shader-gallery.md`.
+start with), then the low-level kind. The plan: `Documentation/Archive/shader-gallery-history.md`.
 
 ![The Shader Gallery: the lesson list and the hall of plinths](../../../Documentation/Images/ShaderGallery-Hall.png)
 

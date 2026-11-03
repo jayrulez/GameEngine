@@ -65,7 +65,7 @@ export namespace foundation::runtime
         [[nodiscard]] virtual SubsystemManager& Subsystems() noexcept = 0;
         [[nodiscard]] virtual IShell* Shell() noexcept = 0;
         [[nodiscard]] virtual GraphicsDevice* Graphics() noexcept = 0;
-        // Long work off the frame (Specs/task-layer.md): resource decodes and whatever else must not
+        // Long work off the frame (Archive/task-layer-history.md): resource decodes and whatever else must not
         // hold the frame's workers. The host pumps it once a frame.
         [[nodiscard]] virtual core::TaskPool& Tasks() noexcept = 0;
 

@@ -3,7 +3,7 @@
 
 // Editor Core - :import_preview partition
 //
-// What the import window shows of a file before it is imported (Specs/import-window.md). A domain
+// What the import window shows of a file before it is imported (Archive/import-window-history.md). A domain
 // registers a preview factory for the asset types it imports, as it registers pages; the window
 // asks for the one nearest the type the file's importer lists it by, and shows its view with its
 // facts under it. A type with no preview shows its facts alone. A preview reads the source file
@@ -32,7 +32,7 @@ export namespace editor
         ~IImportPreviewService() = default;
     };
 
-    /// What a preview publishes when it can show one part of its file alone (Specs/import-window.md,
+    /// What a preview publishes when it can show one part of its file alone (Archive/import-window-history.md,
     /// a file's parts in the tree): the window asks for it when a part is selected in the tree, and
     /// for the whole file again when the file is.
     class IImportPartPreview : public IImportPreviewService

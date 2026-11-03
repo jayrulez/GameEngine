@@ -43,7 +43,7 @@ position through an inverse projection is convention-free. See renderer.md 8.1.
 
 ## The forward library
 
-The forward pass is built from includes a custom shader uses too (`Specs/custom-shaders.md`):
+The forward pass is built from includes a custom shader uses too (`Archive/custom-shaders-history.md`):
 
 - `view.hlsli`: the frame's View constants (set 0, b0), the one declaration of their layout.
   Mirrors the CPU view block.
@@ -66,7 +66,7 @@ The forward pass is built from includes a custom shader uses too (`Specs/custom-
 `forward.ps.hlsl` is these plus its material and its surface code; the split (2026-10-12) left
 its compiled WGSL the same but for names and one constant's placement.
 
-**Surface shaders** (`surface/`, `Specs/custom-shaders.md` phase 6). The cook assembles a
+**Surface shaders** (`surface/`, `Archive/custom-shaders-history.md` phase 6). The cook assembles a
 surface shader's three programs as `surface/surface.hlsli` (its API: `SurfaceInput`,
 `SurfaceOutput`, `VertexInput`, `Time()`), the author's text, `surface/glue.hlsli` (the calls
 into `Surface()` and `Vertex()`), and a pass template: `surface/forward.hlsli`,
@@ -109,7 +109,7 @@ validation ON and counts `rhi::vk::ValidationErrorCount()` around the render for
 ## Custom shaders (a project's own)
 
 A custom shader is a `ShaderAsset`: ONE `.hlsl` with a `properties { ... }` block declaring its
-material parameters, of one of two kinds (`Documentation/Specs/custom-shaders.md`):
+material parameters, of one of two kinds (`Documentation/Archive/custom-shaders-history.md`):
 
 - **Low-level**: both stages written out (entry points as asset fields, `VSMain` / `PSMain` by
   default) with a variant lattice per stage (`// variants(vertex): ...`,

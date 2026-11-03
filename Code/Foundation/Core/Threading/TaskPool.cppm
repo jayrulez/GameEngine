@@ -3,7 +3,7 @@
 
 // Core - :task_pool partition
 //
-// Long work off the frame, handed back on the main thread (Specs/task-layer.md). The JobSystem is
+// Long work off the frame, handed back on the main thread (Archive/task-layer-history.md). The JobSystem is
 // for the frame's fan-out; a cook, an import read, a decode or an export runs here instead, on
 // workers of the pool's own, so it never holds a worker the frame's ParallelFor needs.
 //

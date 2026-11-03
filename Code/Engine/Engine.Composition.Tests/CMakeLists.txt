@@ -1,4 +1,5 @@
-add_executable(Engine.Composition.Tests TestsMain.cpp CompositionTests.cpp SceneExportSupportTests.cpp)
+add_executable(Engine.Composition.Tests TestsMain.cpp CompositionTests.cpp SceneExportSupportTests.cpp
+    PluginServicesTests.cpp)
 target_link_libraries(Engine.Composition.Tests PRIVATE
     Engine::Composition Foundation::Content Foundation::VFS Foundation::Scene Foundation::Resource Foundation::Script.Facades
     Foundation::RHI Foundation::Shaders.System doctest::doctest)

@@ -23,6 +23,7 @@ import foundation.content;
 import foundation.scene;
 import foundation.resource;
 export import engine.domain;
+export import :plugin_services; // what a plugin's Engine part adds through its host
 
 using namespace foundation::core;
 

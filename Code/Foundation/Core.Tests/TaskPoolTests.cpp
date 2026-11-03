@@ -12,8 +12,10 @@ using namespace foundation::core;
 
 namespace
 {
+#if !PLATFORM_WEB
     // Spins (yielding) until `ready` holds or about two seconds pass; false on the timeout, so a
-    // broken pool fails a check instead of hanging the suite.
+    // broken pool fails a check instead of hanging the suite. Only the threaded cases use it, and
+    // web has no workers, so it is compiled where they are.
     template <typename Ready>
     bool Eventually(Ready ready)
     {
@@ -26,6 +28,7 @@ namespace
         }
         return true;
     }
+#endif
 }
 
 TEST_CASE("task pool: with no workers, tasks run in Pump, in order, and Wait runs the queue until its task ends")

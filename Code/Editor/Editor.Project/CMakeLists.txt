@@ -10,7 +10,8 @@ target_link_libraries(Editor.Project
            Pipeline::Cook Foundation::Resource Foundation::Policy
            Pipeline::Core Pipeline::Fonts Pipeline::Texture # the new project's starter font and sky
            Foundation::Shaders Foundation::Shaders.System # export cooks the dist's shader pack
-           Foundation::Shaders.Resource) # a custom shader's product (stripped of its HLSL in a dist)
+           Foundation::Shaders.Resource # a custom shader's product (stripped of its HLSL in a dist)
+           Engine::Composition) # the engine service a tool's plugin host offers its Engine parts
 
 # The player executable basename, from the build's single source of truth (root CMakeLists). The
 # export host-template stages "<base>[.exe]" and reads "<base>.runtime-libs" beside the running tool.

@@ -371,7 +371,9 @@ editor, the player and export still read `nativeModule`):
     the embedded app, which owns the process's plugin host and replaces it per project), and
     Cook, Export and Mcp over a subsystem manager of their own (`ToolPlugins`; Mcp at each
     `project_open`), each loading the parts its role takes; an Editor part is given the editor's
-    context. Tests: each tool's role loads exactly its parts; a project's plugins load with it in
+    context, and an Engine part the engine's service in every host, the tools included, so the
+    scene managers and domains it adds join a tool's scenes (the standalone MCP host's scene tools
+    know a plugin's components). Tests: each tool's role loads exactly its parts; a project's plugins load with it in
     the editor and unload as it closes; the app's host is replaced.
   - **X4b** (built 2026-11-04): the `Pipeline` contributions through `PipelinePluginServices`
     (builders, importers, creators into the host's registries, which gain keyed removal), recorded

@@ -279,7 +279,7 @@ TEST_CASE("plugins: in the player, the Engine part reflects the spin component a
     embedded.OnShutdown(host);
 }
 
-TEST_CASE("plugins: the cook loads the package's Engine and Pipeline parts, its builder cooking and nothing else arriving")
+TEST_CASE("plugins: the cook loads the package's Engine and Pipeline parts, its builder and scene manager arriving and leaving with it")
 {
     const StringView dir = u8"scratch_plugins_cook";
     MakeProject(dir, u8"Cook Notes");
@@ -291,9 +291,10 @@ TEST_CASE("plugins: the cook loads the package's Engine and Pipeline parts, its 
                                     pipeline::PipelineRegistries{&builders});
         CHECK(plugins.Host().IsLoaded(kNativeSample));
         CHECK(builders.Find(&nativesample::NoteAsset::StaticType()) != nullptr);
-        CHECK_FALSE(SpinContributed()); // a cook offers no engine service, so no scene manager
+        CHECK(SpinContributed()); // a tool offers the engine's service, so its scenes get the manager
     }
     CHECK(builders.Find(&nativesample::NoteAsset::StaticType()) == nullptr);
+    CHECK_FALSE(SpinContributed());
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
 }
@@ -353,10 +354,44 @@ TEST_CASE("plugins: through the standalone MCP host, an agent creates and cooks 
     CHECK(notes.value.Get(u8"notes").At(0).Get(u8"name").AsString() == String(u8"First"));
     CHECK(notes.value.Get(u8"notes").At(0).Get(u8"text").AsString() == String(u8"A note from the game's own code"));
 
-    // A project that does not enable it: the plugin's tool and creator leave with it.
+    // The scene tools know the Engine part's component: the schema has it, and a scene holding one
+    // validates without a warning.
+    const auto spinSchema = [&server]()
+    {
+        JsonValue args = JsonValue::MakeObject();
+        args.Set(u8"type", JsonValue::MakeString(u8"nativesample.Spin"));
+        return Call(server, u8"component_schema", Move(args));
+    };
+    const Called schema = spinSchema();
+    REQUIRE_FALSE(schema.error);
+    CHECK(schema.value.Get(u8"wireName").AsString() == String(u8"nativesample.Spin"));
+    const JsonValue version = schema.value.Get(u8"dataVersions").At(0);
+    const String sceneXml = Format(
+        u8"<root><u32 name=\"magic\">3586350318</u32><u32 name=\"version\">3</u32><string name=\"name\">Spin</string>"
+        u8"<array name=\"entities\" count=\"1\"><string name=\"id\">6d1c1a52-3a51-4f0e-9a1b-2a6c7d8e9f01</string>"
+        u8"<string name=\"name\">Spinner</string><u8 name=\"active\">1</u8>"
+        u8"<string name=\"parent\">00000000-0000-0000-0000-000000000000</string>"
+        u8"<object name=\"position\"><f32 name=\"x\">0</f32><f32 name=\"y\">0</f32><f32 name=\"z\">0</f32></object>"
+        u8"<object name=\"rotation\"><f32 name=\"x\">0</f32><f32 name=\"y\">0</f32><f32 name=\"z\">0</f32><f32 name=\"w\">1</f32></object>"
+        u8"<object name=\"scale\"><f32 name=\"x\">1</f32><f32 name=\"y\">1</f32><f32 name=\"z\">1</f32></object></array>"
+        u8"<array name=\"components\" count=\"1\"><object><string name=\"owner\">6d1c1a52-3a51-4f0e-9a1b-2a6c7d8e9f01</string>"
+        u8"<string name=\"type\">nativesample.Spin</string><object name=\"data\"><array name=\"dataVersions\" count=\"1\">"
+        u8"<u64 name=\"type\">{}</u64><u32 name=\"version\">{}</u32></array><f32 name=\"turnsPerSecond\">0.5</f32>"
+        u8"<object name=\"axis\"><f32 name=\"x\">0</f32><f32 name=\"y\">1</f32><f32 name=\"z\">0</f32></object></object></object></array>"
+        u8"<array name=\"systemSettings\" count=\"0\"/><u8 name=\"prefabMode\">4</u8><array name=\"prefabInstances\" count=\"0\"/></root>",
+        version.Get(u8"type").AsString().AsView(), static_cast<u32>(version.Get(u8"version").AsNumber()));
+    JsonValue validateArgs = JsonValue::MakeObject();
+    validateArgs.Set(u8"xml", JsonValue::MakeString(sceneXml));
+    const Called validated = Call(server, u8"scene_validate", Move(validateArgs));
+    REQUIRE_FALSE(validated.error);
+    CHECK(validated.value.Get(u8"valid").AsBool());
+    CHECK(validated.value.Get(u8"warnings").Count() == 0u);
+
+    // A project that does not enable it: the plugin's tool, creator and component leave with it.
     open(plain);
     CHECK_FALSE(server.HasTool(u8"nativesample_notes"));
     CHECK_FALSE(HasCreator(creators, nativesample::kNoteCreator));
+    CHECK(spinSchema().error);
 
     session.plugins = nullptr;
     owner.plugins.Reset();

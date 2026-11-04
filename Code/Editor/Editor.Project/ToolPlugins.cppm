@@ -7,8 +7,11 @@
 // application, so its plugin host runs over a subsystem manager of its own. Made once the
 // project is open, it loads the plugins the project enables, those the tool links and the
 // project's own packages from their development build (a shared tool loads them; a static one
-// refuses them), each the parts the tool's role loads, a Pipeline part adding to the tool's
-// pipeline registries, and unloads them when it goes, before the project it read them from.
+// refuses them), each the parts the tool's role loads, and unloads them when it goes, before the
+// project it read them from. An Engine part is offered the engine's service as in the player and the
+// editor, so the scene managers and domains it adds join this tool's scenes and composition (a
+// headless MCP host's scene tools then know a plugin's components); a Pipeline part adds to the
+// tool's pipeline registries.
 
 module;
 #include "Core/Prelude.h"
@@ -17,6 +20,7 @@ export module editor.project:tool_plugins;
 
 import foundation.core;
 import foundation.runtime;
+import engine.composition; // EnginePluginServices
 import engine.project;
 import pipeline.importer; // PipelinePluginServices
 import :project;
@@ -32,9 +36,10 @@ export namespace editor
         ToolPlugins(IAllocator& allocator, foundation::runtime::HostRole role, const EditorProject& project,
                     Span<const foundation::runtime::LinkedPlugin> linked, pipeline::PipelineRegistries registries = {},
                     const Function<void(foundation::runtime::PluginHost&)>& attach = {})
-            : m_subsystems(allocator), m_pipeline(allocator, registries),
+            : m_subsystems(allocator), m_engine(allocator), m_pipeline(allocator, registries),
               m_host(allocator, m_subsystems, role, engine::project::kEngineVersionString)
         {
+            (void)m_engine.Attach(m_host);
             (void)m_pipeline.Attach(m_host);
             if (attach)
             {
@@ -54,6 +59,7 @@ export namespace editor
 
     private:
         foundation::runtime::SubsystemManager m_subsystems;
+        engine::EnginePluginServices m_engine;       // what the Engine parts add, reversed as they unload
         pipeline::PipelinePluginServices m_pipeline; // what the Pipeline parts add, reversed as they unload
         foundation::runtime::PluginHost m_host;      // after what it runs over and records through, so it goes first
         foundation::runtime::PluginLoadReport m_report;

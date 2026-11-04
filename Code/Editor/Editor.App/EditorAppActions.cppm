@@ -139,8 +139,8 @@ export namespace editor::app
         const EditorContext* context = nullptr;
         Function<void()> settings;
         Function<void()> addNativeCode;
-        Function<void()> buildNativeModule;
-        Function<void()> reloadNativeModule;
+        Function<void()> buildPlugins;
+        Function<void()> reloadPlugins;
         Function<void()> exportPresets;
         Function<void()> reportResourceMemory;
     };
@@ -153,17 +153,19 @@ export namespace editor::app
                     Move(run.settings));
         detail::Add(actions,
                     detail::NeedsProject(context, detail::Declare(u8"project.addNativeCode", u8"Add Native Code...",
-                                                                  u8"Scaffold a native code module under Native/", u8"Project/Add Native Code...", 200)),
+                                                                  u8"Scaffold the game's native code, a plugin package under Plugins/",
+                                                                  u8"Project/Add Native Code...", 200)),
                     Move(run.addNativeCode));
         detail::Add(actions,
-                    detail::NeedsProject(context, detail::Declare(u8"project.buildNativeModule", u8"Build Native Module",
-                                                                  u8"Build the project's native module on the job service",
-                                                                  u8"Project/Build Native Module", 201)),
-                    Move(run.buildNativeModule));
+                    detail::NeedsProject(context, detail::Declare(u8"project.buildPlugins", u8"Build Project Plugins",
+                                                                  u8"Build the project's own plugin packages on the job service",
+                                                                  u8"Project/Build Project Plugins", 201)),
+                    Move(run.buildPlugins));
         detail::Add(actions,
-                    detail::NeedsProject(context, detail::Declare(u8"project.reloadNativeModule", u8"Reload Native Module",
-                                                                  u8"Reload the project's built native module", u8"Project/Reload Native Module", 202)),
-                    Move(run.reloadNativeModule));
+                    detail::NeedsProject(context, detail::Declare(u8"project.reloadPlugins", u8"Reload Project Plugins",
+                                                                  u8"Reload the project's plugins, its packages as last built",
+                                                                  u8"Project/Reload Project Plugins", 202)),
+                    Move(run.reloadPlugins));
         detail::Add(actions,
                     detail::NeedsProject(context, detail::Declare(u8"project.export", u8"Export...", u8"Open the export presets panel",
                                                                   u8"Project/Export...", 300)),

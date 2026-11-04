@@ -304,6 +304,9 @@ Traktor's module DLLs), AND a static-link build must remain possible (Traktor su
 Lumix's `STATIC_PLUGINS` vs `setStudioApp` DLL entry is the same dual). Design later (see §5
 deferred); the manifest reserves a `nativeModule` field, and §3.1's `RegisterEditor(EditorContext&)`
 entry-point convention is deliberately DLL-compatible (one C-linkage export resolving to it).
+Since built (2026-11-04): the game's native code is a plugin package under the project's
+`Plugins/<Game>/`, one entry of the manifest's plugins list; `nativeModule` is gone (project data
+version 11 migrates it). See `Documentation/Specs/plugins.md`.
 
 ### 3.10 Editor logging (✅ DECIDED 2026-07-11 - improved over Sedulous; lands EARLY, with phase 2)
 
@@ -399,7 +402,8 @@ validation - expected, not a stall to chase. Open follow-up: the XML parse is th
 UI-thread cost of a large source scene (parse on a worker, or a binary source form).
 
 **DEFERRED (tagged 2026-07-11, plan/discuss later):**
-- **Project native module**: optional per-project native DLL (game code + its editor plugins)
+- **Project native module** (built 2026-11-04 as the project's plugin packages, see §3.9):
+  optional per-project native DLL (game code + its editor plugins)
  loaded by the editor, with a static-link build option like Traktor. Touches: manifest field,
  module ABI/entry point (`RegisterEditor` C-linkage export), engine DLL-boundary story (currently
  all-static), hot-reload ambitions, play-in-editor with game subsystems. See §3.9 note.

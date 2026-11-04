@@ -115,37 +115,6 @@ export namespace editor
 
     namespace detail
     {
-        // The game's native target name from the manifest's dev-module path:
-        // "Native/libScratchGame.so" gives "ScratchGame" (.dll and names without the lib prefix
-        // too). Empty when the shape is not recognized; callers treat that as no native module.
-        [[nodiscard]] inline foundation::core::String
-        NativeTargetFromModulePath(foundation::core::StringView nativeModule)
-        {
-            namespace core = foundation::core;
-            core::StringView name = nativeModule;
-            for (core::usize i = name.Size(); i > 0; --i)
-            {
-                if (name.Data()[i - 1] == '/' || name.Data()[i - 1] == '\\')
-                {
-                    name = core::StringView(name.Data() + i, name.Size() - i);
-                    break;
-                }
-            }
-            if (name.EndsWith(u8".so"))
-            {
-                name = core::StringView(name.Data(), name.Size() - 3);
-            }
-            else if (name.EndsWith(u8".dll"))
-            {
-                name = core::StringView(name.Data(), name.Size() - 4);
-            }
-            if (name.StartsWith(u8"lib"))
-            {
-                name = core::StringView(name.Data() + 3, name.Size() - 3);
-            }
-            return core::String(name);
-        }
-
         // The ship build's Bin suffix, "-Ship-<sanitized project name>". It is per project so two
         // games' ship outputs never collide in the checkout's Bin, as the -Shared and -ASAN
         // suffixes keep their builds apart.
@@ -644,12 +613,13 @@ export namespace editor
                                // counts); pruned=false for an export that packs everything
     };
 
-    /// Builds the project's native module for the development loop: a persistent per-project
-    /// shared-engine build (<project>/.cache/native-dev) over the engine checkout, building only
-    /// the game target, whose .so lands at the manifest's nativeModule path (the Native/CMakeLists
-    /// output-directory rule). Pair it with the editor's Reload Native Module action for the full
-    /// in-editor loop. Blocking; run it off the UI thread.
-    [[nodiscard]] Status BuildDevNativeModule(EditorProject& project);
+    /// Builds the project's own packages for development: a persistent per-project shared-engine
+    /// build (<project>/.cache/plugins-dev) over the engine checkout, building every part of them as
+    /// a shared library and listing each in its plugin-libraries.txt, where the editor, a player and
+    /// the tools find them. Pair it with the editor's Reload Project Plugins action for the full
+    /// in-editor loop. NotFound when the project has no package of its own. Blocking; run it off the
+    /// UI thread.
+    [[nodiscard]] Status BuildProjectPlugins(EditorProject& project);
 
     /// Writes a preset's own render resolution, window or orientation over what the project's
     /// dist manifest (player.xml in `outDir`) says, so the platform's values ship. Does nothing

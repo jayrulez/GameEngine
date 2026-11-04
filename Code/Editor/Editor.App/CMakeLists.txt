@@ -13,7 +13,7 @@ target_link_libraries(Editor.App
         Foundation::Profiler Foundation::Profiler.Capture Foundation::Profiler.GUI
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
         Foundation::GUI.Testing # the input tools find their targets the way the GUI's tests do
-        Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
+        Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the scenes carried across a plugin reload
         Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::GUI # the game GUI's defaults, as the runtime sets them
         Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
         Foundation::Http.Client Foundation::Net.Tls Foundation::Net.Tls.MbedTLS Foundation::Zip Foundation::Json # the Samples tab's downloads
@@ -77,7 +77,6 @@ target_sources(Editor.App
             ImportDialog.cppm
             AssetsView.cppm
             ResourceRefEditor.cppm
-            EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm
             Layout.cppm

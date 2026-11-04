@@ -52,7 +52,6 @@ export import :asset_operations;
 export import :asset_import;
 export import :import_dialog;
 export import :assets_view;
-export import :native_module;
 export import :export_service;
 export import :asset_creation;
 export import :layout;

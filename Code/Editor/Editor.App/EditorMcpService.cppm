@@ -31,6 +31,7 @@ import pipeline.core;
 import pipeline.importer;
 import editor.core;
 import editor.mcp;
+import foundation.runtime; // PluginHost (the project's plugins the session reports)
 import :mcp_host;
 import :mcp_operations;
 import :mcp_page_tools;
@@ -218,6 +219,9 @@ export namespace editor::app
             m_services.context->SetStatus(Format(u8"MCP host on 127.0.0.1:{}", m_host->BoundPort()));
             return true;
         }
+
+        /// The project's plugin host, which the session's plugin tools report and edit (null: none).
+        void SetPlugins(foundation::runtime::PluginHost* plugins) noexcept { m_session.plugins = plugins; }
 
         /// Stops the host: a waiting agent sees its connection close.
         void Stop()

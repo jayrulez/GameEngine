@@ -55,7 +55,6 @@ import :assets_view;
 import :asset_operations;
 import :asset_import;
 import :import_dialog;
-import :native_module;
 import :export_service;
 import :asset_creation;
 import :session;
@@ -208,7 +207,7 @@ export namespace editor::app
         void StartEmbeddedRuntime(runtime::IApplicationHost& host);
         void RegisterActions();
         void AddNativeCode();
-        void BuildNativeModule();
+        void BuildProjectPlugins();
         void ShowAbout();
         void OpenDock();
         void OpenPages();
@@ -296,7 +295,6 @@ export namespace editor::app
         UniquePtr<AssetImport> m_assetImport;    // files into the project (a drop, Import...)
         UniquePtr<ImportWindow> m_importWindow;  // the import's review, made the first time
         u64 m_logSequence = 0;                   // the last log entry the Console took
-        EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;
         // The MCP tools the project's plugins add through their Tooling parts: attached to each

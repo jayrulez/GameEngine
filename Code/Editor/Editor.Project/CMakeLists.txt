@@ -17,9 +17,9 @@ target_link_libraries(Editor.Project
 target_compile_definitions(Editor.Project PRIVATE
     BUILTIN_PLAYER_BASENAME=u8"${BUILTIN_PLAYER_BASENAME}")
 
-# Native shipping link: the exporter re-invokes this cmake over this checkout to build
-# Engine.GamePlayer with the project's native module statically linked. These paths are baked
-# in, so a relocated editor reports the problem clearly instead of guessing.
+# A project's own packages: the exporter re-invokes this cmake over this checkout to build
+# Engine.GamePlayer with them statically linked, and the editor to build them for development. These
+# paths are baked in, so a relocated editor reports the problem clearly instead of guessing.
 target_compile_definitions(Editor.Project PRIVATE
     BUILDSYSTEM_CMAKE_PATH="${CMAKE_COMMAND}"
     BUILDSYSTEM_ENGINE_ROOT="${CMAKE_SOURCE_DIR}"

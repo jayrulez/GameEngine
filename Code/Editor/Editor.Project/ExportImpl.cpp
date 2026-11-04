@@ -872,8 +872,21 @@ namespace editor
         }
 #endif // PLATFORM_WINDOWS (both callers are Windows-only; unused elsewhere it fails -Werror)
 
-        // Builds Engine.GamePlayer for a native project: re-invokes cmake over the engine checkout
-        // with the game's native directory wired in (ENGINE_GAME_NATIVE_DIR and _TARGET), a
+        // The project's package folders as ENGINE_PROJECT_PLUGINS takes them, ;-separated (empty:
+        // none).
+        [[nodiscard]] String ProjectPackageList(const EditorProject& project)
+        {
+            String list;
+            for (const String& dir : ProjectPackageDirs(project))
+            {
+                list += list.IsEmpty() ? u8"" : u8";";
+                list += dir.AsView();
+            }
+            return list;
+        }
+
+        // Builds Engine.GamePlayer for a project with packages of its own: re-invokes cmake over the
+        // engine checkout with the project's packages added (ENGINE_PROJECT_PLUGINS), a
         // persistent per-project build directory under the project's .cache (for incremental
         // relinks), and a per-project Bin suffix so ship outputs never collide with development
         // builds. Returns the built player's path. `web` builds the wasm ship player by the same
@@ -934,22 +947,12 @@ namespace editor
                           engineRoot);
                 return Status{ErrorCode::NotFound};
             }
-            const String nativeDir = PathJoin(project.Directory(), u8"Native");
-            if (!DirectoryExists(nativeDir.AsView()))
+            const String packages = ProjectPackageList(project);
+            if (packages.IsEmpty())
             {
-                LOG_ERROR(u8"Export",
-                          u8"project declares a native module but '{}' does not exist "
-                          u8"(the native source convention is <project>/Native)",
-                          nativeDir);
+                LOG_ERROR(u8"Export", u8"the project enables no package of its own with a Plugin.xml "
+                                      u8"(each under Plugins/<Name>)");
                 return Status{ErrorCode::NotFound};
-            }
-            const String target =
-                detail::NativeTargetFromModulePath(project.Settings().nativeModule.AsView());
-            if (target.IsEmpty())
-            {
-                LOG_ERROR(u8"Export", u8"cannot derive the native target from nativeModule '{}'",
-                          project.Settings().nativeModule);
-                return Status{ErrorCode::InvalidArgument};
             }
             const String suffix = detail::ShipOutputSuffix(project.Settings().name.AsView());
             const String buildType = config.IsEmpty() ? String(u8"Release") : String(config);
@@ -969,8 +972,7 @@ namespace editor
                 Format(u8"-DCMAKE_CXX_COMPILER={}",
                        StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CXX_COMPILER)));
             const String defBuildType = Format(u8"-DCMAKE_BUILD_TYPE={}", buildType);
-            const String defGameDir = Format(u8"-DENGINE_GAME_NATIVE_DIR={}", nativeDir);
-            const String defGameTarget = Format(u8"-DENGINE_GAME_NATIVE_TARGET={}", target);
+            const String defPackages = Format(u8"-DENGINE_PROJECT_PLUGINS={}", packages);
             const String defSuffix = Format(u8"-DBUILDSYSTEM_OUTPUT_SUFFIX={}", suffix);
             // Web: the toolchain file selects the compiler (never pin clang++ under it).
             const StringView compilerOrToolchain =
@@ -979,10 +981,9 @@ namespace editor
                                           u8"-B",       shipDir.AsView(),
                                           u8"-G",       u8"Ninja",
                                           compilerOrToolchain,   defBuildType.AsView(),
-                                          defGameDir.AsView(),   defGameTarget.AsView(),
-                                          defSuffix.AsView()};
+                                          defPackages.AsView(),  defSuffix.AsView()};
             const ProcessResult configured =
-                RunProcess(cmakePath, Span<const StringView>(cfgArgs, 11));
+                RunProcess(cmakePath, Span<const StringView>(cfgArgs, 10));
             if (!configured.Ok())
             {
                 LOG_ERROR(u8"Export", u8"native ship configure failed ({}):\n{}",
@@ -1040,19 +1041,20 @@ namespace editor
         }
     }
 
-    Status BuildDevNativeModule(EditorProject& project)
+    Status BuildProjectPlugins(EditorProject& project)
     {
         const StringView engineRoot =
             StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_ENGINE_ROOT));
         const StringView cmakePath =
             StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CMAKE_PATH));
-        if (project.Settings().nativeModule.IsEmpty())
+        const String packages = ProjectPackageList(project);
+        if (packages.IsEmpty())
         {
             return Status{ErrorCode::NotFound};
         }
         if (!DirectoryExists(PathJoin(engineRoot, u8"Code").AsView()))
         {
-            LOG_ERROR(u8"Export", u8"native dev build needs the engine checkout at '{}'",
+            LOG_ERROR(u8"Export", u8"the project plugins' build needs the engine checkout at '{}'",
                       engineRoot);
             return Status{ErrorCode::NotFound};
         }
@@ -1062,32 +1064,22 @@ namespace editor
         if (ShipCompilerIsMsvcCl() && !GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
         {
             LOG_ERROR(u8"Export",
-                      u8"native dev build with MSVC needs the Visual Studio build environment: "
+                      u8"the project plugins' build with MSVC needs the Visual Studio build environment: "
                       u8"VCToolsInstallDir is not set - launch the editor/CLI from a "
                       u8"Developer Command Prompt (or a shell that has run vcvars64.bat)");
             return Status{ErrorCode::NotFound};
         }
 #endif
-        const String nativeDir = PathJoin(project.Directory(), u8"Native");
-        const String target =
-            detail::NativeTargetFromModulePath(project.Settings().nativeModule.AsView());
-        if (target.IsEmpty() || !DirectoryExists(nativeDir.AsView()))
-        {
-            return Status{ErrorCode::InvalidArgument};
-        }
         const String suffix =
             Format(u8"-Dev-{}", detail::ShipOutputSuffix(project.Settings().name.AsView())
                                     .AsView()
                                     .Data() + 6); // reuse the sanitizer, swap the prefix
-        const String devDir = PathJoin(
-            project.Directory(),
-            Format(u8"{}/native-dev", engine::project::kProjectCacheDir).AsView());
+        const String devDir = PathJoin(project.Directory(), engine::project::kProjectPluginsBuildDir);
 
         const String defCompiler =
             Format(u8"-DCMAKE_CXX_COMPILER={}",
                    StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CXX_COMPILER)));
-        const String defGameDir = Format(u8"-DENGINE_GAME_NATIVE_DIR={}", nativeDir);
-        const String defGameTarget = Format(u8"-DENGINE_GAME_NATIVE_TARGET={}", target);
+        const String defPackages = Format(u8"-DENGINE_PROJECT_PLUGINS={}", packages);
         const String defSuffix = Format(u8"-DBUILDSYSTEM_OUTPUT_SUFFIX={}", suffix);
         const StringView cfgArgs[] = {u8"-S",
                                       engineRoot,
@@ -1098,30 +1090,28 @@ namespace editor
                                       defCompiler.AsView(),
                                       u8"-DCMAKE_BUILD_TYPE=Debug",
                                       u8"-DENGINE_SHARED_LIBS=ON",
-                                      defGameDir.AsView(),
-                                      defGameTarget.AsView(),
+                                      defPackages.AsView(),
                                       defSuffix.AsView()};
         const ProcessResult configured =
-            RunProcess(cmakePath, Span<const StringView>(cfgArgs, 12));
+            RunProcess(cmakePath, Span<const StringView>(cfgArgs, 11));
         if (!configured.Ok())
         {
-            LOG_ERROR(u8"Export", u8"native dev configure failed ({}):\n{}",
+            LOG_ERROR(u8"Export", u8"the project plugins' configure failed ({}):\n{}",
                       configured.exitCode, configured.output);
             return Status{ErrorCode::Internal};
         }
         const StringView buildArgs[] = {u8"--build", devDir.AsView(), u8"--target",
-                                        target.AsView(), u8"-j", u8"4"};
+                                        u8"ProjectPlugins", u8"-j", u8"4"};
         const ProcessResult built = RunProcess(cmakePath, Span<const StringView>(buildArgs, 6));
         if (!built.Ok())
         {
-            LOG_ERROR(u8"Export", u8"native dev build failed ({}) - tail:\n{}",
+            LOG_ERROR(u8"Export", u8"the project plugins' build failed ({}) - tail:\n{}",
                       built.exitCode, built.output);
             return Status{ErrorCode::Internal};
         }
-        // Success means the .so is at the manifest path (the Native/CMakeLists output-directory rule).
-        const String modulePath =
-            PathJoin(project.Directory(), project.Settings().nativeModule.AsView());
-        return FileExists(modulePath.AsView()) ? Status{} : Status{ErrorCode::NotFound};
+        // The configure lists every part's library (util_add_project_plugins).
+        const String listed = PathJoin(devDir.AsView(), engine::project::kPluginLibrariesFile);
+        return FileExists(listed.AsView()) ? Status{} : Status{ErrorCode::NotFound};
     }
 
     Status ApplyPresetDisplay(StringView outDir, const ExportPreset& preset)
@@ -1311,7 +1301,7 @@ namespace editor
         // built with the game's native module statically linked (for Web presets too, as the wasm
         // build). Ship players ignore the manifest's dlopen module, since the static plugin takes
         // precedence.
-        const bool nativeShip = !project.Settings().nativeModule.IsEmpty();
+        const bool nativeShip = !ProjectPackageDirs(project).IsEmpty();
         const bool nativeWeb = nativeShip && (preset.platform.AsView().StartsWith(u8"Web") ||
                                               preset.platform.AsView().StartsWith(u8"Wasm"));
         String shipPlayerPath;

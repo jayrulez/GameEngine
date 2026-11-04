@@ -213,7 +213,7 @@ export namespace editor::mcp
             u8"Details about the currently-open project: name, directory, sources root, and its "
             u8"`settings`, what the editor's Project Settings dialog edits - the default scene, "
             u8"startup script, default input map, bus layout, UI theme, loading screen and UI font "
-            u8"(each {guid, path}, or null when unset), the native module and the MSAA samples - "
+            u8"(each {guid, path}, or null when unset) and the MSAA samples - "
             u8"and `settingCategories`, the dialog's tabs in order, each with its settings' "
             u8"names. project_settings_set changes them.",
             SchemaBuilder().Build(),

@@ -16,6 +16,22 @@ import foundation.runtime;
 using namespace foundation::core;
 using namespace foundation::runtime;
 
+namespace
+{
+    // Loads `ids` as a project's entries naming no platforms and no settings.
+    PluginLoadReport LoadIds(PluginHost& host, Span<const StringView> ids)
+    {
+        Array<EnabledPlugin> entries;
+        for (StringView id : ids)
+        {
+            EnabledPlugin entry;
+            entry.id = String(id);
+            entries.PushBack(Move(entry));
+        }
+        return host.Load(Span<const EnabledPlugin>(entries.Data(), entries.Size()));
+    }
+}
+
 #ifndef PLUGIN_ROLES_FILE
 #error "Runtime.Tests must define PLUGIN_ROLES_FILE (see Runtime.Tests/CMakeLists.txt)"
 #endif
@@ -73,7 +89,7 @@ TEST_CASE("plugin registry: the host reads the embedded manifests and loads the 
         CHECK(ProbeEngineLoads() == 0); // linked, not enabled: nothing ran
 
         const StringView enabled[] = {u8"probe", u8"probe_base"};
-        const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 2));
+        const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 2));
         CHECK(report.refused.IsEmpty());
         REQUIRE(report.loaded.Size() == 2u);
         CHECK(report.loaded[0] == String(u8"probe_base"));

@@ -14,5 +14,6 @@ target_sources(Runtime
             Plugin.cppm
             PluginLoader.cppm
             PluginManifest.cppm
+            EnabledPlugin.cppm
             PluginPart.cppm
             PluginHost.cppm)

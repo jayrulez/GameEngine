@@ -21,6 +21,22 @@ namespace resource = foundation::resource;
 
 namespace
 {
+    // Loads `ids` as a project's entries naming no platforms and no settings.
+    PluginLoadReport LoadIds(PluginHost& host, Span<const StringView> ids)
+    {
+        Array<EnabledPlugin> entries;
+        for (StringView id : ids)
+        {
+            EnabledPlugin entry;
+            entry.id = String(id);
+            entries.PushBack(Move(entry));
+        }
+        return host.Load(Span<const EnabledPlugin>(entries.Data(), entries.Size()));
+    }
+}
+
+namespace
+{
     int g_domainTypes = 0;
     void RegisterProbeTypes() { ++g_domainTypes; }
     const resource::ResourceModule kProbeResources{u8"services_probe", &RegisterProbeTypes, nullptr, 0};
@@ -61,6 +77,7 @@ namespace
         manifest.version = String(u8"0.1.0");
         manifest.engineVersion = String(u8"0.1");
         manifest.parts.PushBack(PluginManifestPart{String(u8"Engine")});
+        manifest.platforms.PushBack(PluginPlatform{String(GetHostPlatformName())});
         MemoryStream buffer;
         REQUIRE(WritePluginManifest(manifest, buffer).IsOk());
         Array<byte> bytes;
@@ -100,7 +117,7 @@ TEST_CASE("engine plugin services: a part's domain and scene manager arrive, and
         REQUIRE(services.Attach(host));
         REQUIRE(host.AddLinked(Span<const LinkedPlugin>(linked, 1)).IsOk());
         const StringView enabled[] = {kProbeId};
-        REQUIRE(host.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+        REQUIRE(LoadIds(host, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
 
         CHECK(HasModule(u8"services_probe"));
         CHECK(g_domainTypes == 1);

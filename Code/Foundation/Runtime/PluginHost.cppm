@@ -5,9 +5,9 @@
 //
 // PluginHost owns the enabled plugins of one process. It knows
 // the plugins it could load (those linked into the binary, from the generated registry, and
-// packages built as shared libraries for development), and given the ids a project enables it:
+// packages built as shared libraries for development), and given the entries a project enables it:
 //
-//   1. resolves each id, the linked copy first;
+//   1. resolves each id, the linked copy first, and keeps those enabled on the host's platform;
 //   2. checks each manifest, the dependencies (enabled, loadable, recent enough) and the
 //      `provides` slots (one provider each), refusing with a message, never crashing;
 //   3. loads the parts the host's role takes, in dependency order, through the PluginLoader's
@@ -25,6 +25,7 @@ import :subsystem_manager;
 import :plugin_manifest;
 import :plugin_part;
 import :plugin_loader;
+import :enabled_plugin;
 
 namespace core = foundation::core;
 
@@ -43,11 +44,13 @@ export namespace foundation::runtime
         core::String reason;
     };
 
-    // What one Load did: the plugins loaded, in load order, and the ones refused, with why.
+    // What one Load did: the plugins loaded, in load order, the ones refused, with why, and the
+    // ones not enabled on this platform, which are absent rather than refused.
     struct PluginLoadReport
     {
         core::Array<core::String> loaded;
         core::Array<PluginRefusal> refused;
+        core::Array<core::String> notEnabled;
 
         [[nodiscard]] const PluginRefusal* FindRefusal(core::StringView id) const noexcept
         {
@@ -65,11 +68,13 @@ export namespace foundation::runtime
     class PluginHost
     {
     public:
+        // `platform` is the tag the project's entries and the manifests name platforms by; a host
+        // loads for the platform it runs on.
         PluginHost(core::IAllocator& allocator, SubsystemManager& subsystems, HostRole role,
-                   core::StringView engineVersion)
+                   core::StringView engineVersion, core::StringView platform = core::GetHostPlatformName())
             : m_allocator(&allocator), m_subsystems(&subsystems), m_role(role),
-              m_engineVersion(engineVersion, allocator), m_loader(subsystems), m_services(allocator),
-              m_candidates(allocator), m_contexts(allocator), m_loaded(allocator)
+              m_engineVersion(engineVersion, allocator), m_platform(platform, allocator), m_loader(subsystems),
+              m_services(allocator), m_candidates(allocator), m_contexts(allocator), m_loaded(allocator)
         {
         }
 
@@ -79,6 +84,7 @@ export namespace foundation::runtime
         PluginHost& operator=(const PluginHost&) = delete;
 
         [[nodiscard]] HostRole Role() const noexcept { return m_role; }
+        [[nodiscard]] core::StringView Platform() const noexcept { return m_platform.AsView(); }
 
         // The loader the parts load through, for adding recorders before Load.
         [[nodiscard]] PluginLoader& Loader() noexcept { return m_loader; }
@@ -156,6 +162,16 @@ export namespace foundation::runtime
         // Whether a plugin of this id is known (linked or added as a package).
         [[nodiscard]] bool Knows(core::StringView id) const noexcept { return Find(id) != nullptr; }
 
+        // The manifest of a known plugin, or null.
+        [[nodiscard]] const PluginManifest* Manifest(core::StringView id) const noexcept
+        {
+            const Candidate* candidate = Find(id);
+            return candidate != nullptr ? candidate->manifest.Get() : nullptr;
+        }
+
+        // What the last Load did (empty before one, and after Unload).
+        [[nodiscard]] const PluginLoadReport& Report() const noexcept { return m_report; }
+
         [[nodiscard]] bool IsLoaded(core::StringView id) const noexcept
         {
             for (const core::String& loaded : m_loaded)
@@ -168,12 +184,29 @@ export namespace foundation::runtime
             return false;
         }
 
-        // Loads the plugins `enabled` names (ids, in the project's order). Call once; Unload first
-        // to load another set.
-        PluginLoadReport Load(core::Span<const core::StringView> enabled)
+        // The settings a loaded plugin's parts read (PluginContext::Settings), or null when it is not
+        // loaded or asked for none. An editor edits them here and writes them into the project's entry.
+        [[nodiscard]] core::ISerializable* Settings(core::StringView id) const noexcept
+        {
+            const PluginContext* context = FindContext(id);
+            return context != nullptr ? context->SettingsObject() : nullptr;
+        }
+
+        // False when a loaded plugin's settings did not read from the project's entry, so its
+        // settings object holds the defaults and must not be written over the entry.
+        [[nodiscard]] bool SettingsRead(core::StringView id) const noexcept
+        {
+            const PluginContext* context = FindContext(id);
+            return context == nullptr || context->SettingsRead();
+        }
+
+        // Loads the plugins the project's entries enable on this host's platform, in the project's
+        // order. Call once; Unload first to load another set.
+        PluginLoadReport Load(core::Span<const EnabledPlugin> enabled)
         {
             PluginLoadReport report;
             core::Array<const Candidate*> accepted(*m_allocator);
+            core::Array<const EnabledPlugin*> acceptedEntries(*m_allocator); // beside accepted
             const auto refuse = [&report, this](core::StringView id, core::String reason)
             {
                 if (report.FindRefusal(id) == nullptr)
@@ -193,10 +226,11 @@ export namespace foundation::runtime
                 return nullptr;
             };
 
-            // 1. Resolve and check each manifest; then the slots, first come first served.
-            for (core::StringView id : enabled)
+            // 1. Resolve and check each manifest and the platform; then the slots, first come first served.
+            for (const EnabledPlugin& entry : enabled)
             {
-                if (isAccepted(id) != nullptr || report.FindRefusal(id) != nullptr)
+                const core::StringView id = entry.id.AsView();
+                if (isAccepted(id) != nullptr || report.FindRefusal(id) != nullptr || Contains(report.notEnabled, id))
                 {
                     continue; // listed twice
                 }
@@ -204,6 +238,18 @@ export namespace foundation::runtime
                 if (candidate == nullptr)
                 {
                     refuse(id, core::Format(u8"plugin '{}' is not in this build", id));
+                    continue;
+                }
+                const PluginEnablement enablement = EnablementOn(entry, *candidate->manifest, m_platform.AsView());
+                if (enablement == PluginEnablement::NotEnabled)
+                {
+                    report.notEnabled.PushBack(core::String(id, *m_allocator));
+                    continue;
+                }
+                if (enablement == PluginEnablement::Unsupported)
+                {
+                    refuse(id, core::Format(u8"plugin '{}' is enabled on {}, which it does not support", id,
+                                            m_platform));
                     continue;
                 }
                 core::String whyNot;
@@ -239,6 +285,7 @@ export namespace foundation::runtime
                     continue;
                 }
                 accepted.PushBack(candidate);
+                acceptedEntries.PushBack(&entry);
             }
 
             // 2. Dependencies, to a fixed point: refusing one plugin may strand its dependents.
@@ -253,6 +300,7 @@ export namespace foundation::runtime
                     {
                         refuse(manifest.id.AsView(), core::Move(why));
                         accepted.RemoveAt(i);
+                        acceptedEntries.RemoveAt(i);
                         changed = true;
                         break;
                     }
@@ -293,7 +341,12 @@ export namespace foundation::runtime
                                                               manifest.id, failed->id));
                     continue;
                 }
-                core::String why = LoadParts(*candidate);
+                const EnabledPlugin* entry = nullptr;
+                for (core::usize i = 0; i < accepted.Size(); ++i)
+                {
+                    entry = accepted[i] == candidate ? acceptedEntries[i] : entry;
+                }
+                core::String why = LoadParts(*candidate, *entry);
                 if (!why.IsEmpty())
                 {
                     refuse(manifest.id.AsView(), core::Move(why));
@@ -302,6 +355,7 @@ export namespace foundation::runtime
                 m_loaded.PushBack(core::String(manifest.id.AsView(), *m_allocator));
                 report.loaded.PushBack(core::String(manifest.id.AsView(), *m_allocator));
             }
+            m_report = report;
             return report;
         }
 
@@ -311,6 +365,7 @@ export namespace foundation::runtime
             m_loader.UnloadAll();
             m_contexts.Clear();
             m_loaded.Clear();
+            m_report = PluginLoadReport{};
         }
 
     private:
@@ -335,6 +390,18 @@ export namespace foundation::runtime
                 }
             }
             m_candidates.PushBack(core::Move(candidate));
+        }
+
+        [[nodiscard]] const PluginContext* FindContext(core::StringView id) const noexcept
+        {
+            for (const core::UniquePtr<PluginContext>& context : m_contexts)
+            {
+                if (context->PluginId() == id)
+                {
+                    return context.Get();
+                }
+            }
+            return nullptr;
         }
 
         [[nodiscard]] const Candidate* Find(core::StringView id) const noexcept
@@ -472,12 +539,13 @@ export namespace foundation::runtime
         }
 
         // Loads the candidate's parts for this role in kind order; empty on success.
-        [[nodiscard]] core::String LoadParts(const Candidate& candidate)
+        [[nodiscard]] core::String LoadParts(const Candidate& candidate, const EnabledPlugin& entry)
         {
             const PluginManifest& manifest = *candidate.manifest;
             m_contexts.PushBack(core::MakeUnique<PluginContext>(
                 *m_allocator, m_role, *m_subsystems, manifest.id.AsView(),
-                core::Span<const PluginService>(m_services.Data(), m_services.Size()), *m_allocator));
+                core::Span<const PluginService>(m_services.Data(), m_services.Size()),
+                core::Span<const core::u8>(entry.settings.Data(), entry.settings.Size()), *m_allocator));
             PluginContext& context = *m_contexts.Back();
             // Every linked entry is checked before any part loads, so a plugin refused here leaves
             // nothing behind. (A shared library can only be checked by loading it.)
@@ -522,10 +590,12 @@ export namespace foundation::runtime
         SubsystemManager* m_subsystems;
         HostRole m_role;
         core::String m_engineVersion;
+        core::String m_platform;
         PluginLoader m_loader;
         core::Array<PluginService> m_services;
         core::Array<Candidate> m_candidates;
         core::Array<core::UniquePtr<PluginContext>> m_contexts; // one per loaded plugin
         core::Array<core::String> m_loaded;
+        PluginLoadReport m_report;
     };
 }

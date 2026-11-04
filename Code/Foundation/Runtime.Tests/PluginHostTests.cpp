@@ -15,9 +15,26 @@
 
 import foundation.core;
 import foundation.runtime;
+import foundation.xml.serialization; // the entries' XML round trip
 
 using namespace foundation::core;
 using namespace foundation::runtime;
+
+namespace
+{
+    // Loads `ids` as a project's entries naming no platforms and no settings.
+    PluginLoadReport LoadIds(PluginHost& host, Span<const StringView> ids)
+    {
+        Array<EnabledPlugin> entries;
+        for (StringView id : ids)
+        {
+            EnabledPlugin entry;
+            entry.id = String(id);
+            entries.PushBack(Move(entry));
+        }
+        return host.Load(Span<const EnabledPlugin>(entries.Data(), entries.Size()));
+    }
+}
 
 #ifndef TEST_PLUGIN_PART_PATH
 #error "Runtime.Tests must define TEST_PLUGIN_PART_PATH (see Runtime.Tests/CMakeLists.txt)"
@@ -115,6 +132,7 @@ namespace
         Array<PluginDependency> dependsOn{};
         Array<String> provides{};
         Array<PluginPartKind> parts{};
+        Array<String> platforms{}; // empty: Linux64, Win64 and Web
     };
 
     [[nodiscard]] Array<byte> ManifestXml(ManifestSpec spec)
@@ -129,6 +147,17 @@ namespace
         for (PluginPartKind kind : spec.parts)
         {
             manifest.parts.PushBack(PluginManifestPart{String(PluginPartKindName(kind))});
+        }
+        if (spec.platforms.IsEmpty())
+        {
+            for (StringView platform : {StringView(u8"Linux64"), StringView(u8"Win64"), StringView(u8"Web")})
+            {
+                spec.platforms.PushBack(String(platform));
+            }
+        }
+        for (const String& platform : spec.platforms)
+        {
+            manifest.platforms.PushBack(PluginPlatform{platform});
         }
         MemoryStream buffer;
         REQUIRE(WritePluginManifest(manifest, buffer).IsOk());
@@ -272,7 +301,7 @@ TEST_CASE("plugin host: dependencies load first and unload last, whatever order 
     REQUIRE(host.AddLinked(linked.List()).IsOk());
 
     const StringView enabled[] = {kGamma, kBeta, kAlpha};
-    const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 3));
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 3));
     CHECK(report.refused.IsEmpty());
     CHECK(Same(report.loaded, Strings({kAlpha, kBeta, kGamma})));
     // A player loads Engine parts only: alpha's Pipeline, Tooling and Editor parts stay out.
@@ -309,7 +338,7 @@ TEST_CASE("plugin host: each role loads the parts the table gives it, in kind or
         SubsystemManager subsystems(DefaultAllocator());
         PluginHost host(DefaultAllocator(), subsystems, test.role, u8"0.1.0");
         REQUIRE(host.AddLinked(linked.List()).IsOk());
-        const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 1));
+        const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
         CHECK(report.loaded.Size() == 1u);
         CHECK(Same(Log(), test.expected));
     }
@@ -326,7 +355,7 @@ TEST_CASE("plugin host: a missing or refused dependency disables its dependents,
 
     // alpha is not enabled: beta needs it, and gamma needs beta.
     const StringView enabled[] = {kBeta, kGamma, kLocal};
-    const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 3));
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 3));
     CHECK(Same(report.loaded, Strings({kLocal})));
     CHECK(RefusedWith(report, kBeta, u8"needs 'alpha', which is not enabled"));
     CHECK(RefusedWith(report, kGamma, u8"needs 'beta', which was refused"));
@@ -345,7 +374,7 @@ TEST_CASE("plugin host: a dependency older than asked is refused")
     PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
     REQUIRE(host.AddLinked(linked.List()).IsOk());
     const StringView enabled[] = {kAlpha, kBeta};
-    const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 2));
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 2));
     CHECK(Same(report.loaded, Strings({kAlpha})));
     CHECK(RefusedWith(report, kBeta, u8"needs 'alpha' 0.2 or later; it is 0.1.0"));
 }
@@ -359,7 +388,7 @@ TEST_CASE("plugin host: one provider per slot, the first enabled keeps it")
     PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
     REQUIRE(host.AddLinked(linked.List()).IsOk());
     const StringView enabled[] = {kSteam, kLocal};
-    const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 2));
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 2));
     CHECK(Same(report.loaded, Strings({kSteam})));
     CHECK(RefusedWith(report, kLocal, u8"provides 'online.backend', which 'online_steam' already provides"));
 }
@@ -373,7 +402,7 @@ TEST_CASE("plugin host: refused before anything loads - unknown, wrong engine, c
     PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
     REQUIRE(host.AddLinked(linked.List()).IsOk());
     const StringView enabled[] = {u8"nowhere", kOld, kLoopA, kLoopB, kImpostor};
-    const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 5));
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 5));
     CHECK(report.loaded.IsEmpty());
     CHECK(RefusedWith(report, u8"nowhere", u8"is not in this build"));
     CHECK(RefusedWith(report, kOld, u8"needs engine 0.0; this engine is 0.1.0"));
@@ -395,14 +424,14 @@ TEST_CASE("plugin host: a part the manifest lists but the build lacks is refused
         SubsystemManager subsystems(DefaultAllocator());
         PluginHost player(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
         REQUIRE(player.AddLinked(linked.List()).IsOk());
-        CHECK(player.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+        CHECK(LoadIds(player, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
     }
     {
         Log().Clear();
         SubsystemManager subsystems(DefaultAllocator());
         PluginHost cook(DefaultAllocator(), subsystems, HostRole::Cook, u8"0.1.0");
         REQUIRE(cook.AddLinked(linked.List()).IsOk());
-        const PluginLoadReport report = cook.Load(Span<const StringView>(enabled, 1));
+        const PluginLoadReport report = LoadIds(cook, Span<const StringView>(enabled, 1));
         CHECK(RefusedWith(report, kAlpha, u8"its Pipeline part is not in this build"));
         CHECK(Log().IsEmpty());
     }
@@ -420,7 +449,7 @@ TEST_CASE("plugin host: a dormant plugin registers nothing; a loaded one's regis
         PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
         REQUIRE(host.AddLinked(linked.List()).IsOk());
         const StringView enabled[] = {kAlpha};
-        CHECK(host.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+        CHECK(LoadIds(host, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
         // The registrar is linked but not enabled: nothing of it ran.
         CHECK_FALSE(GlobalSerializableRegistry().Contains(probe));
         CHECK_FALSE(subsystems.HasSubsystem<hostprobe::ProbeSubsystem>());
@@ -429,7 +458,7 @@ TEST_CASE("plugin host: a dormant plugin registers nothing; a loaded one's regis
         PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
         REQUIRE(host.AddLinked(linked.List()).IsOk());
         const StringView enabled[] = {kRegistrar};
-        CHECK(host.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+        CHECK(LoadIds(host, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
         CHECK(GlobalSerializableRegistry().Contains(probe));
         CHECK(subsystems.HasSubsystem<hostprobe::ProbeSubsystem>());
         host.Unload();
@@ -449,10 +478,11 @@ TEST_CASE("plugin host: a development package's part loads from its shared libra
         manifest->version = String(u8"0.1.0");
         manifest->engineVersion = String(u8"0.1");
         manifest->parts.PushBack(PluginManifestPart{String(u8"Engine")});
+        manifest->platforms.PushBack(PluginPlatform{String(GetHostPlatformName())});
         const PluginLibrary libraries[] = {{PluginPartKind::Engine, String(PartLibraryPath())}};
         host.AddShared(Move(manifest), Span<const PluginLibrary>(libraries, 1));
         const StringView enabled[] = {u8"shared_probe"};
-        const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 1));
+        const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
         CHECK(report.refused.IsEmpty());
         REQUIRE(report.loaded.Size() == 1u);
 
@@ -475,11 +505,12 @@ TEST_CASE("plugin host: a development package's part loads from its shared libra
         manifest->version = String(u8"0.1.0");
         manifest->engineVersion = String(u8"0.1");
         manifest->parts.PushBack(PluginManifestPart{String(u8"Engine")});
+        manifest->platforms.PushBack(PluginPlatform{String(GetHostPlatformName())});
         const PluginLibrary libraries[] = {{PluginPartKind::Engine, String(u8"./no-such-library.so")}};
         host.AddShared(Move(manifest), Span<const PluginLibrary>(libraries, 1));
         REQUIRE(host.AddLinked(linked.List()).IsOk());
         const StringView enabled[] = {kAlpha};
-        CHECK(host.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+        CHECK(LoadIds(host, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
         CHECK(Same(Log(), Strings({u8"load:alpha:Engine"})));
     }
 }
@@ -493,10 +524,11 @@ TEST_CASE("plugin host: a shared part that does not load is refused with the pat
     manifest->version = String(u8"0.1.0");
     manifest->engineVersion = String(u8"0.1");
     manifest->parts.PushBack(PluginManifestPart{String(u8"Engine")});
+    manifest->platforms.PushBack(PluginPlatform{String(GetHostPlatformName())});
     const PluginLibrary libraries[] = {{PluginPartKind::Engine, String(u8"./no-such-library.so")}};
     host.AddShared(Move(manifest), Span<const PluginLibrary>(libraries, 1));
     const StringView enabled[] = {u8"absent"};
-    const PluginLoadReport report = host.Load(Span<const StringView>(enabled, 1));
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
     CHECK(RefusedWith(report, u8"absent", u8"did not load from './no-such-library.so'"));
 }
 
@@ -555,9 +587,261 @@ TEST_CASE("plugin host: a part finds the services its host provides by type, and
     CHECK(host.Provide(clock));
     CHECK(host.Provide(replacement)); // one per type: this one replaces the first
     const StringView enabled[] = {kServiceUser};
-    CHECK(host.Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+    CHECK(LoadIds(host, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
     CHECK(clock.ticks == 0);
     CHECK(replacement.ticks == 1);
     CHECK_FALSE(g_sawAbsent);
     CHECK_FALSE(host.Provide(clock)); // loaded plugins read the table: it is fixed now
+}
+
+namespace
+{
+    constexpr char8_t kAnywhere[] = u8"anywhere";
+    constexpr char8_t kDesktop[] = u8"desktop";
+
+    [[nodiscard]] EnabledPlugin Entry(StringView id, std::initializer_list<const char8_t*> platforms = {})
+    {
+        EnabledPlugin entry;
+        entry.id = String(id);
+        for (const char8_t* platform : platforms)
+        {
+            entry.platforms.PushBack(String(StringView(platform)));
+        }
+        return entry;
+    }
+
+    [[nodiscard]] PluginLoadReport LoadOn(StringView platform, Linked& linked, Span<const EnabledPlugin> entries)
+    {
+        SubsystemManager subsystems(DefaultAllocator());
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0", platform);
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        PluginLoadReport report = host.Load(entries);
+        host.Unload();
+        return report;
+    }
+}
+
+TEST_CASE("plugin host: an entry loads where it is enabled, is absent elsewhere, and is refused where its plugin cannot run")
+{
+    Linked linked;
+    linked.Add({.id = kAnywhere, .parts = Parts({PluginPartKind::Engine})}, {&Part<kAnywhere, PluginPartKind::Engine>});
+    linked.Add({.id = kDesktop, .parts = Parts({PluginPartKind::Engine}), .platforms = Strings({u8"Linux64", u8"Win64"})},
+               {&Part<kDesktop, PluginPartKind::Engine>});
+
+    // Naming no platforms is every platform the manifest supports.
+    {
+        const EnabledPlugin entries[] = {Entry(kAnywhere), Entry(kDesktop)};
+        const PluginLoadReport web = LoadOn(u8"Web", linked, Span<const EnabledPlugin>(entries, 2));
+        CHECK(Same(web.loaded, Strings({kAnywhere})));
+        CHECK(Same(web.notEnabled, Strings({kDesktop})));
+        CHECK(web.refused.IsEmpty());
+        const PluginLoadReport linux = LoadOn(u8"Linux64", linked, Span<const EnabledPlugin>(entries, 2));
+        CHECK(Same(linux.loaded, Strings({kAnywhere, kDesktop})));
+    }
+    // Naming platforms enables it on those alone.
+    {
+        const EnabledPlugin entries[] = {Entry(kAnywhere, {u8"Win64", u8"Web"})};
+        CHECK(Same(LoadOn(u8"Web", linked, Span<const EnabledPlugin>(entries, 1)).loaded, Strings({kAnywhere})));
+        const PluginLoadReport linux = LoadOn(u8"Linux64", linked, Span<const EnabledPlugin>(entries, 1));
+        CHECK(linux.loaded.IsEmpty());
+        CHECK(Same(linux.notEnabled, Strings({kAnywhere})));
+    }
+    // Naming a platform the manifest does not support is refused there, and reported.
+    {
+        const EnabledPlugin entries[] = {Entry(kDesktop, {u8"Linux64", u8"Web"})};
+        const PluginLoadReport web = LoadOn(u8"Web", linked, Span<const EnabledPlugin>(entries, 1));
+        CHECK(RefusedWith(web, kDesktop, u8"enabled on Web, which it does not support"));
+        CHECK(Same(LoadOn(u8"Linux64", linked, Span<const EnabledPlugin>(entries, 1)).loaded, Strings({kDesktop})));
+
+        PluginManifest manifest;
+        manifest.platforms.PushBack(PluginPlatform{String(u8"Linux64")});
+        CHECK(EnablementOn(entries[0], manifest, u8"Linux64") == PluginEnablement::Enabled);
+        CHECK(EnablementOn(entries[0], manifest, u8"Web") == PluginEnablement::Unsupported);
+        CHECK(EnablementOn(entries[0], manifest, u8"Win64") == PluginEnablement::NotEnabled);
+        CHECK(Same(UnsupportedPlatforms(entries[0], manifest, DefaultAllocator()), Strings({u8"Web"})));
+    }
+}
+
+namespace hostprobe
+{
+    // A plugin's settings type: what its part reads from the project's entry.
+    class ProbeConfig final : public ISerializable
+    {
+        RTTI_OBJECT(ProbeConfig, ISerializable)
+    public:
+        i32 volume = 3;
+        String name = String(u8"default");
+
+        void Serialize(ISerializer& ar) override
+        {
+            foundation::core::Serialize(ar, "volume", volume);
+            foundation::core::Serialize(ar, "name", name);
+        }
+    };
+    RTTI_DEFINE_OBJECT_VERSIONED(ProbeConfig, "rtti::hostprobe", 1)
+}
+
+namespace
+{
+    constexpr char8_t kConfigured[] = u8"configured";
+    i32 g_volumeAtLoad = 0;
+    bool g_otherTypeRefused = false;
+
+    void LoadConfigured(PluginContext& context)
+    {
+        hostprobe::ProbeConfig* config = context.Settings<hostprobe::ProbeConfig>();
+        g_volumeAtLoad = config != nullptr ? config->volume : -1;
+        g_otherTypeRefused = context.Settings<hostprobe::ProbeSettings>() == nullptr;
+    }
+    const PluginPart* ConfiguredEngine()
+    {
+        static constexpr PluginPart part{kConfigured, PluginPartKind::Engine, &LoadConfigured, nullptr};
+        return &part;
+    }
+
+    [[nodiscard]] Array<u8> ConfigXml(i32 volume, StringView name)
+    {
+        hostprobe::ProbeConfig config;
+        config.volume = volume;
+        config.name = String(name);
+        Array<u8> settings;
+        REQUIRE(WritePluginSettings(config, settings, DefaultAllocator()).IsOk());
+        return settings;
+    }
+}
+
+TEST_CASE("plugin host: a part reads its settings from the project's entry, and an editor writes them back")
+{
+    SubsystemManager subsystems(DefaultAllocator());
+    Linked linked;
+    linked.Add({.id = kConfigured, .parts = Parts({PluginPartKind::Engine})}, {&ConfiguredEngine});
+
+    SUBCASE("written settings are what the part reads")
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        EnabledPlugin entry = Entry(kConfigured);
+        entry.settings = ConfigXml(7, u8"seven");
+        REQUIRE(host.Load(Span<const EnabledPlugin>(&entry, 1)).loaded.Size() == 1u);
+        CHECK(g_volumeAtLoad == 7);
+        CHECK(g_otherTypeRefused); // one settings type per plugin
+        CHECK(host.Report().loaded.Size() == 1u); // kept for whoever reports the project's plugins
+        REQUIRE(host.Manifest(kConfigured) != nullptr);
+        CHECK(host.Manifest(kConfigured)->id == String(kConfigured));
+        CHECK(host.Manifest(u8"absent") == nullptr);
+        CHECK(host.SettingsRead(kConfigured));
+
+        // The editor's path: change the live object, write it into the entry, and it reads back.
+        auto* live = Cast<hostprobe::ProbeConfig>(host.Settings(kConfigured));
+        REQUIRE(live != nullptr);
+        CHECK(live->name == String(u8"seven"));
+        live->volume = 9;
+        REQUIRE(WritePluginSettings(*live, entry.settings, DefaultAllocator()).IsOk());
+        hostprobe::ProbeConfig reread;
+        REQUIRE(ReadPluginSettings(Span<const u8>(entry.settings.Data(), entry.settings.Size()), reread,
+                                   DefaultAllocator())
+                    .IsOk());
+        CHECK(reread.volume == 9);
+        CHECK(reread.name == String(u8"seven"));
+        host.Unload();
+        CHECK(host.Report().loaded.IsEmpty());
+        CHECK(host.Settings(kConfigured) == nullptr);
+    }
+    SUBCASE("an entry with no settings gives the defaults")
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        const EnabledPlugin entry = Entry(kConfigured);
+        REQUIRE(host.Load(Span<const EnabledPlugin>(&entry, 1)).loaded.Size() == 1u);
+        CHECK(g_volumeAtLoad == 3);
+        CHECK(host.SettingsRead(kConfigured));
+    }
+    SUBCASE("settings that do not read as the type give the defaults, marked unread")
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        EnabledPlugin entry = Entry(kConfigured);
+        hostprobe::ProbeSettings other; // another type's payload: its data versions do not match
+        REQUIRE(WritePluginSettings(other, entry.settings, DefaultAllocator()).IsOk());
+        REQUIRE(host.Load(Span<const EnabledPlugin>(&entry, 1)).loaded.Size() == 1u);
+        CHECK(g_volumeAtLoad == 3);
+        CHECK_FALSE(host.SettingsRead(kConfigured));
+    }
+    SUBCASE("a plugin that is not loaded has no settings object")
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+        CHECK(host.Settings(kConfigured) == nullptr);
+    }
+}
+
+namespace
+{
+    // A document holding entries, as the project's manifest does.
+    class EntryList final : public ISerializable
+    {
+        RTTI_OBJECT(EntryList, ISerializable)
+    public:
+        Array<EnabledPlugin> plugins;
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "plugins", plugins); }
+    };
+    RTTI_DEFINE_OBJECT(EntryList, "rtti::hostprobe")
+
+    [[nodiscard]] String WriteXml(EntryList& list)
+    {
+        MemoryStream buffer;
+        UniquePtr<SerializerContext> ctx = foundation::xml::XmlSerializerFactory()(buffer, SerializeMode::Write);
+        list.Serialize(*ctx->serializer);
+        REQUIRE(ctx->serializer->IsOk());
+        ctx->Flush(buffer);
+        return String(StringView(reinterpret_cast<const utf8char*>(buffer.Bytes().Data()), buffer.Bytes().Size()));
+    }
+
+    void ReadXml(StringView xml, EntryList& list)
+    {
+        MemoryStream buffer;
+        (void)buffer.Write(xml.Data(), xml.Size());
+        (void)buffer.Seek(0, SeekOrigin::Begin);
+        UniquePtr<SerializerContext> ctx = foundation::xml::XmlSerializerFactory()(buffer, SerializeMode::Read);
+        list.Serialize(*ctx->serializer);
+        REQUIRE(ctx->serializer->IsOk());
+    }
+}
+
+TEST_CASE("enabled plugin: an entry's settings are kept verbatim, read by nobody, through XML and binary copies")
+{
+    EntryList list;
+    EnabledPlugin entry = Entry(u8"steam", {u8"Linux64", u8"Win64"});
+    const StringView unknown = u8"<object name=\"mystery\"><i32 name=\"appId\">480</i32></object>";
+    entry.settings.Resize(unknown.Size());
+    MemCopy(entry.settings.Data(), unknown.Data(), unknown.Size());
+    list.plugins.PushBack(Move(entry));
+    EnabledPlugin local = Entry(u8"paperkid");
+    local.path = String(u8"Native");
+    list.plugins.PushBack(Move(local));
+
+    const String first = WriteXml(list);
+    CHECK(first.AsView().Contains(u8"<i32 name=\"appId\">480</i32>"));
+
+    EntryList read;
+    ReadXml(first.AsView(), read);
+    REQUIRE(read.plugins.Size() == 2u);
+    CHECK(read.plugins[0].id == String(u8"steam"));
+    CHECK(read.plugins[0].platforms.Size() == 2u);
+    CHECK(read.plugins[1].path == String(u8"Native"));
+    CHECK(read.plugins[1].settings.IsEmpty());
+    CHECK(WriteXml(read) == first);
+
+    // Through the binary serializer, as a copy of the manifest goes.
+    MemoryStream buffer;
+    {
+        BinarySerializer writer(buffer, SerializeMode::Write);
+        read.Serialize(writer);
+        REQUIRE(writer.IsOk());
+    }
+    (void)buffer.Seek(0, SeekOrigin::Begin);
+    EntryList copied;
+    BinarySerializer reader(buffer, SerializeMode::Read);
+    copied.Serialize(reader);
+    REQUIRE(reader.IsOk());
+    CHECK(WriteXml(copied) == first);
 }

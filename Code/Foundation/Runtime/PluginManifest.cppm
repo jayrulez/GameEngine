@@ -181,7 +181,7 @@ export namespace foundation::runtime
     struct PluginPlatform
     {
         String platform; // the export platform's tag: "Linux64", "Win64", "Web"
-        Array<String> deploy;
+        Array<String> deploy{};
 
         void Serialize(ISerializer& ar)
         {

@@ -214,6 +214,7 @@ TEST_CASE("defaultapp: CreatePluginHost offers the app's services, and the app's
     manifest.version = String(u8"0.1.0");
     manifest.engineVersion = String(u8"0.1");
     manifest.parts.PushBack(runtime::PluginManifestPart{String(u8"Engine")});
+    manifest.platforms.PushBack(runtime::PluginPlatform{String(GetHostPlatformName())});
     MemoryStream xml;
     REQUIRE(runtime::WritePluginManifest(manifest, xml).IsOk());
     Array<byte> text;
@@ -225,8 +226,9 @@ TEST_CASE("defaultapp: CreatePluginHost offers the app's services, and the app's
     const runtime::PluginPartEntryFn parts[] = {&ProbePluginEngine};
     const runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(text.Data()), parts, 1}};
     REQUIRE(plugins->AddLinked(Span<const runtime::LinkedPlugin>(linked, 1)).IsOk());
-    const StringView enabled[] = {kProbePluginId};
-    REQUIRE(plugins->Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+    runtime::EnabledPlugin probe;
+    probe.id = String(kProbePluginId);
+    REQUIRE(plugins->Load(Span<const runtime::EnabledPlugin>(&probe, 1)).loaded.Size() == 1u);
 
     REQUIRE(g_pluginProbe.client != nullptr);
     CHECK(g_pluginProbe.client->host == &host);

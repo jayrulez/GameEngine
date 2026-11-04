@@ -105,8 +105,9 @@ namespace
             if (m_plugins)
             {
                 (void)m_plugins->AddLinked(foundation::runtime::LinkedPluginList());
-                const foundation::core::StringView enabled[] = {u8"imgui"};
-                (void)m_plugins->Load(foundation::core::Span<const foundation::core::StringView>(enabled, 1));
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)m_plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 

@@ -174,8 +174,9 @@ namespace
                                                         engine::project::kEngineVersionString);
             (void)m_plugins->Provide(m_client);
             (void)m_plugins->AddLinked(runtime::LinkedPluginList());
-            const core::StringView enabled[] = {u8"imgui"};
-            (void)m_plugins->Load(core::Span<const core::StringView>(enabled, 1));
+            runtime::EnabledPlugin imgui;
+            imgui.id = u8"imgui";
+            (void)m_plugins->Load(core::Span<const runtime::EnabledPlugin>(&imgui, 1));
         }
 
         // The subsystems have stopped: the plugins go, the reverse of their load in Configure.

@@ -20,6 +20,7 @@ export module foundation.runtime:plugin_part;
 import foundation.core;
 import :subsystem_manager;
 import :plugin_manifest;
+import :enabled_plugin;
 
 namespace core = foundation::core;
 
@@ -74,16 +75,23 @@ export namespace foundation::runtime
         void* object;
     };
 
-    // What a part's load and unload are handed: the host's services, as far as its role has them.
-    // One context per plugin, shared by its parts, alive from the plugin's load to its unload.
+    // What a part's load and unload are handed: the host's services, as far as its role has them,
+    // and the project's settings for the plugin. One context per plugin, shared by its parts, alive
+    // from the plugin's load to its unload.
     class PluginContext
     {
     public:
         PluginContext(HostRole role, SubsystemManager& subsystems, core::StringView pluginId,
-                      core::Span<const PluginService> services, core::IAllocator& allocator)
+                      core::Span<const PluginService> services, core::Span<const core::u8> settings,
+                      core::IAllocator& allocator)
             : m_role(role), m_subsystems(&subsystems), m_pluginId(pluginId, allocator), m_services(services),
-              m_allocator(&allocator)
+              m_settingsXml(allocator), m_allocator(&allocator)
         {
+            m_settingsXml.Resize(settings.Size());
+            if (!settings.IsEmpty())
+            {
+                core::MemCopy(m_settingsXml.Data(), settings.Data(), settings.Size());
+            }
         }
 
         PluginContext(const PluginContext&) = delete;
@@ -116,11 +124,46 @@ export namespace foundation::runtime
             return nullptr;
         }
 
+        // The plugin's settings, read from the project's entry into T, its reflected settings type,
+        // on the first call (T's defaults when the entry has none); every part asking for them shares
+        // one object, alive until the plugin unloads. A plugin has one settings type: null when an
+        // earlier call named another. When the entry's settings do not read as a T, the defaults are
+        // used and SettingsRead says so, so an editor never writes them over what it could not read.
+        template <typename T>
+            requires(__is_base_of(core::ISerializable, T))
+        [[nodiscard]] T* Settings()
+        {
+            if (m_settings)
+            {
+                return m_settings->GetType() == &T::StaticType() ? static_cast<T*>(m_settings.Get()) : nullptr;
+            }
+            core::UniquePtr<T> settings = core::MakeUnique<T>(*m_allocator);
+            core::ISerializable& object = *settings;
+            m_settings = core::Move(settings);
+            const core::Status read = ReadPluginSettings(
+                core::Span<const core::u8>(m_settingsXml.Data(), m_settingsXml.Size()), object, *m_allocator);
+            if (!read.IsOk())
+            {
+                m_settingsRead = false;
+                m_settings = core::MakeUnique<T>(*m_allocator); // the defaults, not what the reader left
+            }
+            return static_cast<T*>(m_settings.Get());
+        }
+
+        // The settings object a part asked for (Settings<T>), or null when none did.
+        [[nodiscard]] core::ISerializable* SettingsObject() const noexcept { return m_settings.Get(); }
+
+        // False when the project's settings did not read into the plugin's type.
+        [[nodiscard]] bool SettingsRead() const noexcept { return m_settingsRead; }
+
     private:
         HostRole m_role;
         SubsystemManager* m_subsystems;
         core::String m_pluginId;
         core::Span<const PluginService> m_services; // the host's, which outlives every context
+        core::Array<core::u8> m_settingsXml;        // the project entry's, read by Settings<T>
+        core::UniquePtr<core::ISerializable> m_settings;
+        bool m_settingsRead = true;
         core::IAllocator* m_allocator;
     };
 

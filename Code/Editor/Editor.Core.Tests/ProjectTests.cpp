@@ -397,7 +397,7 @@ TEST_CASE("project: a version 9 manifest opens without the old UI's two settings
 TEST_CASE("editor-project: the settings describe themselves, and the path mirrors follow the guids")
 {
     const TypeInfo& type = engine::project::ProjectSettings::StaticType();
-    CHECK(type.dataVersion == 10u); // version 10 drops the old UI's theme and loading document
+    CHECK(type.dataVersion == 11u); // version 11 drops the native module path for the game's package
     CHECK(type.minReadDataVersion == 9u); // a version 9 manifest still reads
     u32 assets = 0;
     u32 lists = 0;
@@ -890,4 +890,76 @@ TEST_CASE("tool plugins: the cook, the exporter and the MCP host each load the p
     }
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
+}
+
+// Before version 11 a project named its native game module by its library path (nativeModule).
+// Such a manifest still opens: the path becomes the entry of the game's package, Plugins/<Game>, its
+// id the name in lower case, and a save writes version 11 without it. An empty path adds nothing.
+TEST_CASE("project: a version 10 manifest's native module becomes the entry of the game's package")
+{
+    const auto open = [](StringView dir, StringView nativeModule)
+    {
+        (void)RemoveDirectoryRecursive(dir);
+        const String text = Format(
+            u8"<root>\n"
+            u8"<array name=\"dataVersions\" count=\"1\"><u64 name=\"type\">{}</u64><u32 name=\"version\">10</u32></array>\n"
+            u8"<string name=\"name\">Old</string>\n"
+            u8"<string name=\"engineVersion\">0.1.0</string>\n"
+            u8"<string name=\"defaultSceneId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"defaultScene\"/>\n"
+            u8"<string name=\"startupScript\"/>\n"
+            u8"<string name=\"nativeModule\">{}</string>\n"
+            u8"<string name=\"defaultInputMapId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"defaultBusLayoutId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"startupScriptId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"defaultUiFontId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<u32 name=\"renderMsaaSamples\">2</u32>\n"
+            u8"</root>\n",
+            engine::project::ProjectSettings::StaticType().id, nativeModule);
+        REQUIRE(CreateDirectories(dir));
+        foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
+        REQUIRE(root.AsWritable()->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(text.CStr()), text.Size())).IsOk());
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        CHECK(project->Settings().renderMsaaSamples == 2u); // read past the dropped path
+        return project;
+    };
+
+    {
+        const StringView dir = u8"scratch_project_v10_native";
+        UniquePtr<EditorProject> project = open(dir, u8"Native/libOldGame.so");
+        REQUIRE(project->Settings().plugins.Size() == 1u);
+        const foundation::runtime::EnabledPlugin& entry = project->Settings().plugins[0];
+        CHECK(entry.id == String(u8"oldgame"));
+        CHECK(entry.path == String(u8"Plugins/OldGame"));
+        CHECK(entry.platforms.IsEmpty());
+        REQUIRE(project->SaveSettings().IsOk());
+        const Result<Array<byte>> saved = ReadFile(PathJoin(dir, u8"Project.xml").AsView());
+        REQUIRE(saved.HasValue());
+        const StringView savedText(reinterpret_cast<const utf8char*>(saved.Value().Data()), saved.Value().Size());
+        CHECK_FALSE(savedText.Contains(u8"\"nativeModule\""));
+        CHECK(savedText.Contains(u8"<u32 name=\"version\">11</u32>"));
+        project.Reset();
+        UniquePtr<EditorProject> again = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(again));
+        CHECK(again->Settings().plugins.Size() == 1u); // migrated once, not again
+        again.Reset();
+        (void)RemoveDirectoryRecursive(dir);
+    }
+    {
+        const StringView dir = u8"scratch_project_v10_native_dll";
+        UniquePtr<EditorProject> project = open(dir, u8"Native/2 Fast.dll");
+        REQUIRE(project->Settings().plugins.Size() == 1u);
+        CHECK(project->Settings().plugins[0].id == String(u8"game_2_fast"));
+        CHECK(project->Settings().plugins[0].path == String(u8"Plugins/2 Fast"));
+        project.Reset();
+        (void)RemoveDirectoryRecursive(dir);
+    }
+    {
+        const StringView dir = u8"scratch_project_v10_scripts";
+        UniquePtr<EditorProject> project = open(dir, u8"");
+        CHECK(project->Settings().plugins.IsEmpty());
+        project.Reset();
+        (void)RemoveDirectoryRecursive(dir);
+    }
 }

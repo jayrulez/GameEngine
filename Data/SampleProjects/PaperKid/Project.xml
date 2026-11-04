@@ -1,14 +1,13 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">10</u32>
+		<u32 name="version">11</u32>
 	</array>
 	<string name="name">PaperKid</string>
 	<string name="engineVersion">0.1.0</string>
 	<string name="defaultSceneId">1a321fbc-7bfa-478e-a672-85351f51cba3</string>
 	<string name="defaultScene">Scenes/Start</string>
 	<string name="startupScript">PaperKidGame</string>
-	<string name="nativeModule"/>
 	<string name="defaultInputMapId">be45bcb3-6c69-4b0b-aba3-b62c3f60a8eb</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">f6302f5a-d4e6-4fde-9008-465a0e8d2fa4</string>
@@ -31,4 +30,5 @@
 		<string>637252a2-421d-4698-9a7b-f0c3615f4a45</string>
 	</array>
 	<string name="guiLoadingDocumentId">00000000-0000-0000-0000-000000000000</string>
+	<array name="plugins" count="0"/>
 </root>

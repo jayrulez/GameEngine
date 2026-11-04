@@ -1,14 +1,13 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">10</u32>
+		<u32 name="version">11</u32>
 	</array>
 	<string name="name">Sky Hopper</string>
 	<string name="engineVersion">0.1.0</string>
 	<string name="defaultSceneId">6dd1ae0e-fbe8-4c9b-8c9e-d10b727f4d84</string>
 	<string name="defaultScene">Scenes/Level1</string>
 	<string name="startupScript">Scripts/PlatformerGame</string>
-	<string name="nativeModule"/>
 	<string name="defaultInputMapId">1355798c-5464-445e-9d1a-080da9df3f94</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">a0fc4c0d-73bd-471f-8357-ae28b52393ef</string>
@@ -29,4 +28,5 @@
 		<string>fff23f74-5710-40c0-84d8-b97cd8e66be4</string>
 	</array>
 	<string name="guiLoadingDocumentId">00000000-0000-0000-0000-000000000000</string>
+	<array name="plugins" count="0"/>
 </root>

@@ -241,12 +241,31 @@ export namespace pipeline
 
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
-        void Register(UniquePtr<IAssetBuilder> builder)
+        /// Adds a builder; its key for Unregister (0, nothing added, for a null one).
+        u64 Register(UniquePtr<IAssetBuilder> builder)
         {
-            if (builder)
+            if (!builder)
             {
-                m_builders.PushBack(Move(builder));
+                return 0;
             }
+            m_builders.PushBack(Move(builder));
+            m_keys.PushBack(m_nextKey);
+            return m_nextKey++;
+        }
+
+        /// Removes the builder Register gave `key` for; false when there is none (removed already).
+        bool Unregister(u64 key)
+        {
+            for (usize i = 0; i < m_keys.Size(); ++i)
+            {
+                if (m_keys[i] == key)
+                {
+                    m_builders.RemoveAt(i);
+                    m_keys.RemoveAt(i);
+                    return true;
+                }
+            }
+            return false;
         }
 
         [[nodiscard]] IAssetBuilder* Find(const TypeInfo* assetType) const
@@ -290,6 +309,8 @@ export namespace pipeline
     private:
         IAllocator* m_allocator;
         Array<UniquePtr<IAssetBuilder>> m_builders;
+        Array<u64> m_keys; // beside m_builders
+        u64 m_nextKey = 1;
     };
 
     // Reflects the Asset base (its fileName property) and SourcePath, so every concrete asset

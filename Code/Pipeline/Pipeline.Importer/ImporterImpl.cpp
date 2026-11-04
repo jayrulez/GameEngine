@@ -30,12 +30,29 @@ namespace pipeline
     {
         return {};
     }
-    void ImporterRegistry::Register(UniquePtr<IFileImporter> importer)
+    u64 ImporterRegistry::Register(UniquePtr<IFileImporter> importer)
     {
-        if (importer)
+        if (!importer)
         {
-            m_importers.PushBack(Move(importer));
+            return 0;
         }
+        m_importers.PushBack(Move(importer));
+        m_keys.PushBack(m_nextKey);
+        return m_nextKey++;
+    }
+
+    bool ImporterRegistry::Unregister(u64 key)
+    {
+        for (usize i = 0; i < m_keys.Size(); ++i)
+        {
+            if (m_keys[i] == key)
+            {
+                m_importers.RemoveAt(i);
+                m_keys.RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
     }
 
     IFileImporter* ImporterRegistry::FindFor(StringView extension) const

@@ -75,11 +75,13 @@ and tools as shared libraries by default, with static builds only for players.
   function-local static by `FullComposition()`. A `DomainModule`
   (`Code/Engine/Engine.Domain/Domain.cppm:34`) carries an id, `dependsOn`, the scene installer,
   the reflection registrar, a script facade registrar and resource modules.
-- **Per-run services are a fixed list**: `GameInstance::InstallRunServices`
-  (`Code/Engine/Engine.GameInstance/GameInstanceImpl.cpp:104`) installs run, input, save and
-  HTTP services into the run's script context; the `Http` facade is the model for an
-  asynchronous facade (request id, handler delegate, `cancel`), with its binding registered per
-  run (`GameInstance.cppm:354`).
+- **Script services are found by type** (since 2026-11-03): a facade asks
+  `script::CurrentService<T>()`, and the run host answers with its runtime binding, then the
+  run's services (`foundation.run`: `RunBase::Register`/`Add`), then the application's
+  (`SubsystemManager::RegisterService`, which each subsystem calls for its own). A plugin offers
+  per-run state on each run, from a listener on the run manager, and app-wide state on the
+  manager; no list names either. The `Http` facade is the model for an asynchronous facade
+  (request id, handler delegate, `cancel`).
 - **Pipeline registration is a fixed list called by four hosts**:
   `Code/Pipeline/Pipeline.Registration/Registration.cppm` (`RegisterPipelineTypes`,
   `RegisterAllBuilders`, `RegisterAllImporters`, `RegisterAllCreators`), called from
@@ -238,9 +240,9 @@ rule.
 
 - **every role:** the subsystem manager, the type and serializable registries, the plugin's
   settings object (Decision 5), logging.
-- **Engine part:** `AddDomain(const DomainModule&)`, `AddRunService(...)` (a callback the
-  `GameInstance` calls from `InstallRunServices`, so a plugin's script binding is installed
-  per run as `Http`'s is), script facade names and delegate shapes.
+- **Engine part:** `EnginePluginServices` (`AddDomain`, `AddSceneManager`), found by type.
+  Per-run state goes on the runs themselves and app-wide state on the subsystem manager, where
+  facades find it (see "What exists").
 - **Pipeline part:** the builder, importer and creator registries.
 - **Tooling part:** the MCP tool registry and export hooks.
 - **Editor part:** the action registry, page factories, the editor context.
@@ -330,13 +332,17 @@ that turns a non-empty `nativeModule` into the game's package entry):
   manifest before X5, and the entry symbol is named from the id). Tests: order, missing dependency
   disables dependents, slot conflict refused, dormant plugin registers nothing, unload reverses
   everything.
-- **X2 - Engine part contributions.** `AddDomain` and the composition built after load;
-  `AddRunService` called by `GameInstance::InstallRunServices`; facades. Where the role has a
+- **X2 - Engine part contributions.** Typed services on the host and context
+  (`PluginHost::Provide`, `PluginContext::Find<T>`); `EnginePluginServices`: `AddDomain` (a
+  plugin domain's resource modules, reflection and facade join the full composition, rebuilt in
+  place; a domain with a scene installer is refused) and `AddSceneManager` (through
+  `SceneModuleContributions`, which reaches live scenes); script services found by type through
+  the run and the application, so a plugin's facade works as the engine's do. Where the role has a
   window (player, editor), the context offers the client side (graphics device, shell, the data
   mount), so a plugin such as Imgui sets itself up on load instead of each app adding its
   subsystem by hand (the user's suggestion, 2026-11-03; whether every such host has a data mount
-  to hand over is to be checked). Tests: a plugin's domain installs its scene systems, its run
-  service reaches a script, unload removes both.
+  to hand over is to be checked). Tests: a plugin's domain and scene manager arrive and leave
+  with it; services resolve run first, then the application.
 - **X3 - project list and settings.** The `plugins` list, the version bump and the
   `nativeModule` migration; typed settings; missing plugins kept; Project Settings rows; MCP
   tools to list plugins and read and write their settings (`McpGuide.md` and the tool count in

@@ -197,7 +197,11 @@ when any of it is refused. `plugin_list` reports the plugins the project enables
 entry's id, path (a project-local package, empty for the engine's), platforms (empty is every
 platform its manifest supports) and its state in this host (`loaded`, `notEnabled` on this
 platform, `refused` or `missing`, with the reason), plus `unsupportedPlatforms`, platforms the
-entry names that its plugin does not support. `plugin_enable` (`id`, optional `path` and
+entry names that its plugin does not support. `available` lists what the project could enable: each package in its Plugins folder that no entry
+names and each plugin this host links that no entry enables (`path` empty), with its name, version,
+parts and platforms, and `offered` false with a `problem` when it cannot be (its manifest does not
+read or suit this engine, or its id is taken). A package in the folder is never enabled by being
+there. `plugin_enable` (`id`, optional `path` and
 `platforms`) adds an entry or changes an enabled one's path and platforms, keeping its settings;
 it refuses a platform the plugin's manifest does not support and a `path` whose package is
 another plugin. `plugin_disable` removes an entry and its settings. A host loads the project's

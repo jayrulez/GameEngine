@@ -93,10 +93,42 @@ export namespace editor::mcp::detail
         {
             plugins.Add(PluginEntryJson(session, entry));
         }
+        // What the project could enable: its Plugins folder's packages and this host's linked
+        // plugins that no entry names, each with why it is not offered when it is not.
+        JsonValue available = JsonValue::MakeArray();
+        const Array<engine::project::AvailablePlugin> found = engine::project::DiscoverPlugins(
+            session.project->Directory(), session.project->Settings(), session.linkedPlugins, session.project->Allocator());
+        for (const engine::project::AvailablePlugin& plugin : found)
+        {
+            JsonValue item = JsonValue::MakeObject();
+            item.Set(u8"id", JsonValue::MakeString(plugin.id));
+            item.Set(u8"path", JsonValue::MakeString(plugin.path));
+            item.Set(u8"name", JsonValue::MakeString(plugin.name));
+            item.Set(u8"version", JsonValue::MakeString(plugin.version));
+            JsonValue parts = JsonValue::MakeArray();
+            for (const String& part : plugin.parts)
+            {
+                parts.Add(JsonValue::MakeString(part));
+            }
+            item.Set(u8"parts", Move(parts));
+            JsonValue platforms = JsonValue::MakeArray();
+            for (const String& platform : plugin.platforms)
+            {
+                platforms.Add(JsonValue::MakeString(platform));
+            }
+            item.Set(u8"platforms", Move(platforms));
+            item.Set(u8"offered", JsonValue::MakeBool(plugin.problem.IsEmpty()));
+            if (!plugin.problem.IsEmpty())
+            {
+                item.Set(u8"problem", JsonValue::MakeString(plugin.problem));
+            }
+            available.Add(Move(item));
+        }
         JsonValue out = JsonValue::MakeObject();
         out.Set(u8"platform", JsonValue::MakeString(String(session.plugins != nullptr ? session.plugins->Platform()
                                                                                       : GetHostPlatformName())));
         out.Set(u8"plugins", Move(plugins));
+        out.Set(u8"available", Move(available));
         return out;
     }
 
@@ -132,7 +164,11 @@ export namespace editor::mcp
             u8"unsupportedPlatforms lists platforms the entry names that its manifest does not support. "
             u8"A loaded plugin with settings reports them (`settings`, as project_info reports the "
             u8"project's), and settingsEditable says whether plugin_settings_set may change them; any "
-            u8"other entry's settings are kept as written.",
+            u8"other entry's settings are kept as written. `available` lists what the project could "
+            u8"enable: each package in its Plugins folder no entry names and each plugin this host links "
+            u8"that no entry enables (path empty), with name, version, parts and platforms; `offered` false "
+            u8"with a `problem` when it cannot be enabled (its manifest does not read or suit this engine, "
+            u8"or its id is taken). Enable one with plugin_enable (its id and path).",
             SchemaBuilder().Build(), foundation::mcp::ToolAnnotations::ReadOnly(),
             [s](const JsonValue& /*args*/) -> ToolResult
             {

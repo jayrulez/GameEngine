@@ -278,6 +278,7 @@ namespace editor::app
         mcp.userSettings = &m_editorSettings;
         mcp.log = m_config.logBuffer;
         mcp.pluginTools = &m_mcpPluginTools;
+        mcp.linkedPlugins = m_config.linkedPlugins;
         mcp.dataRoot = m_config.dataRoot;
         mcp.forceEnabled = m_config.mcpEnabled;
         mcp.port = m_config.mcpPort;

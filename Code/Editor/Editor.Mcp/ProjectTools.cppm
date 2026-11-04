@@ -198,6 +198,7 @@ export namespace editor::mcp
                             (void)exportHooks->Attach(host);
                     });
                 s->exportHooks = exportHooks;
+                s->linkedPlugins = plugins.linked;
                 s->plugins = &o->plugins->Host();
                 return out;
             });

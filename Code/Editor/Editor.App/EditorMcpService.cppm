@@ -59,6 +59,8 @@ export namespace editor::app
             editor::EditorLogBuffer* log = nullptr;                 // what log_read serves
             /// The tools the project's plugins add; the host's server serves them while it runs.
             editor::mcp::McpPluginServices* pluginTools = nullptr;
+            /// The plugins the editor links (plugin_list offers those the project does not enable).
+            Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
             String dataRoot;
             /// Set from the command line: enabled whatever the preference says, with a port of its own (0: the preference's).
             bool forceEnabled = false;
@@ -128,6 +130,7 @@ export namespace editor::app
             paths.shaderLibrary = foundation::vfs::DataPath(m_services.dataRoot.AsView(), foundation::shaders::kShaderFolder);
             m_session.project = project;
             m_session.plugins = m_services.context->Plugins(); // the project's plugins, loaded with it
+            m_session.linkedPlugins = m_services.linkedPlugins;
 
             EditorProjectOperationsSeams operations;
             operations.allocator = &m_allocator;

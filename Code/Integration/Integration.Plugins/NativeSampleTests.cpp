@@ -387,11 +387,54 @@ TEST_CASE("plugins: through the standalone MCP host, an agent creates and cooks 
     CHECK(validated.value.Get(u8"valid").AsBool());
     CHECK(validated.value.Get(u8"warnings").Count() == 0u);
 
-    // A project that does not enable it: the plugin's tool, creator and component leave with it.
+    // A package extracted into the project's Plugins folder is available, not enabled: plugin_list
+    // offers it, and once plugin_enable names it, it is an entry and no longer offered. The linked
+    // plugin the project enables is not offered.
+    {
+        runtime::PluginManifest lantern;
+        lantern.id = String(u8"lantern");
+        lantern.name = String(u8"Lantern");
+        lantern.version = String(u8"0.3.0");
+        lantern.engineVersion = String(engine::project::kEngineVersionString);
+        lantern.parts.PushBack(runtime::PluginManifestPart{String(u8"Engine")});
+        lantern.platforms.PushBack(runtime::PluginPlatform{String(GetHostPlatformName())});
+        const String packageDir = PathJoin(dir, u8"Plugins/Lantern");
+        REQUIRE(CreateDirectories(packageDir.AsView()));
+        MemoryStream xml;
+        REQUIRE(runtime::WritePluginManifest(lantern, xml).IsOk());
+        REQUIRE(WriteFile(PathJoin(packageDir.AsView(), u8"Plugin.xml").AsView(), xml.Bytes()).IsOk());
+    }
+    const auto offered = [&server](StringView id)
+    {
+        const Called list = Call(server, u8"plugin_list", JsonValue::MakeObject());
+        REQUIRE_FALSE(list.error);
+        const JsonValue available = list.value.Get(u8"available");
+        for (i64 i = 0; i < available.Count(); ++i)
+        {
+            if (available.At(i).Get(u8"id").AsString() == String(id))
+            {
+                return available.At(i).Get(u8"offered").AsBool();
+            }
+        }
+        return false;
+    };
+    CHECK(offered(u8"lantern"));
+    CHECK_FALSE(offered(kNativeSample)); // enabled already
+    {
+        JsonValue enable = JsonValue::MakeObject();
+        enable.Set(u8"id", JsonValue::MakeString(u8"lantern"));
+        enable.Set(u8"path", JsonValue::MakeString(u8"Plugins/Lantern"));
+        REQUIRE_FALSE(Call(server, u8"plugin_enable", Move(enable)).error);
+    }
+    CHECK_FALSE(offered(u8"lantern"));
+
+    // A project that does not enable it: the plugin's tool, creator and component leave with it, and
+    // the linked plugin is offered there.
     open(plain);
     CHECK_FALSE(server.HasTool(u8"nativesample_notes"));
     CHECK_FALSE(HasCreator(creators, nativesample::kNoteCreator));
     CHECK(spinSchema().error);
+    CHECK(offered(kNativeSample));
 
     session.plugins = nullptr;
     owner.plugins.Reset();

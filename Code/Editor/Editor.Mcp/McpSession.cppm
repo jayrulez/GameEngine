@@ -46,6 +46,9 @@ export namespace editor::mcp
         /// The export hooks the project's plugins added, which project_export runs once a dist is
         /// staged (null: none).
         const editor::ExportPluginServices* exportHooks = nullptr;
+        /// The plugins this host's binary links: what plugin_list offers as available beside the
+        /// project's own packages.
+        Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
     };
 
     // The stdio host's project ownership: project_open stores what it opened here and points

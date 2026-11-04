@@ -18,6 +18,7 @@ import foundation.vfs.pak;
 import foundation.content;
 import foundation.resource;
 import engine.project;
+import foundation.runtime; // the project's packages
 import foundation.geometry;
 import geometry.pipeline;
 import foundation.geometry.resource;
@@ -2487,18 +2488,7 @@ TEST_CASE("export: player output name carries the executable or page extension (
     CHECK(PlayerOutputName(u8"Web", u8"", u8"Engine.Player.html") == StringView(u8"Engine.Player.html"));
 }
 
-// --- Native ship link derivations ----------------------------------------------------------
-TEST_CASE("export: native target derives from the manifest's dev-module path")
-{
-    using editor::detail::NativeTargetFromModulePath;
-    CHECK(NativeTargetFromModulePath(u8"Native/libScratchGame.so") == u8"ScratchGame");
-    CHECK(NativeTargetFromModulePath(u8"libGameOnly.so") == u8"GameOnly");
-    CHECK(NativeTargetFromModulePath(u8"Native/MyGame.dll") == u8"MyGame");
-    CHECK(NativeTargetFromModulePath(u8"Native\\libWinPath.dll") == u8"WinPath");
-    CHECK(NativeTargetFromModulePath(u8"BareName") == u8"BareName");
-    CHECK(NativeTargetFromModulePath(u8"") == u8"");
-}
-
+// --- The project's own packages ----------------------------------------------------------
 TEST_CASE("export: ship output suffix is per-project and filesystem-safe")
 {
     using editor::detail::ShipOutputSuffix;
@@ -2506,41 +2496,34 @@ TEST_CASE("export: ship output suffix is per-project and filesystem-safe")
     CHECK(ShipOutputSuffix(u8"My Game 2!") == u8"-Ship-My-Game-2-");
 }
 
-TEST_CASE("export: the NativeSample fixture pins the native-game conventions")
+TEST_CASE("export: the NativeSample fixture pins the game-package conventions")
 {
-    // The committed reference project (Data/SampleProjects/NativeSample) must stay a valid
-    // input to the native pipeline: manifest parses, the module path derives the target
-    // that its Native/CMakeLists.txt actually declares, and the source dir exists.
+    // The committed reference project (Data/SampleProjects/NativeSample) must stay a valid input
+    // to the package pipeline: its manifest enables its own package, whose Plugin.xml reads, names
+    // the same id, has an Engine part, and whose part folder holds the CMakeLists and the source.
     const String root = Format(u8"{}/Data/SampleProjects/NativeSample",
                                StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)));
     foundation::vfs::NativeFileSystem fs(root.AsView(), foundation::core::DefaultAllocator());
     engine::project::ProjectSettings settings;
     REQUIRE(engine::project::LoadProjectSettings(fs, settings).IsOk());
     CHECK(settings.name == u8"NativeSample");
-    REQUIRE(settings.nativeModule == u8"Native/libNativeSample.so");
+    const foundation::runtime::EnabledPlugin* entry = settings.FindPlugin(u8"nativesample");
+    REQUIRE(entry != nullptr);
+    CHECK(entry->path == u8"Plugins/NativeSample");
 
-    const String target =
-        editor::detail::NativeTargetFromModulePath(settings.nativeModule.AsView());
-    CHECK(target == u8"NativeSample");
-
-    // The fixture's CMakeLists declares that target through util_add_engine_library.
-    UniquePtr<IStream> cml = fs.Open(u8"Native/CMakeLists.txt", FileMode::Read);
-    REQUIRE(static_cast<bool>(cml));
-    Array<char> text;
-    text.Resize(static_cast<usize>(cml->Size()));
-    REQUIRE(cml->Read(text.Data(), text.Size()) == text.Size());
-    const StringView body(reinterpret_cast<const utf8char*>(text.Data()), text.Size());
-    bool declaresTarget = false;
-    const StringView needle = u8"util_add_engine_library(NativeSample ";
-    for (usize i = 0; i + needle.Size() <= body.Size() && !declaresTarget; ++i)
-    {
-        declaresTarget = StringView(body.Data() + i, needle.Size()) == needle;
-    }
-    CHECK(declaresTarget);
-    CHECK(fs.Exists(u8"Native/NativeSamplePlugin.cpp"));
+    foundation::runtime::PluginManifest manifest;
+    REQUIRE(foundation::runtime::LoadPluginManifest(PathJoin(root.AsView(), entry->path.AsView()).AsView(), manifest,
+                                                    DefaultAllocator())
+                .IsOk());
+    CHECK(manifest.id == u8"nativesample");
+    CHECK(manifest.HasPart(foundation::runtime::PluginPartKind::Engine));
+    String why;
+    CHECK(foundation::runtime::CheckPluginManifest(manifest, engine::project::kEngineVersionString, why));
+    CHECK(fs.Exists(u8"Plugins/NativeSample/NativeSample.Engine/CMakeLists.txt"));
+    CHECK(fs.Exists(u8"Plugins/NativeSample/NativeSample.Engine/NativeSampleEngine.cpp"));
 }
 
-TEST_CASE("export: Add Native Code scaffolds the reference shape and wires the manifest")
+TEST_CASE("export: Add Native Code scaffolds the game's package and enables it")
 {
     const StringView dir = u8"scaffold-proj"; // harness cwd = .test-scratch
     NukeTree(dir);
@@ -2550,28 +2533,34 @@ TEST_CASE("export: Add Native Code scaffolds the reference shape and wires the m
 
     CHECK(editor::NativeTargetNameFromProjectName(u8"My Scaffold 7!") == u8"MyScaffold7");
     CHECK(editor::NativeTargetNameFromProjectName(u8"123!") == u8"Native"); // leading digits drop
+    CHECK(editor::ProjectPackageDirs(*project).IsEmpty());
 
-    REQUIRE(editor::ScaffoldNativeModule(*project).IsOk());
-    // Platform-shaped: the manifest points at what this platform actually loads.
-#if PLATFORM_WINDOWS
-    const StringView expectedModule = u8"Native/MyScaffold7.dll";
-#else
-    const StringView expectedModule = u8"Native/libMyScaffold7.so";
-#endif
-    CHECK(project->Settings().nativeModule == expectedModule);
+    REQUIRE(editor::ScaffoldGamePackage(*project).IsOk());
+    const foundation::runtime::EnabledPlugin* entry = project->Settings().FindPlugin(u8"myscaffold7");
+    REQUIRE(entry != nullptr);
+    CHECK(entry->path == u8"Plugins/MyScaffold7");
 
-    // The manifest persisted; the generated files exist and follow the fixture shape.
+    // The manifest persisted; the package reads, and its part follows the fixture's shape.
     foundation::vfs::NativeFileSystem fs(dir, DefaultAllocator());
     engine::project::ProjectSettings reread;
     REQUIRE(engine::project::LoadProjectSettings(fs, reread).IsOk());
-    CHECK(reread.nativeModule == expectedModule);
-    CHECK(fs.Exists(u8"Native/CMakeLists.txt"));
-    CHECK(fs.Exists(u8"Native/MyScaffold7Plugin.cpp"));
-    CHECK(editor::detail::NativeTargetFromModulePath(reread.nativeModule.AsView()) ==
-          u8"MyScaffold7");
+    CHECK(reread.FindPlugin(u8"myscaffold7") != nullptr);
+    foundation::runtime::PluginManifest manifest;
+    REQUIRE(foundation::runtime::LoadPluginManifest(PathJoin(dir, u8"Plugins/MyScaffold7").AsView(), manifest,
+                                                    DefaultAllocator())
+                .IsOk());
+    CHECK(manifest.id == u8"myscaffold7");
+    CHECK(manifest.name == u8"My Scaffold 7!");
+    String why;
+    CHECK(foundation::runtime::CheckPluginManifest(manifest, engine::project::kEngineVersionString, why));
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Engine/CMakeLists.txt"));
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Engine/MyScaffold7Engine.cpp"));
+    const Array<String> packages = editor::ProjectPackageDirs(*project);
+    REQUIRE(packages.Size() == 1u);
+    CHECK(packages[0].AsView().EndsWith(u8"Plugins/MyScaffold7"));
 
-    // It never overwrites: a second call refuses (the module is declared and the dir exists).
-    CHECK(editor::ScaffoldNativeModule(*project).Code() == ErrorCode::AlreadyExists);
+    // It never overwrites: a second call refuses (the id is enabled and the folder exists).
+    CHECK(editor::ScaffoldGamePackage(*project).Code() == ErrorCode::AlreadyExists);
 
     NukeTree(dir);
 }

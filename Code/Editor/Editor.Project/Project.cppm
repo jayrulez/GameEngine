@@ -15,8 +15,8 @@
 //   <root>/.cache/       thumbnails and the incremental-cook hash DB: gitignored
 //
 // EditorProject::Open mounts Content/ and Cooked/ and opens both ContentDatabases, keeping source
-// and output in separate databases. The manifest reserves `nativeModule` for an optional
-// per-project native game module.
+// and output in separate databases. The project's own native code is a plugin package under
+// Plugins/<Name>, one entry of the manifest's plugins list.
 
 module;
 #include "Core/Prelude.h"
@@ -265,13 +265,16 @@ export namespace editor
     // nothing survives).
     [[nodiscard]] String NativeTargetNameFromProjectName(StringView projectName);
 
-    // "Add Native Code": generates <project>/Native (CMakeLists and <Target>Plugin.cpp, the
-    // NativeSample shape with the target's name filled in), points the manifest's nativeModule at
-    // the platform's dev-module path (Native/<Target>.dll on Windows, Native/lib<Target>.so
-    // elsewhere; that is what gets loaded), and saves it. Fails with AlreadyExists when the project
-    // already declares a module or Native/ exists, so it never overwrites user code. Defined in
-    // ProjectScaffoldImpl.cpp.
-    [[nodiscard]] Status ScaffoldNativeModule(EditorProject& project);
+    // "Add Native Code": generates the game's plugin package, <project>/Plugins/<Game> (its
+    // Plugin.xml, and its Engine part's CMakeLists and <Game>Engine.cpp, the NativeSample shape with
+    // the name filled in), adds the project's entry for it and saves the manifest. Fails with
+    // AlreadyExists when the project already enables that id or the folder exists, so it never
+    // overwrites user code. Defined in ProjectScaffoldImpl.cpp.
+    [[nodiscard]] Status ScaffoldGamePackage(EditorProject& project);
+
+    // The folders of the project's own packages: each entry with a path whose folder holds a
+    // Plugin.xml, as absolute paths. Defined in ProjectScaffoldImpl.cpp.
+    [[nodiscard]] Array<String> ProjectPackageDirs(const EditorProject& project);
 
     // The starter content a new project is seeded with, whether made by the editor's New Project
     // or the MCP project_create: Roboto as a distance-field font set as the manifest's default UI

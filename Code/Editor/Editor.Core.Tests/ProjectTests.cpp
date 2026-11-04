@@ -13,6 +13,7 @@ import foundation.core;
 import foundation.vfs;
 import foundation.content;
 import foundation.xml.serialization;
+import foundation.runtime; // the plugins' entries
 import engine.project;
 import editor.core;
 
@@ -704,4 +705,77 @@ TEST_CASE("project settings: the window in a few words, and the settings that su
     CHECK(summary[1] == StringView(u8"Startup script"));
     CHECK(summary[2] == StringView(u8"Input map"));
     CHECK(summary[3] == StringView(u8"UI font"));
+}
+
+// The plugins list is appended: a manifest without it opens with none. An entry keeps its
+// platforms and its settings as written, whether or not any plugin here reads them, through a
+// save, a reopen and the dist copy.
+TEST_CASE("project: the plugins list is appended, and an entry no plugin here reads is kept as written")
+{
+    const StringView dir = u8"scratch_project_plugins_test";
+    (void)FileDelete(PathJoin(dir, u8"Project.xml"));
+    (void)RemoveDirectory(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    const String manifestPath = PathJoin(dir, u8"Project.xml");
+    const auto manifestText = [&manifestPath]()
+    {
+        Result<Array<byte>> bytes = ReadFile(manifestPath.AsView());
+        REQUIRE(bytes.HasValue());
+        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    };
+
+    // Saved before the list: strip its key from the manifest the create wrote.
+    {
+        String older = manifestText();
+        const usize start = older.AsView().Find(u8"<array name=\"plugins\"");
+        REQUIRE(start != StringView::kNotFound);
+        const usize close = older.AsView().Find(u8"/>", start);
+        REQUIRE(close != StringView::kNotFound);
+        older.Remove(start, close + 2 - start);
+        foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
+        REQUIRE(root.AsWritable()
+                    ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(older.Data()), older.Size()))
+                    .IsOk());
+    }
+    const StringView unknown = u8"<object name=\"mystery\"><i32 name=\"appId\">480</i32></object>";
+    {
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        CHECK(project->Settings().plugins.IsEmpty());
+
+        foundation::runtime::EnabledPlugin steam;
+        steam.id = String(u8"steam");
+        steam.platforms.PushBack(String(u8"Linux64"));
+        steam.platforms.PushBack(String(u8"Win64"));
+        steam.settings.Resize(unknown.Size());
+        MemCopy(steam.settings.Data(), unknown.Data(), unknown.Size());
+        project->Settings().plugins.PushBack(Move(steam));
+        foundation::runtime::EnabledPlugin game;
+        game.id = String(u8"game");
+        game.path = String(u8"Native");
+        project->Settings().plugins.PushBack(Move(game));
+        REQUIRE(project->SaveSettings().IsOk());
+    }
+    const String saved = manifestText();
+    CHECK(saved.AsView().Contains(u8"<i32 name=\"appId\">480</i32>"));
+    {
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        engine::project::ProjectSettings& settings = project->Settings();
+        REQUIRE(settings.plugins.Size() == 2u);
+        REQUIRE(settings.FindPlugin(u8"steam") != nullptr);
+        CHECK(settings.FindPlugin(u8"steam")->platforms.Size() == 2u);
+        CHECK(settings.FindPlugin(u8"game")->path == String(u8"Native"));
+        CHECK(settings.FindPlugin(u8"absent") == nullptr);
+        REQUIRE(project->SaveSettings().IsOk());
+        CHECK(manifestText() == saved); // read and written back unchanged
+
+        engine::project::ProjectSettings dist;
+        REQUIRE(engine::project::CopyProjectSettings(settings, dist).IsOk());
+        REQUIRE(dist.FindPlugin(u8"steam") != nullptr);
+        const Array<u8>& copied = dist.FindPlugin(u8"steam")->settings;
+        CHECK(StringView(reinterpret_cast<const utf8char*>(copied.Data()), copied.Size()).Contains(u8"\"appId\">480<"));
+    }
+    (void)FileDelete(manifestPath.AsView());
+    (void)RemoveDirectory(dir);
 }

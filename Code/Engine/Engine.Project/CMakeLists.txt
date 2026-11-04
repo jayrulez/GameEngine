@@ -2,7 +2,7 @@
 # layout constants). Editor-free, because shipping binaries link this and never the editor.
 util_add_engine_library(Engine.Project ALIAS Engine::Project)
 target_link_libraries(Engine.Project
-    PUBLIC Foundation::Core Foundation::VFS Foundation::Xml.Serialization Foundation::Policy)
+    PUBLIC Foundation::Core Foundation::VFS Foundation::Xml.Serialization Foundation::Runtime Foundation::Policy)
 
 target_sources(Engine.Project
     PRIVATE

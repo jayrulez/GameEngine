@@ -17,6 +17,7 @@ export module engine.project;
 import foundation.core;
 import foundation.vfs;
 import foundation.xml.serialization;
+import foundation.runtime; // the plugins' entries
 
 using namespace foundation::core;
 using namespace foundation;
@@ -154,6 +155,24 @@ export namespace engine::project
         // upright).
         ScreenOrientation orientation = ScreenOrientation::Any;
 
+        // The plugins the project enables, in order, each with its platforms and settings. An entry
+        // whose plugin is missing is kept as read and written back unchanged. Appended: a manifest
+        // saved before it reads none.
+        Array<foundation::runtime::EnabledPlugin> plugins;
+
+        /// The project's entry for plugin `id`, or null when it enables no such plugin.
+        [[nodiscard]] foundation::runtime::EnabledPlugin* FindPlugin(StringView id) noexcept
+        {
+            for (foundation::runtime::EnabledPlugin& entry : plugins)
+            {
+                if (entry.id.AsView() == id)
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        }
+
         /// The player's window in a few words: "1280 × 720, windowed", "1280 × 720, fullscreen",
         /// or "borderless, the display's size".
         [[nodiscard]] String WindowSummary() const
@@ -223,6 +242,7 @@ export namespace engine::project
                 ar.Key("guiLoadingDocumentId");
                 ar.GuidValue(guiLoadingDocumentId);
             }
+            SerializeAppended(ar, "plugins", plugins);
         }
     };
 
@@ -285,6 +305,77 @@ export namespace engine::project
                 }
             }
         }
+    }
+
+    /// What became of a project's plugin entry in a host.
+    enum class PluginState : u8
+    {
+        Loaded,
+        NotEnabled, // not enabled on the host's platform: absent, as the entry asks
+        Refused,    // known, and refused (the reason says why)
+        Missing,    // not in this host: its entry and settings are kept as written
+    };
+
+    [[nodiscard]] constexpr StringView PluginStateName(PluginState state) noexcept
+    {
+        switch (state)
+        {
+        case PluginState::Loaded: return u8"loaded";
+        case PluginState::NotEnabled: return u8"notEnabled";
+        case PluginState::Refused: return u8"refused";
+        case PluginState::Missing: return u8"missing";
+        }
+        return u8"";
+    }
+
+    struct PluginStatus
+    {
+        PluginState state = PluginState::Missing;
+        String reason;                    // why it is not loaded; empty when it is
+        Array<String> unsupportedPlatforms; // platforms the entry names that its manifest lacks
+    };
+
+    /// The status of `entry` in `host`, the process's plugin host after it loaded the project's
+    /// entries; a null host is one that loads no plugins, where every entry is missing.
+    [[nodiscard]] inline PluginStatus PluginStatusOf(const foundation::runtime::EnabledPlugin& entry,
+                                                     const foundation::runtime::PluginHost* host,
+                                                     IAllocator& allocator)
+    {
+        PluginStatus status;
+        const StringView id = entry.id.AsView();
+        if (host == nullptr)
+        {
+            status.reason = Format(u8"plugin '{}' is not loaded: this host loads no plugins", id);
+            return status;
+        }
+        if (const foundation::runtime::PluginManifest* manifest = host->Manifest(id); manifest != nullptr)
+        {
+            status.unsupportedPlatforms = foundation::runtime::UnsupportedPlatforms(entry, *manifest, allocator);
+        }
+        if (host->IsLoaded(id))
+        {
+            status.state = PluginState::Loaded;
+            return status;
+        }
+        const foundation::runtime::PluginLoadReport& report = host->Report();
+        for (const String& absent : report.notEnabled)
+        {
+            if (absent.AsView() == id)
+            {
+                status.state = PluginState::NotEnabled;
+                status.reason = Format(u8"plugin '{}' is not enabled on {}", id, host->Platform());
+                return status;
+            }
+        }
+        if (const foundation::runtime::PluginRefusal* refusal = report.FindRefusal(id);
+            refusal != nullptr && host->Knows(id))
+        {
+            status.state = PluginState::Refused;
+            status.reason = refusal->reason;
+            return status;
+        }
+        status.reason = Format(u8"plugin '{}' is not in this build", id);
+        return status;
     }
 
     /// Read a manifest (Project.xml / player.xml) from `root`. NotFound when absent.

@@ -45,7 +45,13 @@ namespace
         void BeginFrame(f32) override { ++beginFrames; }
         void EndFrame() override { ++endFrames; }
 
-        int inits = 0, readys = 0, updates = 0, shutdowns = 0, beginFrames = 0, endFrames = 0;
+        int inits = 0, readys = 0, updates = 0, shutdowns = 0, beginFrames = 0, endFrames = 0, unregisters = 0;
+
+        void OnUnregister() override
+        {
+            ++unregisters;
+            Subsystem::OnUnregister();
+        }
 
     protected:
         void OnInit() override { ++inits; }
@@ -210,6 +216,7 @@ TEST_CASE("runtime: register a caller-owned subsystem; SubsystemManager does not
         // ctx disposes here: shuts the subsystem down but must not destroy it.
     }
     CHECK(owned.shutdowns == 1); // object still valid, so reading it is safe
+    CHECK(owned.unregisters == 1); // unregistered as RemoveSubsystem would, so it can undo its OnRegister
 }
 
 TEST_CASE("runtime: subsystems registered after Startup come up immediately")

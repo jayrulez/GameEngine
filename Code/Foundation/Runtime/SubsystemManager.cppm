@@ -203,6 +203,13 @@ export namespace foundation::runtime
             {
                 Shutdown();
             }
+            // Unregistered as RemoveSubsystem does, in reverse UpdateOrder, so what a subsystem
+            // installed outside itself on registration (the scene subsystem's live-scene sink in
+            // the process's scene contributions) is taken out before it is destroyed.
+            for (core::usize i = m_sorted.Size(); i-- > 0;)
+            {
+                m_sorted[i]->OnUnregister();
+            }
             m_sorted.Clear();
             m_owned.Clear(); // UniquePtr<Subsystem> destroys each via the allocator
         }

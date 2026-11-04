@@ -16,7 +16,7 @@ if(TARGET Foundation::Shell.Desktop AND TARGET Foundation::Runtime.Desktop AND T
     add_subdirectory(ScriptPlayground)   # script consumer proof (Mover/Spinner behaviors on the ScriptSubsystem)
     add_subdirectory(MultiWindow)
     # Samples with an ImGui debug UI honor the plugin option, or an
-    # -DOPTION_PLUGIN_IMGUI=OFF configure dies on a missing Plugins::Imgui.Engine target.
+    # -DOPTION_PLUGIN_IMGUI=OFF configure dies on util_link_plugins asking for a plugin not added.
     if(OPTION_PLUGIN_IMGUI)
         add_subdirectory(InputActions)       # foundation.input consumer proof (named actions end-to-end)
         add_subdirectory(PhysicsPlayground)  # physics consumer proof (crates/trigger/raycast on Jolt)

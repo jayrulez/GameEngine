@@ -20,7 +20,6 @@ target_link_libraries(Sandbox PRIVATE
     Engine::Animation
     Foundation::Particles
     Engine::Particles
-    Plugins::Imgui.Engine
     Foundation::Image
     Foundation::Image.IO
     Foundation::Geometry
@@ -38,3 +37,6 @@ target_link_libraries(Sandbox PRIVATE
     Foundation::Policy)
 
 util_copy_sdl3_dll(Sandbox)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(Sandbox ROLE player PLUGINS imgui)

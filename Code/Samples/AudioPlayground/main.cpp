@@ -78,10 +78,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host); // registers AudioSubsystem
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            m_plugins = CreatePluginHost(foundation::runtime::HostRole::Player);
+            if (m_plugins)
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)m_plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                const foundation::core::StringView enabled[] = {u8"imgui"};
+                (void)m_plugins->Load(foundation::core::Span<const foundation::core::StringView>(enabled, 1));
             }
         }
 
@@ -264,6 +268,8 @@ namespace
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
+        foundation::core::UniquePtr<foundation::runtime::PluginHost> m_plugins;
         [[nodiscard]] f32 Random01()
         {
             m_randomState = m_randomState * 1664525u + 1013904223u;

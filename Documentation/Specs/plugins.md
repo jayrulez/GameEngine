@@ -332,7 +332,7 @@ that turns a non-empty `nativeModule` into the game's package entry):
   manifest before X5, and the entry symbol is named from the id). Tests: order, missing dependency
   disables dependents, slot conflict refused, dormant plugin registers nothing, unload reverses
   everything.
-- **X2 - Engine part contributions.** Typed services on the host and context
+- **X2 - Engine part contributions** (built 2026-11-03). Typed services on the host and context
   (`PluginHost::Provide`, `PluginContext::Find<T>`); `EnginePluginServices`: `AddDomain` (a
   plugin domain's resource modules, reflection and facade join the full composition, rebuilt in
   place; a domain with a scene installer is refused) and `AddSceneManager` (through
@@ -340,8 +340,12 @@ that turns a non-empty `nativeModule` into the game's package entry):
   the run and the application, so a plugin's facade works as the engine's do. Where the role has a
   window (player, editor), the context offers the client side (graphics device, shell, the data
   mount), so a plugin such as Imgui sets itself up on load instead of each app adding its
-  subsystem by hand (the user's suggestion, 2026-11-03; whether every such host has a data mount
-  to hand over is to be checked). Tests: a plugin's domain and scene manager arrive and leave
+  subsystem by hand (the user's suggestion, 2026-11-03). Settled when built: one plugin host per
+  process, over the engine runtime's subsystem manager (every process runs one `DefaultApplication`;
+  in the editor that is the embedded app over `m_runtimeContext`, never the outer host's manager);
+  `DefaultApplication::CreatePluginHost(role)` makes it with the client services (`ClientServices`:
+  the app's host and data mount) and `EnginePluginServices`, and the app's `OnShutdown` unloads it.
+  Tests: a plugin's domain and scene manager arrive and leave
   with it; services resolve run first, then the application.
 - **X3 - project list and settings.** The `plugins` list, the version bump and the
   `nativeModule` migration; typed settings; missing plugins kept; Project Settings rows; MCP

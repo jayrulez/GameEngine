@@ -15,7 +15,6 @@ target_link_libraries(ParticleFX PRIVATE
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Plugins::Imgui.Engine
     Foundation::Geometry
     Foundation::Materials
     Foundation::Particles
@@ -26,3 +25,6 @@ target_link_libraries(ParticleFX PRIVATE
     Foundation::Policy)
 
 util_copy_sdl3_dll(ParticleFX)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(ParticleFX ROLE player PLUGINS imgui)

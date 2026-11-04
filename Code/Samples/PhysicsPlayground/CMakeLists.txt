@@ -15,6 +15,8 @@ target_link_libraries(PhysicsPlayground PRIVATE
     Engine::Render
     Foundation::Physics Foundation::Physics.Resource Engine::Physics
     Foundation::GUI Foundation::GUI.Resources Engine::GUI # the HUD canvas, the nameplate billboard, the kiosk panel
-    Plugins::Imgui.Engine
     Foundation::Policy)
 util_copy_sdl3_dll(PhysicsPlayground)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(PhysicsPlayground ROLE player PLUGINS imgui)

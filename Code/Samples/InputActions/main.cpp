@@ -29,6 +29,7 @@ import foundation.settings;
 import imgui.engine;
 import foundation.input;
 import engine.input;
+import engine.project; // kEngineVersionString: what the plugin host checks plugins against
 
 namespace core = foundation::core;
 namespace runtime = foundation::runtime;
@@ -163,10 +164,26 @@ namespace
                 core::DefaultAllocator(), dataRoot.AsView(), core::DefaultAllocator());
             m_input = host.Subsystems().AddSubsystem<engine::input::InputSubsystem>(
                 host.Shell() != nullptr ? host.Shell()->Input() : nullptr);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin. A bare app has no DefaultApplication to make the process's
+            // host, so it makes its own, offers its host and data mount, and loads it; the plugin
+            // adds its own subsystem from them.
+            m_client.host = &host;
+            m_client.data = m_dataFileSystem.Get();
+            core::IAllocator& allocator = host.Subsystems().Allocator();
+            m_plugins = MakeUnique<runtime::PluginHost>(allocator, allocator, host.Subsystems(), runtime::HostRole::Player,
+                                                        engine::project::kEngineVersionString);
+            (void)m_plugins->Provide(m_client);
+            (void)m_plugins->AddLinked(runtime::LinkedPluginList());
+            const core::StringView enabled[] = {u8"imgui"};
+            (void)m_plugins->Load(core::Span<const core::StringView>(enabled, 1));
+        }
+
+        // The subsystems have stopped: the plugins go, the reverse of their load in Configure.
+        void OnShutdown(runtime::IApplicationHost&) override
+        {
+            if (m_plugins)
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    *m_dataFileSystem);
+                m_plugins->Unload();
             }
         }
 
@@ -431,6 +448,8 @@ namespace
         engine::input::InputSubsystem* m_input = nullptr;
 
         core::UniquePtr<foundation::vfs::NativeFileSystem> m_dataFileSystem; // the data mount (owned)
+        runtime::ClientServices m_client;                  // what the plugins are offered (host, data mount)
+        core::UniquePtr<runtime::PluginHost> m_plugins;    // the process's plugins (Dear ImGui)
         input::InputMap m_asset;                // pristine defaults
         input::InputBindingOverrides m_overlay; // the user's rebinds (persisted)
         input::ActionRef m_move;

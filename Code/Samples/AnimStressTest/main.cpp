@@ -99,10 +99,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            m_plugins = CreatePluginHost(foundation::runtime::HostRole::Player);
+            if (m_plugins)
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)m_plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                const foundation::core::StringView enabled[] = {u8"imgui"};
+                (void)m_plugins->Load(foundation::core::Span<const foundation::core::StringView>(enabled, 1));
             }
         }
 
@@ -656,9 +660,13 @@ namespace
                 gfx->Raw()->WaitIdle();
             }
             core::ConsoleWrite(u8"AnimStressTest: shutting down.\n");
+            // The base last: its teardown (the plugins, the scenes, the runs) after this app's own.
+            engine::runtime::DefaultApplication::OnShutdown(host);
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
+        foundation::core::UniquePtr<foundation::runtime::PluginHost> m_plugins;
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_camera{};
         scene::EntityHandle m_floor{};

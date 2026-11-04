@@ -15,8 +15,10 @@ target_link_libraries(RenderStressTest PRIVATE Foundation::VFS
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Plugins::Imgui.Engine
     Foundation::Geometry
     Foundation::Materials
     Foundation::Policy)
 util_copy_sdl3_dll(RenderStressTest)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(RenderStressTest ROLE player PLUGINS imgui)

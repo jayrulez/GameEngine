@@ -3,7 +3,7 @@
 # Links the vendored ThirdParty::ImGui PUBLIC so consumers (apps) get imgui.h and the ImGui:: API directly.
 util_add_plugin_part()
 target_link_libraries(${PLUGIN_PART}
-    PUBLIC Foundation::Core Foundation::RHI Foundation::Runtime Foundation::Shell
+    PUBLIC Foundation::Core Foundation::RHI Foundation::Runtime Foundation::Runtime.Client Foundation::Shell
            Foundation::Graphics Foundation::Shaders Foundation::Shaders.System
            ThirdParty::ImGui Foundation::Policy)
 

@@ -446,7 +446,11 @@ editor, the player and export still read `nativeModule`):
   enabled; the cook reports a script that uses a facade absent on the platform it cooks for.
 - **The composition was a function-local static.** Everything that cached `FullComposition()`
   before plugins load must be found and fixed in X2.
-- **Type id collisions** between plugins are refused at load with both names, not asserted.
+- **Type id collisions** between plugins are refused at load with both names, not asserted (built
+  2026-11-04): a part whose load offers a type under an id another type holds, in the type or the
+  serializable registry, is refused naming both types and the holder (another plugin, itself or the
+  engine), and the plugin's parts that loaded are undone. A held id keeps its type and factory, so
+  a plugin registering the engine's type again no longer swaps in a factory of its own library.
 - **The template's static registry lists every official plugin**, so dormancy must be real:
   a plugin's static objects may not do work at static-initialisation time.
 - **Hot reload** rebuilds the composition and reinstalls run services; a running play-in-editor

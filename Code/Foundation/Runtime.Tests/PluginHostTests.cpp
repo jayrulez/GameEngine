@@ -55,6 +55,40 @@ namespace hostprobe
     class ProbeSubsystem final : public Subsystem
     {
     };
+
+    // A type only the second colliding plugin's Engine part registers, to show its refusal undoes
+    // the parts that loaded before the one refused.
+    class SecondOwn final : public ISerializable
+    {
+        RTTI_OBJECT(SecondOwn, ISerializable)
+    public:
+        void Serialize(ISerializer&) override {}
+    };
+    RTTI_DEFINE_OBJECT(SecondOwn, "rtti::hostprobe")
+}
+
+// Two distinct types under one reflected name, so one id: what two plugins that each define
+// rtti::collide::Settings would register.
+namespace collidefirst
+{
+    class Settings final : public ISerializable
+    {
+        RTTI_OBJECT(Settings, ISerializable)
+    public:
+        void Serialize(ISerializer&) override {}
+    };
+    RTTI_DEFINE_OBJECT(Settings, "rtti::collide")
+}
+
+namespace collidesecond
+{
+    class Settings final : public ISerializable
+    {
+        RTTI_OBJECT(Settings, ISerializable)
+    public:
+        void Serialize(ISerializer&) override {}
+    };
+    RTTI_DEFINE_OBJECT(Settings, "rtti::collide")
 }
 
 namespace
@@ -121,6 +155,58 @@ namespace
     const PluginPart* RegistrarEngine()
     {
         static constexpr PluginPart part{kRegistrar, PluginPartKind::Engine, &LoadRegistrar, &UnloadRegistrar};
+        return &part;
+    }
+
+    constexpr char8_t kFirst[] = u8"first";
+    constexpr char8_t kSecond[] = u8"second";
+
+    // first's Engine part registers its Settings; second's Engine part its own type, then its
+    // Pipeline part a Settings of its own under the same id.
+    void LoadFirstEngine(PluginContext& context)
+    {
+        context.Types().Register(collidefirst::Settings::StaticType());
+        RegisterSerializable<collidefirst::Settings>(context.Serializables());
+        Record(u8"load", context, PluginPartKind::Engine);
+    }
+    void LoadSecondEngine(PluginContext& context)
+    {
+        context.Types().Register(hostprobe::SecondOwn::StaticType());
+        Record(u8"load", context, PluginPartKind::Engine);
+    }
+    void LoadSecondPipeline(PluginContext& context)
+    {
+        context.Types().Register(collidesecond::Settings::StaticType());
+        RegisterSerializable<collidesecond::Settings>(context.Serializables());
+        Record(u8"load", context, PluginPartKind::Pipeline);
+    }
+    constexpr char8_t kTwice[] = u8"twice";
+    void LoadTwiceEngine(PluginContext& context)
+    {
+        context.Types().Register(collidefirst::Settings::StaticType());
+        context.Types().Register(collidesecond::Settings::StaticType());
+    }
+    const PluginPart* TwiceEngine()
+    {
+        static constexpr PluginPart part{kTwice, PluginPartKind::Engine, &LoadTwiceEngine, nullptr};
+        return &part;
+    }
+    const PluginPart* FirstEngine()
+    {
+        static constexpr PluginPart part{kFirst, PluginPartKind::Engine, &LoadFirstEngine,
+                                         &UnloadLogged<PluginPartKind::Engine>};
+        return &part;
+    }
+    const PluginPart* SecondEngine()
+    {
+        static constexpr PluginPart part{kSecond, PluginPartKind::Engine, &LoadSecondEngine,
+                                         &UnloadLogged<PluginPartKind::Engine>};
+        return &part;
+    }
+    const PluginPart* SecondPipeline()
+    {
+        static constexpr PluginPart part{kSecond, PluginPartKind::Pipeline, &LoadSecondPipeline,
+                                         &UnloadLogged<PluginPartKind::Pipeline>};
         return &part;
     }
 
@@ -251,6 +337,14 @@ namespace
                    {&Part<kLoopB, PluginPartKind::Engine>});
         linked.Add({.id = kImpostor, .parts = Parts({PluginPartKind::Engine})}, {&Part<kAlpha, PluginPartKind::Engine>});
         linked.Add({.id = kRegistrar, .parts = Parts({PluginPartKind::Engine})}, {&RegistrarEngine});
+    }
+
+    void AddCollidingPlugins(Linked& linked)
+    {
+        linked.Add({.id = kFirst, .parts = Parts({PluginPartKind::Engine})}, {&FirstEngine});
+        linked.Add({.id = kSecond, .parts = Parts({PluginPartKind::Engine, PluginPartKind::Pipeline})},
+                   {&SecondEngine, &SecondPipeline});
+        linked.Add({.id = kTwice, .parts = Parts({PluginPartKind::Engine})}, {&TwiceEngine});
     }
 
     [[nodiscard]] Array<String> Strings(std::initializer_list<const char8_t*> lines)
@@ -862,4 +956,71 @@ TEST_CASE("plugin host: a development package with no library of a part is refus
     const StringView enabled[] = {u8"unbuilt"};
     const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
     CHECK(RefusedWith(report, u8"unbuilt", u8"its Engine part is not built"));
+}
+
+// A plugin whose load offers a type under an id another plugin's type holds is refused, naming both
+// and the holder; every part of it that loaded is undone (its Engine part, which registered nothing
+// that collides, included), and the holder keeps its type and factory.
+TEST_CASE("plugin host: a type id another plugin holds is refused with both names, the refused plugin undone")
+{
+    Linked linked;
+    AddCollidingPlugins(linked);
+    SubsystemManager subsystems(DefaultAllocator());
+    Log().Clear();
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Editor, u8"0.1.0");
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        const StringView enabled[] = {kFirst, kSecond};
+        const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 2));
+        CHECK(host.IsLoaded(kFirst));
+        CHECK_FALSE(host.IsLoaded(kSecond));
+        CHECK(RefusedWith(report, kSecond,
+                          u8"plugin 'second': its Pipeline part registers type 'rtti::collide::Settings', whose id "
+                          u8"plugin 'first''s type 'rtti::collide::Settings' holds"));
+        CHECK(Same(Log(), Strings({u8"load:first:Engine", u8"load:second:Engine", u8"load:second:Pipeline",
+                                   u8"unload:second:Pipeline", u8"unload:second:Engine"})));
+        CHECK(GlobalTypeRegistry().FindById(hostprobe::SecondOwn::StaticType().id) == nullptr);
+        CHECK(GlobalTypeRegistry().FindById(collidefirst::Settings::StaticType().id) ==
+              &collidefirst::Settings::StaticType());
+        const RefPtr<ISerializable> made = GlobalSerializableRegistry().Create(collidefirst::Settings::StaticType().id);
+        REQUIRE(made.Get() != nullptr);
+        CHECK(made->GetType() == &collidefirst::Settings::StaticType());
+    }
+    CHECK(GlobalTypeRegistry().FindById(collidefirst::Settings::StaticType().id) == nullptr);
+    CHECK_FALSE(GlobalSerializableRegistry().Contains(collidefirst::Settings::StaticType().id));
+}
+
+// The holder can be the engine: a type registered outside any plugin.
+TEST_CASE("plugin host: a type id the engine holds is refused, naming the engine")
+{
+    Linked linked;
+    AddCollidingPlugins(linked);
+    GlobalTypeRegistry().Register(collidefirst::Settings::StaticType());
+    SubsystemManager subsystems(DefaultAllocator());
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Editor, u8"0.1.0");
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        const StringView enabled[] = {kSecond};
+        const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
+        CHECK(RefusedWith(report, kSecond, u8"whose id the engine's type 'rtti::collide::Settings' holds"));
+    }
+    CHECK(GlobalTypeRegistry().FindById(collidefirst::Settings::StaticType().id) ==
+          &collidefirst::Settings::StaticType());
+    GlobalTypeRegistry().Unregister(collidefirst::Settings::StaticType().id);
+}
+
+// The holder can be the plugin itself: one part offering two types under one id.
+TEST_CASE("plugin host: a part offering two types under one id is refused, naming its own")
+{
+    Linked linked;
+    AddCollidingPlugins(linked);
+    SubsystemManager subsystems(DefaultAllocator());
+    {
+        PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+        REQUIRE(host.AddLinked(linked.List()).IsOk());
+        const StringView enabled[] = {kTwice};
+        const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
+        CHECK(RefusedWith(report, kTwice, u8"whose id its own type 'rtti::collide::Settings' holds"));
+    }
+    CHECK(GlobalTypeRegistry().FindById(collidefirst::Settings::StaticType().id) == nullptr);
 }

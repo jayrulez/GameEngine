@@ -119,8 +119,8 @@ export namespace foundation::core
         }
 
         // Collision observer (one at a time): told when a Register offers a different type under
-        // an id another type holds (`held`, which stays), so a host loading native code can refuse
-        // the code that offered it.
+        // an id another type holds (`held`, which stays); PluginLoader refuses the plugin whose
+        // load offered it.
         void SetCollisionObserver(void (*observer)(void*, const TypeInfo& held, const TypeInfo& offered),
                                   void* context) noexcept
         {

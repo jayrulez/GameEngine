@@ -555,6 +555,7 @@ export namespace foundation::runtime
                 core::Span<const PluginService>(m_services.Data(), m_services.Size()),
                 core::Span<const core::u8>(entry.settings.Data(), entry.settings.Size()), *m_allocator));
             PluginContext& context = *m_contexts.Back();
+            const core::usize firstPart = m_loader.Count(); // a refusal below unloads back to here
             // Every linked entry is checked before any part loads, so a plugin refused here leaves
             // nothing behind. (A shared library can only be checked by loading it.)
             for (PluginPartKind kind : kPluginPartKinds)
@@ -577,18 +578,25 @@ export namespace foundation::runtime
                 {
                     continue;
                 }
+                core::Result<const PluginPart*, core::String> loaded = core::Err(core::String{});
                 if (const PluginPart* part = LinkedPart(candidate, kind); part != nullptr)
                 {
-                    m_loader.AddPart(*part, context);
-                    continue;
+                    loaded = m_loader.AddPart(*part, context);
                 }
-                const PluginLibrary* library = SharedPart(candidate, kind);
-                const core::String symbol = PluginPartSymbol(manifest.id.AsView(), kind, *m_allocator);
-                core::Result<const PluginPart*> loaded = m_loader.LoadPart(library->path.AsView(), symbol.AsView(), context);
+                else
+                {
+                    const PluginLibrary* library = SharedPart(candidate, kind);
+                    const core::String symbol = PluginPartSymbol(manifest.id.AsView(), kind, *m_allocator);
+                    loaded = m_loader.LoadPart(library->path.AsView(), symbol.AsView(), context);
+                }
                 if (!loaded.HasValue())
                 {
-                    return core::Format(u8"plugin '{}': its {} part did not load from '{}'", manifest.id,
-                                        PluginPartKindName(kind), library->path);
+                    // The parts that loaded before this one go too, so a refused plugin leaves
+                    // nothing behind.
+                    m_loader.UnloadFrom(firstPart);
+                    m_contexts.PopBack();
+                    return core::Format(u8"plugin '{}': its {} part {}", manifest.id, PluginPartKindName(kind),
+                                        loaded.Error());
                 }
             }
             return {};

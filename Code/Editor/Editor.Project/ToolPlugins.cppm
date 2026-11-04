@@ -5,9 +5,10 @@
 //
 // The plugins of a headless tool (the cook, the exporter, the MCP host): a tool has no
 // application, so its plugin host runs over a subsystem manager of its own. Made once the
-// project is open, it loads the plugins the project enables that the tool links, each the parts
-// the tool's role loads, a Pipeline part adding to the tool's pipeline registries, and unloads
-// them when it goes, before the project it read them from.
+// project is open, it loads the plugins the project enables, those the tool links and the
+// project's own packages from their development build (a shared tool loads them; a static one
+// refuses them), each the parts the tool's role loads, a Pipeline part adding to the tool's
+// pipeline registries, and unloads them when it goes, before the project it read them from.
 
 module;
 #include "Core/Prelude.h"
@@ -39,6 +40,7 @@ export namespace editor
             {
                 attach(m_host);
             }
+            engine::project::AddProjectPackages(m_host, project.Directory(), project.Settings(), allocator);
             m_report = engine::project::LoadProjectPlugins(m_host, linked, project.Settings());
         }
 

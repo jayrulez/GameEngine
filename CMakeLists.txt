@@ -33,14 +33,12 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # is passed explicitly.
 option(ENGINE_SHARED_LIBS "Build engine libraries as shared libraries" OFF)
 
-# A game project's native directory, added to this build as a subdirectory. The game's
-# module builds like any engine library (full C++20 module and BMI access through
-# util_add_engine_library), so the dev .so and the shipping static library come from the
-# same source. Engine.GamePlayer, the shipping player with the game statically linked,
-# exists when ENGINE_GAME_NATIVE_TARGET names the game's target. The exporter sets these;
-# setting them by hand works too.
-set(ENGINE_GAME_NATIVE_DIR "" CACHE PATH "Game project's native source directory (adds it to this build)")
-set(ENGINE_GAME_NATIVE_TARGET "" CACHE STRING "The game native target name (enables Engine.GamePlayer)")
+# A project's own plugin packages (its game code and project-local plugins: each a folder with its
+# Plugin.xml), added to this build after every engine target. Their parts build like any engine
+# library, so a shared-engine tree makes the development libraries the editor loads and a static
+# one the archives Engine.GamePlayer, the project's player, links. The editor's development build
+# and the exporter set it; setting it by hand works too.
+set(ENGINE_PROJECT_PLUGINS "" CACHE STRING "A project's plugin package folders, ;-separated (adds them and Engine.GamePlayer)")
 # The GitHub repository (owner/name) whose releases carry what an editor downloads for its own
 # version, such as the sample games: release v<project VERSION> of it. Stamped into engine.project.
 set(ENGINE_RELEASE_REPOSITORY "jayrulez/GameEngine" CACHE STRING "GitHub owner/name whose releases carry the editor's downloads (the sample games)")
@@ -884,11 +882,10 @@ if(EMSCRIPTEN)
             add_subdirectory(Code/Samples/TerrainPlayground) # a heightfield built in code, drawn by engine.terrain; builds TerrainPlayground.html
         endif()
     endif()
-    # Game native code: the wasm build hosts the game too, and the web shipping player
-    # compiles the module in (browsers have no dlopen). Mirrors the non-Emscripten block
-    # at the end of the file, which this branch return()s before reaching.
-    if(ENGINE_GAME_NATIVE_DIR)
-        add_subdirectory(${ENGINE_GAME_NATIVE_DIR} game-native)
+    # A project's packages: the web player compiles them in (browsers have no dlopen). Mirrors the
+    # non-Emscripten block at the end of the file, which this branch return()s before reaching.
+    if(ENGINE_PROJECT_PLUGINS)
+        util_add_project_plugins(${ENGINE_PROJECT_PLUGINS})
     endif()
     return()
 endif()
@@ -903,8 +900,8 @@ if(OPTION_BUILD_DEPRECATED)
     add_subdirectory(Code/Deprecated/UI)
 endif()
 
-# Game native code: the game's native directory joins the build after every engine
-# target exists, so it can link any of them.
-if(ENGINE_GAME_NATIVE_DIR)
-    add_subdirectory(${ENGINE_GAME_NATIVE_DIR} game-native)
+# A project's packages join the build after every engine target exists, so a part can link any of
+# them.
+if(ENGINE_PROJECT_PLUGINS)
+    util_add_project_plugins(${ENGINE_PROJECT_PLUGINS})
 endif()

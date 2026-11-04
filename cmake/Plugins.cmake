@@ -100,7 +100,8 @@ endfunction()
 # util_add_plugin(<package dir>)
 #
 # Reads <dir>/Plugin.xml and adds each part's folder in load order. A plugin it depends on must
-# have been added first. Each part's CMakeLists starts with util_add_plugin_part().
+# have been added first. Each part's CMakeLists starts with util_add_plugin_part(). Sets
+# UTIL_PLUGIN_ADDED_ID, the id it added, in the caller's scope.
 function(util_add_plugin dir)
     get_filename_component(_dir "${dir}" ABSOLUTE)
     get_filename_component(_name "${_dir}" NAME)
@@ -139,6 +140,39 @@ function(util_add_plugin dir)
             set(PLUGIN_PREVIOUS_PART "${PLUGIN_PART}")
         endif()
     endforeach()
+    set(UTIL_PLUGIN_ADDED_ID "${_plugin_ID}" PARENT_SCOPE)
+endfunction()
+
+# util_add_project_plugins(<package dir>...)
+#
+# Adds a project's own packages (ENGINE_PROJECT_PLUGINS) after every engine target, and:
+#   - the target ProjectPlugins, which builds every part of them (the development build);
+#   - <build>/plugin-libraries.txt, each part's library as `id|Kind|path` (the editor, the player
+#     and the tools load a development build's parts from it);
+#   - their link into Engine.GamePlayer, the project's player, with the engine's host plugins.
+function(util_add_project_plugins)
+    set(_ids "")
+    set(_parts "")
+    set(_lines "")
+    foreach(_dir IN LISTS ARGN)
+        util_add_plugin("${_dir}")
+        list(APPEND _ids "${UTIL_PLUGIN_ADDED_ID}")
+        foreach(_kind IN LISTS UTIL_PLUGIN_PART_KINDS)
+            get_property(_part GLOBAL PROPERTY UTIL_PLUGIN_${UTIL_PLUGIN_ADDED_ID}_${_kind})
+            if(_part)
+                list(APPEND _parts "${_part}")
+                string(APPEND _lines "${UTIL_PLUGIN_ADDED_ID}|${_kind}|$<TARGET_FILE:${_part}>\n")
+            endif()
+        endforeach()
+    endforeach()
+    add_custom_target(ProjectPlugins)
+    if(_parts)
+        add_dependencies(ProjectPlugins ${_parts})
+    endif()
+    file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/plugin-libraries.txt" CONTENT "${_lines}")
+    if(TARGET Engine.GamePlayer)
+        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS} ${_ids})
+    endif()
 endfunction()
 
 # util_add_plugin_part()

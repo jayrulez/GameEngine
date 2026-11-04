@@ -1,5 +1,5 @@
-# Engine.Player - the generic game runner (the engine, the project's content and its game script;
-# no native game code required).
+# Engine.Player - the generic game runner (the engine, the project's content and its game script,
+# and the engine's plugins a project may enable).
 #
 # One runner (PlayerApplication.h), two entry points: Main.cpp on desktop (SDL shell, a device,
 # the blocking runner, CLI args) and WebMain.cpp in the browser (web shell, WebGPU, the rAF
@@ -23,10 +23,9 @@ add_custom_command(
 if(EMSCRIPTEN)
 
     # --- Browser player: WebMain.cpp and the web platform trio ---
-    # One link list, two players: Engine.Player is the reusable template (no game code);
-    # Engine.GamePlayer (below, only when a game is wired in) compiles the game's native
-    # module in. Browsers have no dlopen, so native code on the web exists only in a
-    # shipping player.
+    # One link list, two players: Engine.Player is the reusable template (no project code);
+    # Engine.GamePlayer (below, only when a project's packages are added) compiles them in.
+    # Browsers have no dlopen, so a project's own code on the web exists only in that player.
     set(_web_player_libs
         Foundation::Core
         Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Web Engine::DefaultApp
@@ -66,13 +65,11 @@ if(EMSCRIPTEN)
     )
     set_target_properties(Engine.Player PROPERTIES SUFFIX ".html")
 
-    # The web shipping player: the game's native module statically compiled in.
-    if(ENGINE_GAME_NATIVE_TARGET)
+    # The project's web player: its packages compiled in (the root CMakeLists links them through
+    # util_add_project_plugins, once they are added).
+    if(ENGINE_PROJECT_PLUGINS)
         add_executable(Engine.GamePlayer WebMain.cpp "${_engine_logo_src}")
-        target_link_libraries(Engine.GamePlayer PRIVATE
-            ${_web_player_libs} ${ENGINE_GAME_NATIVE_TARGET})
-        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
-        target_compile_definitions(Engine.GamePlayer PRIVATE ENGINE_SHIP_NATIVE_GAME)
+        target_link_libraries(Engine.GamePlayer PRIVATE ${_web_player_libs})
         target_link_options(Engine.GamePlayer PRIVATE
             "--shell-file=${_web_shell}"
             "-sASYNCIFY"
@@ -107,9 +104,9 @@ else()
 
     # --- Desktop player: the launcher as a library ---
     # The whole boot is Engine.Player.Main, a static lib in every mode because it carries the
-    # main logic, not engine state. The dev executable is a thin stub calling
-    # PlayerMain(nullptr), and the exporter's generated shipping stub links this same library
-    # with the game's static plugin. For that reason it is not a util_add_engine_library.
+    # main logic, not engine state. Both players are a thin stub calling PlayerMain, each with
+    # its own generated plugin registry (the project's player linking the project's packages),
+    # which is why it is not a util_add_engine_library.
     add_library(Engine.Player.Main STATIC)
     target_sources(Engine.Player.Main
         PUBLIC FILE_SET player_main_modules TYPE CXX_MODULES FILES PlayerMain.cppm
@@ -133,15 +130,12 @@ else()
     target_link_libraries(Engine.Player PRIVATE Engine.Player.Main Foundation::Policy)
     util_link_plugins(Engine.Player ROLE player PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 
-    # The shipping player, only when a game's native directory is wired into this build
-    # (ENGINE_GAME_NATIVE_DIR/_TARGET, which the exporter sets and which work by hand too).
-    # Links the game's plugin statically through the same launcher; ShipMain's
-    # CreatePlugin reference pulls the registration from the game archive.
-    if(ENGINE_GAME_NATIVE_TARGET)
-        add_executable(Engine.GamePlayer ShipMain.cpp)
-        target_link_libraries(Engine.GamePlayer PRIVATE
-            Engine.Player.Main ${ENGINE_GAME_NATIVE_TARGET} Foundation::Policy)
-        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
+    # The project's player, when a project's packages are added to this build (ENGINE_PROJECT_PLUGINS,
+    # which the exporter sets and which works by hand too): the same launcher, with the packages
+    # linked through the generated registry, which the root CMakeLists adds once they are added.
+    if(ENGINE_PROJECT_PLUGINS)
+        add_executable(Engine.GamePlayer Main.cpp)
+        target_link_libraries(Engine.GamePlayer PRIVATE Engine.Player.Main Foundation::Policy)
         util_copy_runtime_deps(Engine.GamePlayer EXTRA ${BUILDSYSTEM_WGPU_LIB} ${BUILDSYSTEM_NOTICES_FILE})
         if(UNIX AND NOT APPLE)
             set_property(TARGET Engine.GamePlayer APPEND PROPERTY BUILD_RPATH "$ORIGIN")

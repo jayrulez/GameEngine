@@ -53,6 +53,7 @@ namespace
     {
     public:
         static inline u32 version = 1;
+        static inline u64 environment = 0;
         static inline bool fail = false;
 
         [[nodiscard]] const TypeInfo* AssetType() const override
@@ -64,6 +65,7 @@ namespace
             return &CookWidgetProduct::StaticType();
         }
         [[nodiscard]] u32 Version() const override { return version; }
+        [[nodiscard]] u64 EnvironmentHash() const override { return environment; }
 
         [[nodiscard]] Status Build(const Asset& asset, AssetBuildContext& ctx) override
         {
@@ -228,6 +230,7 @@ namespace
             builders.Register(UniquePtr<IAssetBuilder>(DefaultAllocator().New<VariantBuilder>(),
                                                        DefaultAllocator()));
             CookWidgetBuilder::version = 1;
+            CookWidgetBuilder::environment = 0;
             CookWidgetBuilder::fail = false;
         }
 
@@ -415,6 +418,14 @@ TEST_CASE("cook: source-file edit dirties exactly the consumer; settings + versi
     CookWidgetBuilder::version = 2;
     CookPlan p3 = driver.Plan();
     CHECK(p3.dirty.Size() == 2u);
+    (void)driver.Execute(p3);
+
+    // So does a change of what the builder compiles against (a script cook's surface).
+    CookWidgetBuilder::environment = 0x5EED;
+    CookPlan p4 = driver.Plan();
+    CHECK(p4.dirty.Size() == 2u);
+    (void)driver.Execute(p4);
+    CHECK(driver.Plan().dirty.IsEmpty());
 }
 
 TEST_CASE("cook: read deps chain hashes + order; references never dirty their consumer")

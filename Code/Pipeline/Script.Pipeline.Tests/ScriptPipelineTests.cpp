@@ -12,6 +12,7 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
+import pipeline.core;
 import script.pipeline;
 
 using namespace foundation::core;
@@ -96,4 +97,30 @@ TEST_CASE("script.pipeline: the shared startCoroutine( surface is detected neutr
     CHECK_FALSE(ScriptReferencesCoroutineStart(u8"class Mover {\n    onUpdate(dt) {}\n}\n"));
     // Only in real code, not a comment.
     CHECK_FALSE(ScriptReferencesCoroutineStart(u8"// startCoroutine(nope)\nclass Mover {\n}\n"));
+}
+
+// The script surface hash a script product's recipe carries: it moves when a runtime type joins
+// or leaves, not with the order the types registered in, and not for an editor-only type (which no
+// player has), so every host that cooks agrees on it.
+TEST_CASE("script.pipeline: the script surface hash follows the runtime types, in any order")
+{
+    const TypeInfo& asset = ScriptClassAsset::StaticType();
+    const TypeInfo& source = Asset::StaticType();
+    TypeRegistry one;
+    one.Register(asset);
+    const u64 alone = ScriptSurfaceHash(one);
+    one.Register(source);
+    const u64 both = ScriptSurfaceHash(one);
+    CHECK(alone != both);
+
+    TypeRegistry other;
+    other.Register(source);
+    other.Register(asset);
+    CHECK(ScriptSurfaceHash(other) == both);
+
+    other.Register(TypeOf<Float3>(), TypeDomain(StringView(u8"Editor")));
+    CHECK(ScriptSurfaceHash(other) == both);
+
+    other.Unregister(source.id);
+    CHECK(ScriptSurfaceHash(other) == alone);
 }

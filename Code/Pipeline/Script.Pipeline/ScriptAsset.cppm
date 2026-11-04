@@ -642,6 +642,13 @@ export namespace pipeline{
         Array<Entry> m_cooks;
     };
 
+    /// A hash of the script surface the player has: every runtime-domain type in `registry`, its id,
+    /// members and their shapes, whatever order they were registered in. A script's bytecode is
+    /// bound to it, so its change (an engine or native module whose facades changed) recooks the
+    /// scripts. Editor-only types stay out, so every host that cooks gets the same answer for the
+    /// same build and native module. Defined in ScriptAssetImpl.cpp.
+    [[nodiscard]] u64 ScriptSurfaceHash(const TypeRegistry& registry);
+
     // Cooks a ScriptClassAsset to a ScriptClassSource by delegating to the language cook the
     // asset's language resolves to. A thin shell: it reads the source, resolves the
     // cook, and delegates, with no language syntax and no VM handling.
@@ -664,6 +671,9 @@ export namespace pipeline{
             // Luau (or other bytecode) vendor bump recooks every script pack automatically.
             return 4 + ScriptLanguageCookRegistry::Get().CombinedCookVersion();
         }
+
+        // The script surface the products compile against and their bytecode binds to.
+        [[nodiscard]] u64 EnvironmentHash() const override { return ScriptSurfaceHash(GlobalTypeRegistry()); }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override

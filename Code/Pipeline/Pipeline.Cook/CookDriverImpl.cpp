@@ -554,6 +554,12 @@ namespace pipeline
         // 3. Builder version.
         h = detail::FoldHash(h, 'V', builder.Version());
 
+        // 3a. What the build compiles against (the script surface), when the builder has one.
+        if (const u64 environment = builder.EnvironmentHash(); environment != 0)
+        {
+            h = detail::FoldHash(h, 'X', environment);
+        }
+
         // 3b. Platform salt: only variant builders are salted by the target, so
         // the same source produces a distinct product per target (BC or ASTC) while invariant
         // products keep a target-independent recipe and copy forward unchanged.

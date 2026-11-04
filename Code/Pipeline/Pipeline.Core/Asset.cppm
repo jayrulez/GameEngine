@@ -165,6 +165,11 @@ export namespace pipeline
         // Whether this builder's product varies per export target. Default invariant (see BuildVariance).
         [[nodiscard]] virtual BuildVariance Variance() const { return BuildVariance::PlatformInvariant; }
 
+        // A hash of what a build compiles against beyond its sources and the instances it reads (a
+        // script cook: the script surface its products are bound to), folded into the recipe so a
+        // change recooks. 0, the default, folds nothing.
+        [[nodiscard]] virtual u64 EnvironmentHash() const { return 0; }
+
         // Declare extra dependencies (Asset::fileName is implicit). Default: none.
         virtual void ScanDependencies(const Asset& asset, AssetBuildContext& ctx,
                                       AssetDependencies& out)

@@ -11,6 +11,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 // Export-template id prefix; CMake bakes TEMPLATE_ID_PREFIX_VALUE on the policy target. It is
 // required, with no default in the source, which keeps the prefix value out of the source. Tests
@@ -25,6 +26,7 @@ import foundation.core;
 import foundation.vfs;
 import foundation.xml.serialization;
 import engine.project;
+import foundation.runtime; // the plugins a template carries (their manifests)
 import :export_preset; // ExportPreset, ExportPresetSet
 import :template_icons; // the icon a created template carries
 
@@ -35,6 +37,28 @@ export namespace editor
     namespace vfs = foundation::vfs;
 
     inline constexpr StringView kTemplateManifestFile = u8"template.xml";
+    // A template bundle's copy of each plugin's package files (its Plugin.xml and its deploy files):
+    // plugins/<id>/ under the bundle.
+    inline constexpr StringView kTemplatePluginsDir = u8"plugins";
+
+    // A plugin a template's player links: what an export checks a project's plugins against.
+    struct TemplatePlugin
+    {
+        String id;
+        String version;
+
+        void Serialize(ISerializer& ar)
+        {
+            foundation::core::Serialize(ar, "id", id);
+            foundation::core::Serialize(ar, "version", version);
+        }
+    };
+    inline void Serialize(ISerializer& ar, TemplatePlugin& value)
+    {
+        ar.BeginObject();
+        value.Serialize(ar);
+        ar.EndObject();
+    }
 
     // A prebuilt per-platform export bundle. The serialized fields come from template.xml; `directory`
     // and `isHost` are resolved at run time (the registry sets them) and not serialized. ISerializable so
@@ -59,6 +83,9 @@ export namespace editor
         // CreateTemplate), which the editor shows it with. Empty in a manifest without one, and then
         // the editor shows its platform's built-in icon.
         String icon;
+        // The plugins its player links (dormant until a project enables them), each with its
+        // version. Appended: a manifest written before reads none.
+        Array<TemplatePlugin> plugins;
 
         String directory;    // not serialized: the bundle's absolute directory (Bin for the host)
         bool isHost = false; // not serialized: synthesized for the host, not imported
@@ -244,6 +271,64 @@ export namespace editor
         }
     }
 
+    // A plugin a player links, as the build lists it beside the player ("<player>.plugins", one
+    // `id|package folder` line each; util_link_plugins): its id and its package folder, absolute
+    // (a relative one, a template bundle's copy, resolves against the player's directory).
+    struct PlayerPlugin
+    {
+        String id;
+        String packageDir;
+    };
+
+    // The plugins listed beside the player `playerBase` in `playerDir`; none when it lists none.
+    [[nodiscard]] inline Array<PlayerPlugin> ReadPlayerPlugins(StringView playerDir, StringView playerBase)
+    {
+        Array<PlayerPlugin> plugins;
+        Result<Array<byte>> bytes = ReadFile(PathJoin(playerDir, Format(u8"{}.plugins", playerBase).AsView()).AsView());
+        if (!bytes.HasValue())
+        {
+            return plugins;
+        }
+        const StringView text(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        usize start = 0;
+        for (usize i = 0; i <= text.Size(); ++i)
+        {
+            if (i < text.Size() && text[i] != u8'\n')
+            {
+                continue;
+            }
+            const StringView line = Trim(text.SubStr(start, i - start));
+            start = i + 1;
+            const usize bar = line.Find(u8'|');
+            if (bar == StringView::kNotFound)
+            {
+                continue;
+            }
+            const StringView dir = line.SubStr(bar + 1, line.Size() - bar - 1);
+            const bool absolute = !dir.IsEmpty() && (dir[0] == u8'/' || (dir.Size() > 1 && dir[1] == u8':'));
+            plugins.PushBack(PlayerPlugin{String(line.SubStr(0, bar)), absolute ? String(dir) : PathJoin(playerDir, dir)});
+        }
+        return plugins;
+    }
+
+    // The template's record of `plugins`: each one's id and its manifest's version (a plugin whose
+    // manifest does not read is left out, and logged).
+    inline void RecordTemplatePlugins(Span<const PlayerPlugin> plugins, Array<TemplatePlugin>& out)
+    {
+        out.Clear();
+        for (const PlayerPlugin& plugin : plugins)
+        {
+            foundation::runtime::PluginManifest manifest;
+            if (!foundation::runtime::LoadPluginManifest(plugin.packageDir.AsView(), manifest, DefaultAllocator()).IsOk())
+            {
+                LOG_WARNING(u8"Export", u8"the player links plugin '{}', whose Plugin.xml at '{}' does not read", plugin.id,
+                            plugin.packageDir);
+                continue;
+            }
+            out.PushBack(TemplatePlugin{plugin.id, manifest.version});
+        }
+    }
+
     // Synthesizes the host's implicit template from the running tool's own directory (Bin/...), so a
     // development export for the current platform works with no import. Sidecars come from the
     // "<player>.runtime-libs" file the build writes in that directory (it depends on the config and
@@ -279,6 +364,8 @@ export namespace editor
             manifest += u8".runtime-libs";
             ReadRuntimeLibs(*hostToolFs, manifest.AsView(), out.sidecars);
         }
+        const Array<PlayerPlugin> plugins = ReadPlayerPlugins(hostToolDir, kPlayerBaseName);
+        RecordTemplatePlugins(Span<const PlayerPlugin>(plugins.Data(), plugins.Size()), out.plugins);
     }
 
     // The built-in default templates root: <user-data-dir>/templates.
@@ -491,6 +578,54 @@ export namespace editor
 
         tmpl.directory = bundleDir;
         vfs::NativeFileSystem bundleFs(bundleDir.AsView(), foundation::core::DefaultAllocator());
+
+        // The plugins the player links: each one's Plugin.xml and its deploy files for the template's
+        // platform, copied to plugins/<id>/ in the bundle, and the bundle's own list pointing at them,
+        // so an export stages what a plugin it enables deploys with no engine checkout at hand.
+        {
+            const Array<PlayerPlugin> linked = ReadPlayerPlugins(configDir, kPlayerBaseName);
+            String list;
+            for (const PlayerPlugin& plugin : linked)
+            {
+                foundation::runtime::PluginManifest manifest;
+                if (!foundation::runtime::LoadPluginManifest(plugin.packageDir.AsView(), manifest, DefaultAllocator()).IsOk())
+                {
+                    return Status{ErrorCode::NotFound}; // the bundle would carry a plugin it cannot describe
+                }
+                const String copyDir = Format(u8"{}/{}", kTemplatePluginsDir, plugin.id);
+                const String copyAbsolute = PathJoin(bundleDir.AsView(), copyDir.AsView());
+                if (!CreateDirectories(copyAbsolute.AsView()) ||
+                    !FileCopyPreserving(PathJoin(plugin.packageDir.AsView(), foundation::runtime::kPluginManifestFile).AsView(),
+                                        PathJoin(copyAbsolute.AsView(), foundation::runtime::kPluginManifestFile).AsView()))
+                {
+                    return Status{ErrorCode::Internal};
+                }
+                if (const foundation::runtime::PluginPlatform* platform = manifest.FindPlatform(tmpl.platform.AsView()))
+                {
+                    for (const String& file : platform->deploy)
+                    {
+                        const String target = PathJoin(copyAbsolute.AsView(), file.AsView());
+                        if (!CreateDirectories(PathParent(target.AsView())) ||
+                            !FileCopyPreserving(PathJoin(plugin.packageDir.AsView(), file.AsView()).AsView(), target.AsView()))
+                        {
+                            return Status{ErrorCode::NotFound}; // a deploy file the manifest lists is missing
+                        }
+                    }
+                }
+                list += Format(u8"{}|{}\n", plugin.id, copyDir).AsView();
+            }
+            RecordTemplatePlugins(Span<const PlayerPlugin>(linked.Data(), linked.Size()), tmpl.plugins);
+            if (!linked.IsEmpty())
+            {
+                if (Status s = bundleFs.AsWritable()->Save(
+                        Format(u8"{}.plugins", kPlayerBaseName).AsView(),
+                        Span<const byte>(reinterpret_cast<const byte*>(list.Data()), list.Size()));
+                    !s.IsOk())
+                {
+                    return s;
+                }
+            }
+        }
 
         // The icon the template carries (settled above): an .svg given by path copied in,
         // otherwise the built-in one named, or the platform's.

@@ -373,8 +373,12 @@ editor, the player and export still read `nativeModule`):
     `project_open`), each loading the parts its role takes; an Editor part is given the editor's
     context. Tests: each tool's role loads exactly its parts; a project's plugins load with it in
     the editor and unload as it closes; the app's host is replaced.
-  - **X4b**: the `Pipeline` contributions (builders, importers, creators), recorded and reversed,
-    the registries gaining removal.
+  - **X4b** (built 2026-11-04): the `Pipeline` contributions through `PipelinePluginServices`
+    (builders, importers, creators into the host's registries, which gain keyed removal), recorded
+    and reversed with the plugin's unload; the tools pass their registries to `ToolPlugins`, and the
+    editor attaches the service over its own to each project's host. Test: through the standalone
+    MCP host, a project that enables a plugin creates its asset with its creator and cooks it with
+    its builder, and a project that does not has neither.
   - **X4c**: the `Tooling` contributions (MCP tools, served by both MCP hosts, added and removed
     with their plugin).
   Tests run each host's load step against a linked four-part fixture; the real tools link no

@@ -165,3 +165,76 @@ TEST_CASE("defaultapp: its instances are the runs, on the subsystem manager for 
     app.ReleaseInstance(next);
 }
 
+
+namespace
+{
+    // What the probe plugin's Engine part found when it loaded, and whether it was unloaded.
+    struct PluginProbe
+    {
+        const runtime::ClientServices* client = nullptr;
+        engine::EnginePluginServices* engine = nullptr;
+        int loads = 0;
+        int unloads = 0;
+    };
+    PluginProbe g_pluginProbe;
+
+    void LoadProbePlugin(runtime::PluginContext& context)
+    {
+        g_pluginProbe.client = context.Find<runtime::ClientServices>();
+        g_pluginProbe.engine = context.Find<engine::EnginePluginServices>();
+        ++g_pluginProbe.loads;
+    }
+    void UnloadProbePlugin(runtime::PluginContext&) { ++g_pluginProbe.unloads; }
+
+    constexpr char8_t kProbePluginId[] = u8"app_probe";
+    const runtime::PluginPart* ProbePluginEngine()
+    {
+        static constexpr runtime::PluginPart part{kProbePluginId, runtime::PluginPartKind::Engine, &LoadProbePlugin,
+                                                  &UnloadProbePlugin};
+        return &part;
+    }
+}
+
+// The process's plugin host from the app: made only once the app is configured, it gives the
+// plugins this app's client services (its host and data mount) and the engine's service for Engine
+// parts, and the app's shutdown unloads them.
+TEST_CASE("defaultapp: CreatePluginHost offers the app's services, and the app's shutdown unloads the plugins")
+{
+    g_pluginProbe = PluginProbe{};
+    StubHost host;
+    engine::runtime::DefaultApplication app;
+    CHECK_FALSE(app.CreatePluginHost(runtime::HostRole::Player)); // not configured: nothing to offer
+    app.Configure(host);
+    UniquePtr<runtime::PluginHost> plugins = app.CreatePluginHost(runtime::HostRole::Player);
+    REQUIRE(plugins);
+    CHECK(plugins->Role() == runtime::HostRole::Player);
+
+    runtime::PluginManifest manifest;
+    manifest.id = String(kProbePluginId);
+    manifest.version = String(u8"0.1.0");
+    manifest.engineVersion = String(u8"0.1");
+    manifest.parts.PushBack(runtime::PluginManifestPart{String(u8"Engine")});
+    MemoryStream xml;
+    REQUIRE(runtime::WritePluginManifest(manifest, xml).IsOk());
+    Array<byte> text;
+    for (byte b : xml.Bytes())
+    {
+        text.PushBack(b);
+    }
+    text.PushBack(byte{0});
+    const runtime::PluginPartEntryFn parts[] = {&ProbePluginEngine};
+    const runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(text.Data()), parts, 1}};
+    REQUIRE(plugins->AddLinked(Span<const runtime::LinkedPlugin>(linked, 1)).IsOk());
+    const StringView enabled[] = {kProbePluginId};
+    REQUIRE(plugins->Load(Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+
+    REQUIRE(g_pluginProbe.client != nullptr);
+    CHECK(g_pluginProbe.client->host == &host);
+    CHECK(g_pluginProbe.client->data == &app.DataFileSystem());
+    CHECK(g_pluginProbe.engine != nullptr);
+    CHECK(g_pluginProbe.unloads == 0);
+
+    app.OnShutdown(host);
+    CHECK(g_pluginProbe.unloads == 1);
+    CHECK_FALSE(plugins->IsLoaded(kProbePluginId));
+}

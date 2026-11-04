@@ -15,8 +15,8 @@
 # which reads the build's runtime-libs manifest, copies the player and sidecars, and writes
 # template.xml.
 #
-# The Linux template is built RelWithDebInfo (the clang-reldbg preset, the tree the editor
-# distribution builds too, so a release builds the engine once): the player is optimised, and its
+# The Linux template is built RelWithDebInfo (the clang-reldbg preset: static, since a player links
+# its plugins statically; the editor distribution's tree is the shared one): the player is optimised, and its
 # debug info is split off before packaging: the template's player is stripped (an export copies it
 # as it is, so every game would carry it otherwise) and Engine.Player.debug goes to
 # <OUT>/linux64-release-symbols, to keep with the build. The template's config, and so its id, is
@@ -45,7 +45,7 @@ JOBS="${JOBS:-4}"
 OUT="${OUT:-}"
 WHICH="${1:-all}"
 
-LINUX_PRESET="clang-reldbg"            # RelWithDebInfo, shared with build-editor-dist.sh
+LINUX_PRESET="clang-reldbg"            # RelWithDebInfo, static (the player links its plugins)
 LINUX_BUILD="build/$LINUX_PRESET"
 LINUX_BIN="Bin/RelWithDebInfo/Linux64-Clang"
 WEB_BUILD="build/wasm-shipping"        # the wasm-shipping preset: emscripten, Release, shipping
@@ -100,6 +100,9 @@ build_linux() {
     rm -rf "build/tmp/template-stage" "$symbols"
     mkdir -p "$stage" "$symbols"
     cp "$LINUX_BIN/Engine.Player" "$stage/"
+    # The plugins the player links (util_link_plugins writes the list): the template records them
+    # and carries their package files.
+    [[ -f "$LINUX_BIN/Engine.Player.plugins" ]] && cp "$LINUX_BIN/Engine.Player.plugins" "$stage/"
     if [[ -f "$LINUX_BIN/Engine.Player.runtime-libs" ]]; then
         cp "$LINUX_BIN/Engine.Player.runtime-libs" "$stage/"
         while IFS= read -r lib; do

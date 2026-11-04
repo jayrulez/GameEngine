@@ -36,8 +36,8 @@ if(EMSCRIPTEN)
         ${_webscene_common_libs}
         Foundation::Shell.Web
         Foundation::Runtime.Web)
-    if(OPTION_EXTENSION_IMGUI)
-        target_link_libraries(WebScene PRIVATE Extensions::Imgui)
+    if(OPTION_PLUGIN_IMGUI)
+        util_link_plugins(WebScene ROLE player PLUGINS imgui) # Dear ImGui, loaded as a plugin
     endif()
 
     # Cook the WGSL shader pack with the native tool (the browser has no compiler) and bundle it
@@ -90,8 +90,8 @@ else()
         ${_webscene_common_libs}
         Foundation::Shell.Desktop
         Foundation::Runtime.Desktop)
-    if(OPTION_EXTENSION_IMGUI)
-        target_link_libraries(WebScene PRIVATE Extensions::Imgui)
+    if(OPTION_PLUGIN_IMGUI)
+        util_link_plugins(WebScene ROLE player PLUGINS imgui) # Dear ImGui, loaded as a plugin
     endif()
     util_copy_runtime_deps(WebScene) # SDL3 is vendored static; no DLL to stage
 

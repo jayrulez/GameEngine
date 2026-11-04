@@ -10,8 +10,9 @@ A template is NOT game content and NOT a toolchain - it is the prebuilt runtime 
 against. See Documentation/Systems/export-templates.md.
 
 What it does: configure the RelWithDebInfo preset for -Compiler if its build dir is missing
-(msvc-reldbg, or clang-reldbg: clang++ on the MSVC ABI - the tree build-editor-dist.ps1 builds, so a
-release builds the engine once), build Engine.Player (+ the native Tools.Export), then run
+(msvc-reldbg, or clang-reldbg: clang++ on the MSVC ABI; static, since a player links its plugins
+statically, while build-editor-dist.ps1 builds the shared tree), build Engine.Player (+ the native
+Tools.Export), then run
     Tools.Export.exe --template create Bin\RelWithDebInfo\Win64-<Compiler>
 which reads the build's runtime-libs manifest, copies the player + sidecars, writes template.xml.
 The player is optimised; its PDB (not part of the template) goes to <Out>\win64-release-symbols, to

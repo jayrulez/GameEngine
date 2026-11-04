@@ -174,3 +174,52 @@ TEST_CASE("engine.composition: RegisterAllScriptFacades installs exactly the dom
     engine::RegisterAllScriptFacades();
     CHECK(foundation::script::ExtraFacadeNames().Size() == first);
 }
+
+namespace
+{
+    int g_pluginTypesRegistered = 0;
+    int g_pluginFacadesRegistered = 0;
+    void RegisterPluginTypes() { ++g_pluginTypesRegistered; }
+    void RegisterPluginFacade() { ++g_pluginFacadesRegistered; }
+    void InstallPluginScene(scene::Scene&) {}
+
+    const resource::ResourceModule kPluginResources{u8"plugin_probe", &RegisterPluginTypes, nullptr, 0};
+    const resource::ResourceModule* const kPluginResourceList[] = {&kPluginResources};
+    const engine::DomainModule kPluginDomain{
+        .id = u8"plugin_probe",
+        .registerScriptFacade = &RegisterPluginFacade,
+        .resources = Span<const resource::ResourceModule* const>{kPluginResourceList, 1}};
+    const engine::DomainModule kPluginSceneDomain{.id = u8"plugin_scene", .installScene = &InstallPluginScene};
+}
+
+TEST_CASE("engine.composition: a plugin's domain joins the full composition in place, registers at once, and leaves on removal")
+{
+    const engine::EngineComposition& composition = engine::FullComposition();
+    const usize modules = composition.Modules().Size();
+    const usize resources = composition.ResourceModules().Size();
+    g_pluginTypesRegistered = 0;
+    g_pluginFacadesRegistered = 0;
+
+    const u64 token = engine::AddPluginDomain(kPluginDomain);
+    REQUIRE(token != 0u);
+    CHECK(&engine::FullComposition() == &composition); // the same object, rebuilt in place
+    CHECK(composition.Modules().Size() == modules + 1u);
+    CHECK(composition.ResourceModules().Size() == resources + 1u);
+    CHECK(composition.Modules()[modules] == &kPluginDomain); // after the engine's own
+    CHECK(g_pluginTypesRegistered == 1);
+    CHECK(g_pluginFacadesRegistered == 1);
+    engine::RegisterAllScriptFacades(); // later startup registration reaches it too
+    CHECK(g_pluginFacadesRegistered == 2);
+
+    engine::RemovePluginDomain(token);
+    CHECK(composition.Modules().Size() == modules);
+    CHECK(composition.ResourceModules().Size() == resources);
+}
+
+TEST_CASE("engine.composition: a plugin domain with a scene installer is refused")
+{
+    // A plugin's scene managers reach live scenes through SceneModuleContributions instead.
+    const usize modules = engine::FullComposition().Modules().Size();
+    CHECK(engine::AddPluginDomain(kPluginSceneDomain) == 0u);
+    CHECK(engine::FullComposition().Modules().Size() == modules);
+}

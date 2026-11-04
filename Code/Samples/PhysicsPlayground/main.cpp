@@ -26,7 +26,7 @@ import foundation.graphics.gpu;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import extensions.imgui;
+import imgui.engine;
 import foundation.physics;
 import foundation.physics.resource;
 import engine.physics;
@@ -42,7 +42,6 @@ namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
 namespace physics = foundation::physics;
-namespace imgui = extensions::imgui;
 namespace gui = foundation::gui;
 
 namespace
@@ -70,10 +69,14 @@ namespace
             // Physics, input and UI come from DefaultApplication; only the sample-local
             // extras register here (adding a subsystem twice gives two instances ticking).
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -292,6 +295,7 @@ namespace
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         // The node under `node` with `id` (a GUI tree from markup), or null.
         [[nodiscard]] static gui::Node* FindById(gui::Node& node, core::StringView id)
         {

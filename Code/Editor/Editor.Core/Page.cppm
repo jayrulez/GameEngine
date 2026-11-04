@@ -63,7 +63,7 @@ export namespace editor
     };
 
     /// A page that runs a game (a Game tab). The editor stops every one before it unloads code a
-    /// run executes (a native module reload); a run's own exit request stops only its own tab.
+    /// run executes (a plugin reload); a run's own exit request stops only its own tab.
     class IGameRunPage : public IPageService
     {
     public:

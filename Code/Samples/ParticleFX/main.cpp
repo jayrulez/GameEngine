@@ -26,7 +26,7 @@ import foundation.scene;
 import engine.scene;
 import engine.render;
 import foundation.render;
-import extensions.imgui;
+import imgui.engine;
 import foundation.geometry;
 import foundation.materials;
 import foundation.particles;           // the CPU sim (effect/system/modules)
@@ -46,7 +46,6 @@ namespace runtime = foundation::runtime;
 namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
-namespace imgui = extensions::imgui;
 namespace geometry = foundation::geometry;
 namespace materials = foundation::materials;
 namespace particles = foundation::particles;
@@ -83,10 +82,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -374,6 +377,7 @@ namespace
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         // 4x4 showcase grid, centered on the origin. Cells are indexed row-major (0..15); each holds one
         // particle system. Returns the cell's floor-level center (callers add any per-system y offset).
         static constexpr core::f32 kCellSpacing = 15.0f;

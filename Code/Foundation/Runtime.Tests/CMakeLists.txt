@@ -1,28 +1,48 @@
 # Foundation::Runtime unit tests (doctest).
 
-# A real plugin shared object, dlopen'd by the PluginHost::Load test.
-add_library(Runtime.TestPlugin MODULE TestPlugin.cpp)
-set_target_properties(Runtime.TestPlugin PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(Runtime.TestPlugin PRIVATE Foundation::Runtime Foundation::Policy)
+# A development package's part as a shared library, loaded by the plugin host's shared-part test.
+add_library(Runtime.TestPluginPart MODULE TestPluginPart.cpp)
+set_target_properties(Runtime.TestPluginPart PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(Runtime.TestPluginPart PRIVATE Foundation::Runtime Foundation::Policy)
 
 add_executable(Runtime.Tests
     TestsMain.cpp
-    RuntimeTests.cpp)
+    RuntimeTests.cpp
+    PluginManifestTests.cpp
+    PluginHostTests.cpp
+    PluginRegistryTests.cpp)
 
 target_link_libraries(Runtime.Tests PRIVATE Foundation::Runtime Foundation::Runtime.Client
     Foundation::Scene Foundation::Scene.Resource # the cross-boundary scene-contribution case
     doctest::doctest)
-add_dependencies(Runtime.Tests Runtime.TestPlugin)
+add_dependencies(Runtime.Tests Runtime.TestPluginPart)
 
 target_compile_definitions(Runtime.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
-    TEST_PLUGIN_PATH="$<TARGET_FILE:Runtime.TestPlugin>")
+    TEST_PLUGIN_PART_PATH="$<TARGET_FILE:Runtime.TestPluginPart>"
+    PLUGIN_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Fixtures"
+    PLUGIN_MANIFESTS_READ="${UTIL_PLUGIN_MANIFESTS_READ}"
+    PLUGIN_ROLES_FILE="${UTIL_PLUGIN_ROLES_FILE}")
+
+# Two fixture packages, probe depending on probe_base, linked the way a cook links its plugins:
+# the generated registry lists both (the dependency closure), with the parts a cook loads.
+util_add_plugin(Fixtures/ProbeBase)
+util_add_plugin(Fixtures/Probe)
+util_link_plugins(Runtime.Tests ROLE cook PLUGINS probe)
+
+# The four-part fixture goes through the build's manifest reader too, so the pin in
+# PluginManifestTests.cpp always covers dependencies and every part kind.
+util_read_plugin_manifest("${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/Everything/Plugin.xml" _fixture)
+util_record_plugin_manifest("${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/Everything/Plugin.xml"
+    "${_fixture_ID}" "${_fixture_PARTS}" "${_fixture_DEPENDS}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/Fixtures/Everything/Plugin.xml")
 
 target_compile_options(Runtime.Tests PRIVATE
     "$<$<CXX_COMPILER_ID:Clang>:-Wno-error=#warnings;-Wno-error=c2y-extensions>"
     "$<$<CXX_COMPILER_ID:GNU>:-Wno-error=cpp>")
 
-# The cross-boundary identity plugin, only in shared-engine builds (the supported
+# The cross-boundary identity plugin part, only in shared-engine builds (the supported
 # plugin model). It links the engine's .so set, so identity and rendezvous are
 # single-instance by construction; the test proves it across a real dlopen boundary.
 if(ENGINE_SHARED_LIBS)

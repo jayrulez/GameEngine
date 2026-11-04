@@ -573,9 +573,12 @@ export namespace pipeline{
 
         /// Compile-check `source` as Cook would, without running any of it and without the
         /// harvest: errors to `sink`, the class name (empty when none is found) to `className`.
-        /// For checking a script as it is typed. Returns whether it compiled.
+        /// The surface is every registered type less `hidden` (a platform without some plugins:
+        /// their types), and a use of a hidden type is an error. For checking a script as it is
+        /// typed, and for each platform it ships to. Returns whether it compiled.
         [[nodiscard]] virtual bool Check(StringView source, StringView assetName,
-                                         CookScriptErrorSink& sink, String& className) = 0;
+                                         CookScriptErrorSink& sink, String& className,
+                                         Span<const TypeId> hidden) = 0;
     };
 
     /// The cook registry (shaped like ScriptBackendRegistry): a language library registers its
@@ -644,9 +647,9 @@ export namespace pipeline{
 
     /// A hash of the script surface the player has: every runtime-domain type in `registry`, its id,
     /// members and their shapes, whatever order they were registered in. A script's bytecode is
-    /// bound to it, so its change (an engine or native module whose facades changed) recooks the
-    /// scripts. Editor-only types stay out, so every host that cooks gets the same answer for the
-    /// same build and native module. Defined in ScriptAssetImpl.cpp.
+    /// bound to it, so its change (a plugin enabled, removed or updated) recooks the scripts.
+    /// Editor-only types stay out, so every host that cooks gets the same answer for the same
+    /// build and plugins. Defined in ScriptAssetImpl.cpp.
     [[nodiscard]] u64 ScriptSurfaceHash(const TypeRegistry& registry);
 
     // Cooks a ScriptClassAsset to a ScriptClassSource by delegating to the language cook the
@@ -878,7 +881,7 @@ export namespace pipeline{
             }
             CookScriptErrorSink sink;
             String className;
-            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), sink, className);
+            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), sink, className, Span<const TypeId>{});
             for (const CookScriptErrorSink::Entry& entry : sink.errors)
             {
                 CompileError e;

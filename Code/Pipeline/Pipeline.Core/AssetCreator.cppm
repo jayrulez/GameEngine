@@ -153,20 +153,38 @@ export namespace pipeline
     {
     public:
         explicit AssetCreatorRegistry(IAllocator& allocator)
-            : m_allocator(&allocator), m_creators(allocator)
+            : m_allocator(&allocator), m_creators(allocator), m_keys(allocator)
         {
         }
 
         /// What a creator that builds in memory first allocates from (a primitive's mesh).
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
-        /// A creator with no run is dropped.
-        void Register(AssetCreator creator)
+        /// Adds a creator; its key for Unregister. A creator with no run is dropped (key 0).
+        u64 Register(AssetCreator creator)
         {
-            if (creator.run)
+            if (!creator.run)
             {
-                m_creators.PushBack(Move(creator));
+                return 0;
             }
+            m_creators.PushBack(Move(creator));
+            m_keys.PushBack(m_nextKey);
+            return m_nextKey++;
+        }
+
+        /// Removes the creator Register gave `key` for; false when there is none.
+        bool Unregister(u64 key)
+        {
+            for (usize i = 0; i < m_keys.Size(); ++i)
+            {
+                if (m_keys[i] == key)
+                {
+                    m_creators.RemoveAt(i);
+                    m_keys.RemoveAt(i);
+                    return true;
+                }
+            }
+            return false;
         }
 
         [[nodiscard]] usize Count() const noexcept { return m_creators.Size(); }
@@ -213,5 +231,7 @@ export namespace pipeline
     private:
         IAllocator* m_allocator;
         Array<AssetCreator> m_creators;
+        Array<u64> m_keys; // beside m_creators
+        u64 m_nextKey = 1;
     };
 }

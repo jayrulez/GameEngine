@@ -145,7 +145,9 @@ themselves: toon bands, and lighting that walks the scene's lights. Its lessons 
 |:---:|:---:|:---:|:---:|
 | ![The hall](Documentation/Images/ShaderGallery-Hall.png) | ![Hologram](Documentation/Images/ShaderGallery-Hologram.png) | ![Dissolve](Documentation/Images/ShaderGallery-Dissolve.png) | ![Toon](Documentation/Images/ShaderGallery-Toon.png) |
 
-**NativeSample** is the reference for a game with native C++ code beside its scripts.
+**NativeSample** is the reference for a game's own native C++ code: a plugin package with all
+four parts (runtime, pipeline, tooling and editor), and a scene of cubes its native Spin component
+turns.
 
 ## Platform support
 

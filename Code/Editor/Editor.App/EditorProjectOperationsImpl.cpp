@@ -287,10 +287,14 @@ namespace editor::app
         const String toolDir = m_seams.hostToolDir;
         const String templatesRoot = m_seams.templatesRoot;
         const String dataRoot = m_seams.dataRoot;
+        // The project's plugins as the editor loaded them: the export checks the scripts against them
+        // and runs their hooks.
+        const editor::ExportPlugins plugins{m_seams.context != nullptr ? m_seams.context->Plugins() : nullptr,
+                                            m_seams.context != nullptr ? m_seams.context->ExportHooks() : nullptr};
         (void)m_seams.tasks->Submit(
             Format(u8"Export {}", shared->preset.name.AsView()).AsView(),
             Function<Status(TaskContext&)>{
-                [shared, project, builders, toolDir, templatesRoot, dataRoot](
+                [shared, project, builders, toolDir, templatesRoot, dataRoot, plugins](
                     TaskContext& ctx) -> Status
                 {
                     foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(),
@@ -310,7 +314,7 @@ namespace editor::app
                         *project, shared->preset, templates, *builders, shared->outRoot.AsView(),
                         dataRoot.AsView(), /*rebuild=*/false, &shared->result, onProgress,
                         /*cook=*/false, &shared->sceneStreams, /*scanner=*/nullptr,
-                        shared->reachableValid ? &shared->reachableRoots : nullptr);
+                        shared->reachableValid ? &shared->reachableRoots : nullptr, plugins);
                 }},
             Function<void(Status)>{[shared](Status status)
                                    {

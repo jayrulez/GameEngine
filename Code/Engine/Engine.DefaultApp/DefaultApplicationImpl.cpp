@@ -16,7 +16,9 @@ module engine.defaultapp;
 import foundation.core;
 import foundation.rhi;
 import foundation.shaders.system;      // ShaderSystem: the service the shader factory asks for
-import foundation.runtime.client;       // IApplication, IApplicationHost
+import engine.project;                 // kEngineVersionString (what plugins are checked against)
+import foundation.runtime;              // PluginHost (the process's plugins, CreatePluginHost)
+import foundation.runtime.client;       // IApplication, IApplicationHost, ClientServices
 import engine.gameinstance; // GameInstance: this app's running game (scene and script bracket)
 import foundation.shell;                // IShell, IKeyboard, KeyCode (the profile-dump hotkey)
 import foundation.graphics;             // GraphicsDevice, FrameContext
@@ -671,8 +673,42 @@ namespace engine::runtime
         }
     }
 
+    foundation::runtime::PluginHost* DefaultApplication::CreatePluginHost(foundation::runtime::HostRole role)
+    {
+        if (m_host == nullptr)
+        {
+            return nullptr; // not configured yet: there is no host or data mount to offer
+        }
+        DestroyPluginHost(); // one per process
+        core::IAllocator& allocator = m_host->Subsystems().Allocator();
+        core::UniquePtr<foundation::runtime::PluginHost> plugins = core::MakeUnique<foundation::runtime::PluginHost>(
+            allocator, allocator, m_host->Subsystems(), role, engine::project::kEngineVersionString);
+        m_clientServices.host = m_host;
+        m_clientServices.data = m_dataFileSystem.Get();
+        if (!m_enginePluginServices)
+        {
+            m_enginePluginServices = core::MakeUnique<engine::EnginePluginServices>(allocator, allocator);
+        }
+        (void)plugins->Provide(m_clientServices); // a new host has loaded nothing: both are accepted
+        (void)m_enginePluginServices->Attach(*plugins);
+        m_plugins = core::Move(plugins);
+        return m_plugins.Get();
+    }
+
+    void DefaultApplication::DestroyPluginHost(bool closeLibraries)
+    {
+        if (m_plugins)
+        {
+            m_plugins->Unload(closeLibraries);
+            m_plugins.Reset();
+        }
+    }
+
     void DefaultApplication::OnShutdown(IApplicationHost& host)
     {
+        // The plugins first, after the subsystems have stopped and before anything they added to
+        // goes: the reverse of their load, which came between Configure and the start.
+        DestroyPluginHost();
         // The subsystems have shut down (and stopped listening): nothing reaches the runs through
         // the subsystem manager after this. The runs themselves go with the app.
         host.Subsystems().SetRunManager(nullptr);

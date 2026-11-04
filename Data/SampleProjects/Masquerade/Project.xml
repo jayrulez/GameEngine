@@ -1,14 +1,13 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">10</u32>
+		<u32 name="version">11</u32>
 	</array>
 	<string name="name">Masquerade</string>
 	<string name="engineVersion">0.1.0</string>
 	<string name="defaultSceneId">20eb69af-217d-4b37-93d2-d032e63094fb</string>
 	<string name="defaultScene">Scenes/Palace</string>
 	<string name="startupScript">Scripts/Masquerade</string>
-	<string name="nativeModule"/>
 	<string name="defaultInputMapId">ae9c2367-82f0-4ff7-924f-c9b1e73acb2c</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">f61c25d2-80ca-4a8c-9e05-706e479c8c0f</string>
@@ -27,4 +26,5 @@
 		<string>6bd080d4-e1a9-441d-a6fb-dd7014782f16</string>
 	</array>
 	<string name="guiLoadingDocumentId">00000000-0000-0000-0000-000000000000</string>
+	<array name="plugins" count="0"/>
 </root>

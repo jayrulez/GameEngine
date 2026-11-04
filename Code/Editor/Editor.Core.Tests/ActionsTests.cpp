@@ -6,6 +6,7 @@
 // overrides, collisions, reset), the change notification, and the refusal of a bad or
 // duplicate registration.
 #include <doctest/doctest.h>
+#include <initializer_list>
 #include "Core/Prelude.h"
 
 import foundation.core;
@@ -300,6 +301,30 @@ TEST_CASE("actions: a registration without an id, a label or execute is refused,
     CHECK(actions.Execute(u8"x.y").IsOk());
     CHECK(first == 1u);
     CHECK(second == 0u);
+}
+
+// A plugin's action leaves the registry as its plugin unloads: the others keep their places and
+// their lookups, and a shortcut the user bound to it holds again when it comes back.
+TEST_CASE("actions: an unregistered action is gone, the rest still found, its user shortcut kept")
+{
+    EditorActionRegistry actions;
+    for (StringView id : {StringView(u8"a.one"), StringView(u8"b.two"), StringView(u8"c.three")})
+    {
+        EditorActionDeclaration declaration = Declare(id, u8"Label");
+        declaration.execute = [](EditorPage*) {};
+        REQUIRE(actions.Register(Move(declaration)));
+    }
+    REQUIRE(actions.Rebind(u8"b.two", EditorShortcut::Of(u8"ctrl-k")).IsOk());
+    CHECK(actions.Unregister(u8"b.two"));
+    CHECK_FALSE(actions.Unregister(u8"b.two")); // gone already
+    CHECK(actions.Count() == 2u);
+    CHECK(actions.Find(u8"b.two") == nullptr);
+    REQUIRE(actions.Find(u8"c.three") != nullptr);
+    CHECK(actions.Find(u8"c.three")->id == u8"c.three");
+    EditorActionDeclaration again = Declare(u8"b.two", u8"Back");
+    again.execute = [](EditorPage*) {};
+    REQUIRE(actions.Register(Move(again)));
+    CHECK(actions.Shortcut(u8"b.two") == EditorShortcut::Of(u8"ctrl-k"));
 }
 
 TEST_CASE("actions: AppendActionItems adds a context menu's items from the declarations over a "

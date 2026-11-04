@@ -37,11 +37,11 @@ TEST_CASE("app actions: a menu registers what can run, with its keys; what needs
     int reloads = 0;
     app::ProjectActions project;
     project.context = &context;
-    project.reloadNativeModule = [&reloads]() { ++reloads; };
+    project.reloadPlugins = [&reloads]() { ++reloads; };
     project.reportResourceMemory = []() {};
     app::RegisterProjectActions(actions, Move(project));
-    CHECK_FALSE(actions.IsEnabled(u8"project.reloadNativeModule", nullptr)); // no project open
-    CHECK_FALSE(actions.Execute(u8"project.reloadNativeModule", nullptr).IsOk());
+    CHECK_FALSE(actions.IsEnabled(u8"project.reloadPlugins", nullptr)); // no project open
+    CHECK_FALSE(actions.Execute(u8"project.reloadPlugins", nullptr).IsOk());
     CHECK(reloads == 0);
     CHECK(actions.Find(u8"project.reportResourceMemory")->readOnly);
 

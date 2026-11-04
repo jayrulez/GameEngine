@@ -539,7 +539,7 @@ jobs:
       - name: Verify the Vulkan backend is in the build
         shell: pwsh
         run: |
-          $cache = 'build/msvc-reldbg/CMakeCache.txt'
+          $cache = 'build/msvc-reldbg-shared/CMakeCache.txt' # the editor's tree (shared)
           if (-not (Test-Path $cache)) { throw "$cache missing - did the dist build change its preset?" }
           $line = Select-String -Path $cache -Pattern '^Vulkan_LIBRARY:FILEPATH=(.+)$' |
                   Select-Object -First 1

@@ -13,6 +13,7 @@ import foundation.core;
 import foundation.vfs;
 import foundation.content;
 import foundation.xml.serialization;
+import foundation.runtime; // the plugins' entries
 import engine.project;
 import editor.core;
 
@@ -396,7 +397,7 @@ TEST_CASE("project: a version 9 manifest opens without the old UI's two settings
 TEST_CASE("editor-project: the settings describe themselves, and the path mirrors follow the guids")
 {
     const TypeInfo& type = engine::project::ProjectSettings::StaticType();
-    CHECK(type.dataVersion == 10u); // version 10 drops the old UI's theme and loading document
+    CHECK(type.dataVersion == 11u); // version 11 drops the native module path for the game's package
     CHECK(type.minReadDataVersion == 9u); // a version 9 manifest still reads
     u32 assets = 0;
     u32 lists = 0;
@@ -704,4 +705,364 @@ TEST_CASE("project settings: the window in a few words, and the settings that su
     CHECK(summary[1] == StringView(u8"Startup script"));
     CHECK(summary[2] == StringView(u8"Input map"));
     CHECK(summary[3] == StringView(u8"UI font"));
+}
+
+// The plugins list is appended: a manifest without it opens with none. An entry keeps its
+// platforms and its settings as written, whether or not any plugin here reads them, through a
+// save, a reopen and the dist copy.
+TEST_CASE("project: the plugins list is appended, and an entry no plugin here reads is kept as written")
+{
+    const StringView dir = u8"scratch_project_plugins_test";
+    (void)FileDelete(PathJoin(dir, u8"Project.xml"));
+    (void)RemoveDirectory(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
+    const String manifestPath = PathJoin(dir, u8"Project.xml");
+    const auto manifestText = [&manifestPath]()
+    {
+        Result<Array<byte>> bytes = ReadFile(manifestPath.AsView());
+        REQUIRE(bytes.HasValue());
+        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    };
+
+    // Saved before the list: strip its key from the manifest the create wrote.
+    {
+        String older = manifestText();
+        const usize start = older.AsView().Find(u8"<array name=\"plugins\"");
+        REQUIRE(start != StringView::kNotFound);
+        const usize close = older.AsView().Find(u8"/>", start);
+        REQUIRE(close != StringView::kNotFound);
+        older.Remove(start, close + 2 - start);
+        foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
+        REQUIRE(root.AsWritable()
+                    ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(older.Data()), older.Size()))
+                    .IsOk());
+    }
+    const StringView unknown = u8"<object name=\"mystery\"><i32 name=\"appId\">480</i32></object>";
+    {
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        CHECK(project->Settings().plugins.IsEmpty());
+
+        foundation::runtime::EnabledPlugin steam;
+        steam.id = String(u8"steam");
+        steam.platforms.PushBack(String(u8"Linux64"));
+        steam.platforms.PushBack(String(u8"Win64"));
+        steam.settings.Resize(unknown.Size());
+        MemCopy(steam.settings.Data(), unknown.Data(), unknown.Size());
+        project->Settings().plugins.PushBack(Move(steam));
+        foundation::runtime::EnabledPlugin game;
+        game.id = String(u8"game");
+        game.path = String(u8"Native");
+        project->Settings().plugins.PushBack(Move(game));
+        REQUIRE(project->SaveSettings().IsOk());
+    }
+    const String saved = manifestText();
+    CHECK(saved.AsView().Contains(u8"<i32 name=\"appId\">480</i32>"));
+    {
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        engine::project::ProjectSettings& settings = project->Settings();
+        REQUIRE(settings.plugins.Size() == 2u);
+        REQUIRE(settings.FindPlugin(u8"steam") != nullptr);
+        CHECK(settings.FindPlugin(u8"steam")->platforms.Size() == 2u);
+        CHECK(settings.FindPlugin(u8"game")->path == String(u8"Native"));
+        CHECK(settings.FindPlugin(u8"absent") == nullptr);
+        REQUIRE(project->SaveSettings().IsOk());
+        CHECK(manifestText() == saved); // read and written back unchanged
+
+        engine::project::ProjectSettings dist;
+        REQUIRE(engine::project::CopyProjectSettings(settings, dist).IsOk());
+        REQUIRE(dist.FindPlugin(u8"steam") != nullptr);
+        const Array<u8>& copied = dist.FindPlugin(u8"steam")->settings;
+        CHECK(StringView(reinterpret_cast<const utf8char*>(copied.Data()), copied.Size()).Contains(u8"\"appId\">480<"));
+    }
+    (void)FileDelete(manifestPath.AsView());
+    (void)RemoveDirectory(dir);
+}
+
+namespace
+{
+    // A plugin with all four parts, linked into this test as the generated registry links one: each
+    // part records its kind as it loads and unloads.
+    constexpr char8_t kFourParts[] = u8"four_parts";
+    Array<String>& FourPartsLog()
+    {
+        static Array<String> log;
+        return log;
+    }
+    template <foundation::runtime::PluginPartKind Kind>
+    void FourPartsLoad(foundation::runtime::PluginContext&)
+    {
+        FourPartsLog().PushBack(Format(u8"load:{}", foundation::runtime::PluginPartKindName(Kind)));
+    }
+    template <foundation::runtime::PluginPartKind Kind>
+    void FourPartsUnload(foundation::runtime::PluginContext&)
+    {
+        FourPartsLog().PushBack(Format(u8"unload:{}", foundation::runtime::PluginPartKindName(Kind)));
+    }
+    template <foundation::runtime::PluginPartKind Kind>
+    const foundation::runtime::PluginPart* FourPartsPart()
+    {
+        static constexpr foundation::runtime::PluginPart part{kFourParts, Kind, &FourPartsLoad<Kind>, &FourPartsUnload<Kind>};
+        return &part;
+    }
+
+    struct FourPartsLinked
+    {
+        Array<byte> manifest;
+        foundation::runtime::PluginPartEntryFn parts[4] = {
+            &FourPartsPart<foundation::runtime::PluginPartKind::Engine>, &FourPartsPart<foundation::runtime::PluginPartKind::Pipeline>,
+            &FourPartsPart<foundation::runtime::PluginPartKind::Tooling>, &FourPartsPart<foundation::runtime::PluginPartKind::Editor>};
+        foundation::runtime::LinkedPlugin linked[1]{};
+
+        FourPartsLinked()
+        {
+            foundation::runtime::PluginManifest written;
+            written.id = String(kFourParts);
+            written.name = String(u8"Four parts");
+            written.version = String(u8"1.0");
+            written.engineVersion = String(engine::project::kEngineVersionString);
+            for (foundation::runtime::PluginPartKind kind : foundation::runtime::kPluginPartKinds)
+                written.parts.PushBack(foundation::runtime::PluginManifestPart{String(foundation::runtime::PluginPartKindName(kind))});
+            written.platforms.PushBack(foundation::runtime::PluginPlatform{String(GetHostPlatformName())});
+            MemoryStream xml;
+            REQUIRE(foundation::runtime::WritePluginManifest(written, xml).IsOk());
+            for (byte b : xml.Bytes())
+                manifest.PushBack(b);
+            manifest.PushBack(byte{0});
+            linked[0] = foundation::runtime::LinkedPlugin{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 4};
+        }
+        [[nodiscard]] Span<const foundation::runtime::LinkedPlugin> List() const { return Span<const foundation::runtime::LinkedPlugin>(linked, 1); }
+    };
+}
+
+// A headless tool has no application: its plugins run over a subsystem manager of its own, and each
+// tool loads exactly the parts its role takes of the plugins the project enables, unloading them
+// when it goes.
+TEST_CASE("tool plugins: the cook, the exporter and the MCP host each load the parts their role takes")
+{
+    const StringView dir = u8"scratch_project_tool_plugins";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"Tools").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(kFourParts);
+    project->Settings().plugins.PushBack(Move(entry));
+    const FourPartsLinked linked;
+
+    const auto loadsFor = [&](foundation::runtime::HostRole role)
+    {
+        FourPartsLog().Clear();
+        {
+            ToolPlugins plugins(DefaultAllocator(), role, *project, linked.List());
+            CHECK(plugins.Report().loaded.Size() == 1u);
+            CHECK(plugins.Host().IsLoaded(kFourParts));
+            CHECK(plugins.Host().Role() == role);
+        }
+        Array<String> loads;
+        bool unloaded = false;
+        for (const String& line : FourPartsLog())
+        {
+            if (line.AsView().StartsWith(u8"load:"))
+                loads.PushBack(String(line.AsView().SubStr(5, line.Size() - 5)));
+            unloaded = unloaded || line.AsView().StartsWith(u8"unload:");
+        }
+        CHECK(unloaded); // the tool's plugins went with it
+        String joined;
+        for (const String& kind : loads)
+        {
+            joined += joined.IsEmpty() ? u8"" : u8",";
+            joined += kind.AsView();
+        }
+        return joined;
+    };
+    CHECK(loadsFor(foundation::runtime::HostRole::Cook) == String(u8"Engine,Pipeline"));
+    CHECK(loadsFor(foundation::runtime::HostRole::Export) == String(u8"Engine,Pipeline,Tooling"));
+    CHECK(loadsFor(foundation::runtime::HostRole::Mcp) == String(u8"Engine,Pipeline,Tooling"));
+
+    // A plugin this tool does not link stays missing; the project keeps its entry.
+    {
+        ToolPlugins plugins(DefaultAllocator(), foundation::runtime::HostRole::Cook, *project,
+                            Span<const foundation::runtime::LinkedPlugin>{});
+        REQUIRE(plugins.Report().FindRefusal(kFourParts) != nullptr);
+        CHECK(project->Settings().FindPlugin(kFourParts) != nullptr);
+    }
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}
+
+// Before version 11 a project named its native game module by its library path (nativeModule).
+// Such a manifest still opens: the path becomes the entry of the game's package, Plugins/<Game>, its
+// id the name in lower case, and a save writes version 11 without it. An empty path adds nothing.
+TEST_CASE("project: a version 10 manifest's native module becomes the entry of the game's package")
+{
+    const auto open = [](StringView dir, StringView nativeModule)
+    {
+        (void)RemoveDirectoryRecursive(dir);
+        const String text = Format(
+            u8"<root>\n"
+            u8"<array name=\"dataVersions\" count=\"1\"><u64 name=\"type\">{}</u64><u32 name=\"version\">10</u32></array>\n"
+            u8"<string name=\"name\">Old</string>\n"
+            u8"<string name=\"engineVersion\">0.1.0</string>\n"
+            u8"<string name=\"defaultSceneId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"defaultScene\"/>\n"
+            u8"<string name=\"startupScript\"/>\n"
+            u8"<string name=\"nativeModule\">{}</string>\n"
+            u8"<string name=\"defaultInputMapId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"defaultBusLayoutId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"startupScriptId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<string name=\"defaultUiFontId\">00000000-0000-0000-0000-000000000000</string>\n"
+            u8"<u32 name=\"renderMsaaSamples\">2</u32>\n"
+            u8"</root>\n",
+            engine::project::ProjectSettings::StaticType().id, nativeModule);
+        REQUIRE(CreateDirectories(dir));
+        foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
+        REQUIRE(root.AsWritable()->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(text.CStr()), text.Size())).IsOk());
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        CHECK(project->Settings().renderMsaaSamples == 2u); // read past the dropped path
+        return project;
+    };
+
+    {
+        const StringView dir = u8"scratch_project_v10_native";
+        UniquePtr<EditorProject> project = open(dir, u8"Native/libOldGame.so");
+        REQUIRE(project->Settings().plugins.Size() == 1u);
+        const foundation::runtime::EnabledPlugin& entry = project->Settings().plugins[0];
+        CHECK(entry.id == String(u8"oldgame"));
+        CHECK(entry.path == String(u8"Plugins/OldGame"));
+        CHECK(entry.platforms.IsEmpty());
+        REQUIRE(project->SaveSettings().IsOk());
+        const Result<Array<byte>> saved = ReadFile(PathJoin(dir, u8"Project.xml").AsView());
+        REQUIRE(saved.HasValue());
+        const StringView savedText(reinterpret_cast<const utf8char*>(saved.Value().Data()), saved.Value().Size());
+        CHECK_FALSE(savedText.Contains(u8"\"nativeModule\""));
+        CHECK(savedText.Contains(u8"<u32 name=\"version\">11</u32>"));
+        project.Reset();
+        UniquePtr<EditorProject> again = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(again));
+        CHECK(again->Settings().plugins.Size() == 1u); // migrated once, not again
+        again.Reset();
+        (void)RemoveDirectoryRecursive(dir);
+    }
+    {
+        const StringView dir = u8"scratch_project_v10_native_dll";
+        UniquePtr<EditorProject> project = open(dir, u8"Native/2 Fast.dll");
+        REQUIRE(project->Settings().plugins.Size() == 1u);
+        CHECK(project->Settings().plugins[0].id == String(u8"game_2_fast"));
+        CHECK(project->Settings().plugins[0].path == String(u8"Plugins/2 Fast"));
+        project.Reset();
+        (void)RemoveDirectoryRecursive(dir);
+    }
+    {
+        const StringView dir = u8"scratch_project_v10_scripts";
+        UniquePtr<EditorProject> project = open(dir, u8"");
+        CHECK(project->Settings().plugins.IsEmpty());
+        project.Reset();
+        (void)RemoveDirectoryRecursive(dir);
+    }
+}
+
+namespace
+{
+    // A package folder under the project's Plugins/ with a manifest of `id` (and `engineVersion`).
+    void WriteProjectPackage(StringView projectDir, StringView folder, StringView id,
+                             StringView engineVersion = engine::project::kEngineVersionString)
+    {
+        foundation::runtime::PluginManifest manifest;
+        manifest.id = String(id);
+        manifest.name = Format(u8"{} package", id);
+        manifest.version = String(u8"0.3.0");
+        manifest.engineVersion = String(engineVersion);
+        manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+        manifest.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Linux64")});
+        const String dir = PathJoin(PathJoin(projectDir, u8"Plugins").AsView(), folder);
+        REQUIRE(CreateDirectories(dir.AsView()));
+        MemoryStream xml;
+        REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+        REQUIRE(WriteFile(PathJoin(dir.AsView(), u8"Plugin.xml").AsView(), xml.Bytes()).IsOk());
+    }
+
+    [[nodiscard]] const engine::project::AvailablePlugin* FindAvailable(const Array<engine::project::AvailablePlugin>& found,
+                                                                        StringView id, StringView path)
+    {
+        for (const engine::project::AvailablePlugin& plugin : found)
+        {
+            if (plugin.id == id && plugin.path == path)
+            {
+                return &plugin;
+            }
+        }
+        return nullptr;
+    }
+}
+
+// A package extracted into the project's Plugins folder is available, not enabled: discovery lists
+// each package no entry names (with what its manifest says) and each linked plugin no entry
+// enables, and reports, without offering it, a package whose manifest does not read, whose engine
+// is another, or whose id is taken; a folder with no Plugin.xml is no package, and an entry's own
+// package is not listed.
+TEST_CASE("project: discovery lists the packages in Plugins/ and the linked plugins no entry enables")
+{
+    const StringView dir = u8"scratch_project_discovery";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"Discovery").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    WriteProjectPackage(dir, u8"Lantern", u8"lantern");
+    WriteProjectPackage(dir, u8"LanternCopy", u8"lantern");
+    WriteProjectPackage(dir, u8"Old", u8"old_engine", u8"0.0");
+    WriteProjectPackage(dir, u8"Mine", u8"mine");
+    WriteProjectPackage(dir, u8"Taken", u8"taken");
+    REQUIRE(CreateDirectories(PathJoin(dir, u8"Plugins/Broken").AsView()));
+    const StringView garbage = u8"not xml";
+    REQUIRE(WriteFile(PathJoin(dir, u8"Plugins/Broken/Plugin.xml").AsView(),
+                      Span<const byte>(reinterpret_cast<const byte*>(garbage.Data()), garbage.Size()))
+                .IsOk());
+    REQUIRE(CreateDirectories(PathJoin(dir, u8"Plugins/Notes").AsView())); // no Plugin.xml: no package
+    foundation::runtime::EnabledPlugin mine;
+    mine.id = String(u8"mine");
+    mine.path = String(u8"Plugins/Mine");
+    project->Settings().plugins.PushBack(Move(mine));
+    foundation::runtime::EnabledPlugin taken;
+    taken.id = String(u8"taken");
+    taken.path = String(u8"Elsewhere/Taken");
+    project->Settings().plugins.PushBack(Move(taken));
+    const FourPartsLinked linked;
+
+    const Array<engine::project::AvailablePlugin> found =
+        engine::project::DiscoverPlugins(dir, project->Settings(), linked.List(), DefaultAllocator());
+
+    const engine::project::AvailablePlugin* lantern = FindAvailable(found, u8"lantern", u8"Plugins/Lantern");
+    REQUIRE(lantern != nullptr);
+    CHECK(lantern->problem.IsEmpty());
+    CHECK(lantern->name == String(u8"lantern package"));
+    CHECK(lantern->version == String(u8"0.3.0"));
+    REQUIRE(lantern->parts.Size() == 1u);
+    CHECK(lantern->parts[0] == String(u8"Engine"));
+    REQUIRE(lantern->platforms.Size() == 1u);
+    const engine::project::AvailablePlugin* copy = FindAvailable(found, u8"lantern", u8"Plugins/LanternCopy");
+    REQUIRE(copy != nullptr);
+    CHECK(copy->problem.AsView().Contains(u8"is also in 'Plugins/Lantern'"));
+    const engine::project::AvailablePlugin* old = FindAvailable(found, u8"old_engine", u8"Plugins/Old");
+    REQUIRE(old != nullptr);
+    CHECK_FALSE(old->problem.IsEmpty());
+    const engine::project::AvailablePlugin* takenPackage = FindAvailable(found, u8"taken", u8"Plugins/Taken");
+    REQUIRE(takenPackage != nullptr);
+    CHECK(takenPackage->problem.AsView().Contains(u8"already enabled from 'Elsewhere/Taken'"));
+    const engine::project::AvailablePlugin* broken = FindAvailable(found, u8"", u8"Plugins/Broken");
+    REQUIRE(broken != nullptr);
+    CHECK(broken->problem.AsView().Contains(u8"does not read"));
+    CHECK(FindAvailable(found, u8"mine", u8"Plugins/Mine") == nullptr); // an entry's own package
+    const engine::project::AvailablePlugin* fourParts = FindAvailable(found, kFourParts, u8"");
+    REQUIRE(fourParts != nullptr); // linked, no entry
+    CHECK(fourParts->problem.IsEmpty());
+    for (const engine::project::AvailablePlugin& plugin : found)
+    {
+        CHECK(plugin.path != String(u8"Plugins/Notes"));
+    }
+
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
 }

@@ -16,7 +16,7 @@
 // move fast, Esc to exit.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (HUD), used directly; extensions.imgui does the engine integration
+#include "imgui.h" // Dear ImGui (HUD), used directly; imgui.engine does the engine integration
 
 import foundation.core;
 import foundation.rhi; // PresentMode (run the benchmark vsync-off)
@@ -32,7 +32,7 @@ import engine.defaultapp;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import extensions.imgui; // ImguiSubsystem (HUD)
+import imgui.engine; // ImguiSubsystem (HUD)
 import foundation.geometry;
 import foundation.materials;
 
@@ -44,7 +44,6 @@ namespace runtime = foundation::runtime;
 namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
-namespace imgui = extensions::imgui;
 namespace geometry = foundation::geometry;
 namespace materials = foundation::materials;
 
@@ -84,10 +83,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -321,12 +324,15 @@ namespace
             }
         }
 
-        void OnShutdown(runtime::IApplicationHost&) override
+        void OnShutdown(runtime::IApplicationHost& host) override
         {
             core::ConsoleWrite(u8"=== Stress Test Shutdown ===\n");
+            // The base last: its teardown (the plugins, the scenes, the runs) after this app's own.
+            engine::runtime::DefaultApplication::OnShutdown(host);
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         // Push the fly camera's pose onto the camera entity (the default render path reads it).
         void PushCameraToEntity()
         {

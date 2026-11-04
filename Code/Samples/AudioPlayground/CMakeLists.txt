@@ -16,6 +16,8 @@ target_link_libraries(AudioPlayground PRIVATE
     Engine::Scene
     Engine::Render
     Foundation::Audio Engine::Audio
-    Extensions::Imgui
     Foundation::Policy)
 util_copy_sdl3_dll(AudioPlayground)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(AudioPlayground ROLE player PLUGINS imgui)

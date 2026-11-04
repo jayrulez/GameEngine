@@ -36,7 +36,7 @@ using namespace foundation::scene;
 export namespace engine::scene
 {
 
-    // The PluginHost recorder for scene-manager contributions: armed
+    // The PluginLoader recorder for scene-manager contributions: armed
     // around a plugin's OnLoad, it records the managers the plugin contributes and reverses
     // them on unload. One per process (defined in SceneSubsystemImpl.cpp).
     class SceneContributionRecorder final : public foundation::runtime::IRegistrationRecorder

@@ -4,7 +4,7 @@
 util_add_engine_library(Runtime.Client ALIAS Foundation::Runtime.Client)
 target_link_libraries(Runtime.Client
     PUBLIC Foundation::Runtime Foundation::Shell Foundation::Graphics Foundation::Profiler
-           Foundation::Profiler.Capture Foundation::Policy)
+           Foundation::Profiler.Capture Foundation::VFS Foundation::Policy) # VFS: ClientServices' data mount
 
 target_sources(Runtime.Client
     PUBLIC
@@ -12,7 +12,8 @@ target_sources(Runtime.Client
             Application.cppm
             EmbeddedHost.cppm
             DeviceCounterPublisher.cppm
-            ApplicationHost.cppm)
+            ApplicationHost.cppm
+            ClientServices.cppm)
 
 
 # Build stamp: regenerated when git state changes (content-compared) and

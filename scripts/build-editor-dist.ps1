@@ -7,8 +7,10 @@
 
 .DESCRIPTION
   The Windows counterpart of build-editor-dist.sh. Produces an unzip-and-run folder:
-  Tools.Editor.exe + its runtime DLLs (dxcompiler.dll, SDL3.dll - staged by the build's
-  util_copy_runtime_deps into Bin\...\ and listed in Tools.Editor.runtime-libs), and the Data root
+  Tools.Editor.exe and the CLI tools (Tools.Cook, Tools.Export, Tools.Mcp) + their runtime DLLs (the
+  engine's own, since the build is shared so they load a project's plugin packages, dxcompiler.dll and
+  SDL3.dll - staged by the build's util_copy_runtime_deps into Bin\...\ and listed in each one's
+  .runtime-libs), and the Data root
   (Assets, the editor's interface under Editor, and .dataroot) beside the exe. Data\Engine\Shaders holds the cooked shader pack (shaders.dpak, the
   path the runtime opens), the shader SOURCES (an export cooks the game's pack from them) and the
   .pack-first marker, so this editor starts from the pack and not by compiling the sources.
@@ -17,7 +19,7 @@
   Built RelWithDebInfo through a preset: optimised, asserts kept (it is a development tool, and an
   assert names the bug), and symbols - the PDBs go into a separate <dist>-symbols.zip, so a crash
   in a shipped editor can be resolved against the build that made it. The preset follows
-  -Compiler, and so does the Bin\RelWithDebInfo\Win64-<Compiler> folder copied from: the build and
+  -Compiler, and so does the Bin\RelWithDebInfo\Win64-<Compiler>-Shared folder copied from: the build and
   the copy cannot disagree.
 
   NOT bundled: the Vulkan/DX12 system runtime (the target machine's GPU drivers).
@@ -32,8 +34,8 @@
 .PARAMETER Jobs
   Build parallelism (default 4; higher can OOM the modules build).
 .PARAMETER Compiler
-  MSVC (the msvc-reldbg preset, through build-msvc.cmd) or Clang (clang-reldbg, clang++ on the MSVC
-  ABI, through build-clang.cmd). Default MSVC.
+  MSVC (the msvc-reldbg-shared preset, through build-msvc.cmd) or Clang (clang-reldbg-shared, clang++ on
+  the MSVC ABI, through build-clang.cmd). Default MSVC.
 .PARAMETER Formats
   Shader-pack formats (default "dxil spirv": the editor on Windows runs DX12 or Vulkan).
 #>
@@ -61,12 +63,13 @@ $Out     = Join-Path $rawDir "$prefix-$Version-$suffix"   # e.g. dist\Editor-0.1
 
 # One choice names the preset, its build tree and the Bin folder it writes (CMakeLists.txt:
 # Bin/<Config>/<Platform>-<CMAKE_CXX_COMPILER_ID>).
-$Preset  = if ($Compiler -eq "MSVC") { "msvc-reldbg" } else { "clang-reldbg" }
+$Preset  = if ($Compiler -eq "MSVC") { "msvc-reldbg-shared" } else { "clang-reldbg-shared" }
 $Wrapper = if ($Compiler -eq "MSVC") { "build-msvc.cmd" } else { "build-clang.cmd" }
-$Bin     = "Bin\RelWithDebInfo\Win64-$Compiler"
+$Bin     = "Bin\RelWithDebInfo\Win64-$Compiler-Shared"
+$Tools   = @("Tools.Editor", "Tools.Cook", "Tools.Export", "Tools.Mcp") # what the dist runs
 
-Write-Host "== Building Tools.Editor + Tools.ShaderPack ($Preset, $Wrapper) =="
-& (Join-Path $Root $Wrapper) --preset $Preset --target Tools.Editor Tools.ShaderPack -j $Jobs
+Write-Host "== Building $($Tools -join ', ') + Tools.ShaderPack ($Preset, $Wrapper) =="
+& (Join-Path $Root $Wrapper) --preset $Preset --target @Tools Tools.ShaderPack -j $Jobs
 if ($LASTEXITCODE -ne 0) { throw "$Wrapper --preset $Preset failed" }
 if (-not (Test-Path (Join-Path $Bin "Tools.Editor.exe"))) {
     throw "$Bin\Tools.Editor.exe not found - the $Preset build writes somewhere else?"
@@ -80,15 +83,18 @@ foreach ($dir in @($Out, $Symbols)) {
 New-Item -ItemType Directory -Force -Path (Join-Path $Out "Data") | Out-Null
 New-Item -ItemType Directory -Force -Path $Symbols | Out-Null
 
-# Editor exe + its runtime DLLs (from the .runtime-libs manifest); each one's PDB, when the build
-# made one, to the symbols folder.
-$staged = @("Tools.Editor.exe")
-Copy-Item (Join-Path $Bin "Tools.Editor.exe") $Out
-$manifest = Join-Path $Bin "Tools.Editor.runtime-libs"
-if (Test-Path $manifest) {
-    Get-Content $manifest | Where-Object { $_ -ne "" } | ForEach-Object {
-        $src = Join-Path $Bin $_
-        if (Test-Path $src) { Copy-Item $src $Out; $staged += $_ } else { Write-Warning "sidecar missing: $_" }
+# Each executable + its runtime DLLs (from its .runtime-libs manifest, the engine's among them); each
+# one's PDB, when the build made one, to the symbols folder.
+$staged = @()
+foreach ($tool in $Tools) {
+    Copy-Item (Join-Path $Bin "$tool.exe") $Out
+    $staged += "$tool.exe"
+    $manifest = Join-Path $Bin "$tool.runtime-libs"
+    if (Test-Path $manifest) {
+        Get-Content $manifest | Where-Object { $_ -ne "" -and $staged -notcontains $_ } | ForEach-Object {
+            $src = Join-Path $Bin $_
+            if (Test-Path $src) { Copy-Item $src $Out; $staged += $_ } else { Write-Warning "sidecar missing: $_" }
+        }
     }
 }
 foreach ($file in $staged) {
@@ -123,6 +129,9 @@ Set-Content (Join-Path $Shaders ".pack-first") "An editor distribution: start fr
 Editor (Windows x64)
 
 Run:  Tools.Editor.exe
+
+The command-line tools beside it run on the same engine: Tools.Cook.exe <project> cooks,
+Tools.Export.exe <project> exports, and Tools.Mcp.exe serves the engine's MCP tools over stdio.
 
 Requires GPU drivers with Vulkan or DX12 support. Everything else (fonts, assets,
 shader pack and sources, dxcompiler.dll) ships in this folder and is found relative to the exe.

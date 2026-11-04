@@ -55,11 +55,11 @@ import :assets_view;
 import :asset_operations;
 import :asset_import;
 import :import_dialog;
-import :native_module;
 import :export_service;
 import :asset_creation;
 import :session;
 import :mcp_service;
+import editor.mcp; // McpPluginServices (the project's plugins' MCP tools)
 
 using namespace foundation::core;
 
@@ -82,6 +82,10 @@ export namespace editor::app
         // Log capture registered on GlobalLogger by main() before anything else runs, so early
         // startup logs reach the console. Borrowed; main owns it (outlives the app).
         editor::EditorLogBuffer* logBuffer = nullptr;
+
+        // The plugins the editor executable links (its generated registry's list), which a project
+        // may enable: loaded with each project, each the parts an editor loads.
+        Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
 
         // Start on the project manager screen instead of opening projectDirectory (set by
         // main() when no project was given).
@@ -203,7 +207,7 @@ export namespace editor::app
         void StartEmbeddedRuntime(runtime::IApplicationHost& host);
         void RegisterActions();
         void AddNativeCode();
-        void BuildNativeModule();
+        void BuildProjectPlugins();
         void ShowAbout();
         void OpenDock();
         void OpenPages();
@@ -272,6 +276,7 @@ export namespace editor::app
         UniquePtr<AssetPickerWindow> m_assetPicker; // an asset slot's picker, made the first time
         RefPtr<foundation::gui::Window> m_createAsset; // Create Asset, while open
         RefPtr<foundation::gui::Window> m_namePrompt;  // the name prompt, while open
+        RefPtr<foundation::gui::Window> m_nativeCodeDialog; // Add Native Code's parts, while open
         ResourceRefServices m_refs;                 // what an asset slot asks of the editor
         UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
         UniquePtr<TemplatesDialog> m_templates;             // Edit > Export Templates
@@ -291,9 +296,12 @@ export namespace editor::app
         UniquePtr<AssetImport> m_assetImport;    // files into the project (a drop, Import...)
         UniquePtr<ImportWindow> m_importWindow;  // the import's review, made the first time
         u64 m_logSequence = 0;                   // the last log entry the Console took
-        EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;
+        // The MCP tools the project's plugins add through their Tooling parts: attached to each
+        // project's plugin host by the session, and serving the MCP host's server while it runs.
+        editor::mcp::McpPluginServices m_mcpPluginTools{m_editorAllocator};
+        editor::ExportPluginServices m_exportHooks{m_editorAllocator}; // the project's plugins' export hooks
         UniquePtr<EditorMcpService> m_mcp;
         EditorSession m_session; // the open project; declared after the services it uses, so it is destroyed before them
 

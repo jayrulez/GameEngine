@@ -29,6 +29,7 @@ import :import_preview;
 import :actions;
 import :thumbnail_service;
 import editor.project; // EditorProject, the job service, the root allocator
+import foundation.runtime; // the process's plugin host
 
 using namespace foundation::core;
 
@@ -246,6 +247,15 @@ export namespace editor
         [[nodiscard]] ThumbnailService* Thumbnails() const noexcept { return m_thumbnails; }
         void SetThumbnails(ThumbnailService* thumbnails) noexcept { m_thumbnails = thumbnails; }
         [[nodiscard]] EditorProject* Project() const noexcept { return m_project; }
+
+        /// The process's plugin host, which loaded the project's plugins (borrowed; null where none
+        /// loads). Project Settings reports each entry against it and edits the settings it holds.
+        [[nodiscard]] foundation::runtime::PluginHost* Plugins() const noexcept { return m_plugins; }
+        void SetPlugins(foundation::runtime::PluginHost* plugins) noexcept { m_plugins = plugins; }
+        /// The export hooks the project's plugins added (borrowed; null: none), which an export runs
+        /// once its dist is staged.
+        [[nodiscard]] const ExportPluginServices* ExportHooks() const noexcept { return m_exportHooks; }
+        void SetExportHooks(const ExportPluginServices* hooks) noexcept { m_exportHooks = hooks; }
 
         // === Importers (an OS file into Sources/ and a typed Asset instance; registered by the exe) ===
         [[nodiscard]] pipeline::ImporterRegistry& Importers() noexcept { return m_importers; }
@@ -542,6 +552,8 @@ export namespace editor
         void NotifyPagesChanged();
 
         EditorProject* m_project = nullptr;
+        foundation::runtime::PluginHost* m_plugins = nullptr; // borrowed (owned by the application)
+        const ExportPluginServices* m_exportHooks = nullptr;  // borrowed (owned by the application)
         ThumbnailService* m_thumbnails = nullptr; // borrowed (owned by the application)
         foundation::resource::ResourceManager* m_resources = nullptr; // borrowed (owned by the application)
         foundation::settings::Settings* m_projectEditorSettings = nullptr; // borrowed (owned by the application)

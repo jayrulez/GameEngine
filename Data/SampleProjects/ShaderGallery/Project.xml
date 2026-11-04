@@ -1,14 +1,13 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">10</u32>
+		<u32 name="version">11</u32>
 	</array>
 	<string name="name">Shader Gallery</string>
 	<string name="engineVersion">0.1.0</string>
 	<string name="defaultSceneId">96856f7c-fe71-480e-ad91-220d867ec643</string>
 	<string name="defaultScene">Hall</string>
 	<string name="startupScript"/>
-	<string name="nativeModule"/>
 	<string name="defaultInputMapId">1e34ba29-51f5-4c53-8836-43b2d8af63b1</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">00000000-0000-0000-0000-000000000000</string>
@@ -27,4 +26,5 @@
 		<string>b66f898c-77f9-42d3-b8d2-3c7d1ca4b544</string>
 	</array>
 	<string name="guiLoadingDocumentId">00000000-0000-0000-0000-000000000000</string>
+	<array name="plugins" count="0"/>
 </root>

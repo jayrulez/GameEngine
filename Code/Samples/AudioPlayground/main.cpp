@@ -29,7 +29,7 @@ import foundation.graphics.gpu;
 import foundation.scene;
 import engine.scene;
 import engine.render;
-import extensions.imgui;
+import imgui.engine;
 import foundation.audio;
 import engine.audio;
 
@@ -41,7 +41,6 @@ namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
 namespace audio = foundation::audio;
-namespace imgui = extensions::imgui;
 
 using core::f32;
 
@@ -79,10 +78,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host); // registers AudioSubsystem
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -265,6 +268,7 @@ namespace
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         [[nodiscard]] f32 Random01()
         {
             m_randomState = m_randomState * 1664525u + 1013904223u;

@@ -14,11 +14,14 @@ target_link_libraries(Engine.Composition PUBLIC
     Foundation::Net.Replication Foundation::Net.Manager Engine::Net
     Foundation::Policy)
 target_link_libraries(Engine.Composition PUBLIC Engine::GUI) # the GUI domain
+target_link_libraries(Engine.Composition PUBLIC Foundation::Runtime Engine::Scene) # the plugin services
 
 target_sources(Engine.Composition
     PRIVATE
         CompositionImpl.cpp
+        PluginServicesImpl.cpp
         SceneExportSupport.cpp
     PUBLIC
         FILE_SET engine_composition_modules TYPE CXX_MODULES FILES
-            Composition.cppm)
+            Composition.cppm
+            PluginServices.cppm)

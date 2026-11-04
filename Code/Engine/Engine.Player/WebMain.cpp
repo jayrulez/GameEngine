@@ -80,9 +80,6 @@ import foundation.vfs.pak;
 
 using namespace foundation::core;
 
-#if defined(ENGINE_SHIP_NATIVE_GAME)
-extern "C" foundation::runtime::IRuntimePlugin* CreatePlugin();
-#endif
 
 
 // The IndexedDB mount behind MountUserData. The path is ASCII (the browser's home directory), read
@@ -288,11 +285,6 @@ namespace
             FetchDistFile("Data/Engine/Shaders/shaders.dpak");
             engine::player::PlayerOptions options;
             options.projectDir = String(u8".");
-#if defined(ENGINE_SHIP_NATIVE_GAME)
-            // The web ship player: a browser has no dlopen, so the game's plugin is compiled in,
-            // with the same contract as the desktop ship stub.
-            options.nativeGame = CreatePlugin();
-#endif
             return options;
         }
     };

@@ -7,19 +7,20 @@ util_add_engine_library(Editor.Project ALIAS Editor::Project)
 target_link_libraries(Editor.Project
     PUBLIC Pipeline::Importer Foundation::Core Foundation::VFS Foundation::VFS.Pak Foundation::Content Foundation::Xml.Serialization Engine::Project
            Foundation::Settings Foundation::Scene.Resource
-           Pipeline::Cook Foundation::Resource Foundation::Policy
+           Pipeline::Cook Pipeline::Script Foundation::Resource Foundation::Policy
            Pipeline::Core Pipeline::Fonts Pipeline::Texture # the new project's starter font and sky
            Foundation::Shaders Foundation::Shaders.System # export cooks the dist's shader pack
-           Foundation::Shaders.Resource) # a custom shader's product (stripped of its HLSL in a dist)
+           Foundation::Shaders.Resource # a custom shader's product (stripped of its HLSL in a dist)
+           Engine::Composition) # the engine service a tool's plugin host offers its Engine parts
 
 # The player executable basename, from the build's single source of truth (root CMakeLists). The
 # export host-template stages "<base>[.exe]" and reads "<base>.runtime-libs" beside the running tool.
 target_compile_definitions(Editor.Project PRIVATE
     BUILTIN_PLAYER_BASENAME=u8"${BUILTIN_PLAYER_BASENAME}")
 
-# Native shipping link: the exporter re-invokes this cmake over this checkout to build
-# Engine.GamePlayer with the project's native module statically linked. These paths are baked
-# in, so a relocated editor reports the problem clearly instead of guessing.
+# A project's own packages: the exporter re-invokes this cmake over this checkout to build
+# Engine.GamePlayer with them statically linked, and the editor to build them for development. These
+# paths are baked in, so a relocated editor reports the problem clearly instead of guessing.
 target_compile_definitions(Editor.Project PRIVATE
     BUILDSYSTEM_CMAKE_PATH="${CMAKE_COMMAND}"
     BUILDSYSTEM_ENGINE_ROOT="${CMAKE_SOURCE_DIR}"
@@ -47,4 +48,6 @@ target_sources(Editor.Project
             ExportTemplate.cppm
             ExportController.cppm
             CookService.cppm
+            ToolPlugins.cppm
+            ExportHooks.cppm
             EditorProjectModule.cppm)

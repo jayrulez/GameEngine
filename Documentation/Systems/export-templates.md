@@ -48,9 +48,16 @@ Release) so old presets resolve. `EffectiveConfig()` treats an unstamped (v1) te
 `template.xml` (shipped): `id`, `name`, `platform`, `config`, `compiler`, `engineVersion`,
 `playerBinary`, categorized runtime files - `sidecars` (REQUIRED, always staged, read from the build's
 `runtime-libs` manifest) + `symbols` (optional PDB/DWARF, staged only when the preset opts in) - and
-`notes`, and `icon`, the SVG in the bundle the editor shows the template by (`icon.svg`; a manifest
-from before it shows its platform's built-in icon), plus runtime-resolved, non-serialized `directory` /
-`isHost`. Symbols do not justify a
+`notes`, `icon`, the SVG in the bundle the editor shows the template by (`icon.svg`; a manifest
+from before it shows its platform's built-in icon), and `plugins`, each plugin its player links (id and
+version, from the build's `<player>.plugins`; the bundle carries each one's Plugin.xml and deploy files
+for its platform under `plugins/<id>/`, and its own `<player>.plugins` pointing at them), plus
+runtime-resolved, non-serialized `directory` / `isHost`. An export uses the template's player when it
+carries every plugin the project enables on the preset's platform at a version at least the one known
+there and the project enables none of its own packages there; otherwise it builds the project's
+player from the engine checkout (`Engine.GamePlayer`, with `ENGINE_PROJECT_PLUGINS` or, without
+packages, `ENGINE_GAME_PLAYER`), and it stages each enabled plugin's deploy files beside the player
+(see `Documentation/Specs/plugins.md`, Decision 6). Symbols do not justify a
 separate template; they are an optional group on Debug/RelWithDebInfo templates, and export defaults to
 NOT staging them into the shipped dist (ship stripped, retain symbols beside the template for
 symbolication). If the player runtime-compiles shaders, its compiler (e.g. `dxcompiler`) is just another

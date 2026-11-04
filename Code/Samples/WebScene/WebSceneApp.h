@@ -32,7 +32,7 @@
 
 #include "../Common/FlyCamera.h" // shared free-fly camera (WASD/QE, right mouse button to look)
 
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
 #include "imgui.h"
 
 namespace
@@ -65,14 +65,18 @@ namespace samples
     class WebSceneApp : public engine::runtime::DefaultApplication
     {
     public:
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<extensions::imgui::ImguiSubsystem>(
-                    *gfx->Raw(), gfx->FramesInFlight(), DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 #endif
@@ -127,8 +131,8 @@ namespace samples
                 return;
             }
 
-#if OPTION_HAS_EXTENSION_IMGUI
-            if (auto* g = host.Subsystems().GetSubsystem<extensions::imgui::ImguiSubsystem>())
+#if OPTION_HAS_PLUGIN_IMGUI
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
                 BuildTweakPanel(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
@@ -271,9 +275,9 @@ namespace samples
                 }
             }
             engine::runtime::DefaultApplication::OnRenderWindow(host, frame);
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
             // The debug panel draws over the finished scene on the backbuffer.
-            if (auto* g = host.Subsystems().GetSubsystem<extensions::imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -281,6 +285,7 @@ namespace samples
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         // --- scene building ---------------------------------------------------------------
 
         void BuildEnvironment()
@@ -725,7 +730,7 @@ namespace samples
 
         // --- the tweak panel --------------------------------------------------------------
 
-#if OPTION_HAS_EXTENSION_IMGUI
+#if OPTION_HAS_PLUGIN_IMGUI
         void BuildTweakPanel(engine::render::RenderSubsystem* renderSub)
         {
             if (renderSub == nullptr || m_scene == nullptr)

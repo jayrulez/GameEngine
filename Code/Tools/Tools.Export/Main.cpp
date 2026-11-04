@@ -30,10 +30,12 @@ import foundation.animation;
 import foundation.particles;
 import foundation.vfs;
 import foundation.content;
+import foundation.runtime; // the plugins this tool links (LinkedPluginList)
 import foundation.resource;
 import foundation.scene;
 import foundation.scene.resource;
 import pipeline.core;
+import pipeline.importer; // PipelineRegistries (what a plugin's Pipeline part adds to)
 import pipeline.registration;
 import editor.project;
 import texture.pipeline;
@@ -343,6 +345,13 @@ int main(int argc, char** argv)
     // game has. RegisterPipelineTypes registers only the foundation-level surface, without the
     // Engine-level facades. This registers metadata only (no device, GPU or world) and is idempotent.
     engine::RegisterAllScriptFacades();
+    // The plugins the project enables that this tool links, their Engine, Pipeline and Tooling parts
+    // (their builders join the export's cook).
+    // Their export hooks run once each preset's dist is staged.
+    editor::ExportPluginServices exportHooks(AppRoot());
+    editor::ToolPlugins plugins(AppRoot(), foundation::runtime::HostRole::Export, *project,
+                                foundation::runtime::LinkedPluginList(), pipeline::PipelineRegistries{&builders},
+                                [&exportHooks](foundation::runtime::PluginHost& host) { (void)exportHooks.Attach(host); });
 
     // Component reflection (with its data-version gates) for every domain, through the scene
     // composition root, before any scene stream deserializes. One shared list keeps this host
@@ -377,7 +386,8 @@ int main(int argc, char** argv)
     {
         const Span<const editor::ExportPreset> span(presets.presets.Data(), presets.presets.Size());
         if (!editor::ExportAll(*project, span, registry, builders, outRoot.AsView(),
-                               dataRoot.AsView(), rebuild, {}, true, &sceneStreams, &scanner)
+                               dataRoot.AsView(), rebuild, {}, true, &sceneStreams, &scanner, nullptr,
+                               editor::ExportPlugins{&plugins.Host(), &exportHooks})
                  .IsOk())
         {
             std::fprintf(stderr, "Tools.Export: one or more presets failed (see log)\n");
@@ -400,9 +410,15 @@ int main(int argc, char** argv)
 
     editor::ExportResult result;
     if (!editor::ExportOne(*project, *preset, registry, builders, outRoot.AsView(),
-                           dataRoot.AsView(), rebuild, &result, {}, true, &sceneStreams, &scanner)
+                           dataRoot.AsView(), rebuild, &result, {}, true, &sceneStreams, &scanner, nullptr,
+                           editor::ExportPlugins{&plugins.Host(), &exportHooks})
              .IsOk())
     {
+        if (!result.refusal.IsEmpty())
+        {
+            std::fprintf(stderr, "Tools.Export: export refused: %s\n", Cs(result.refusal.AsView()));
+            return 1;
+        }
         std::fprintf(stderr, "Tools.Export: export failed (see log)\n");
         return 1;
     }
@@ -410,6 +426,7 @@ int main(int argc, char** argv)
         "exported '%s' -> %s\n  cook: %zu cooked, %zu scene(s), %zu packed | staged %zu file(s)\n",
         Cs(preset->name.AsView()), Cs(result.outputDir.AsView()), result.content.cooked,
         result.content.scenesStaged, result.content.filesPacked, result.filesStaged);
+    std::printf("  player: %s\n", Cs(result.playerReason.AsView()));
     if (!result.engineVersionWarning.IsEmpty())
     {
         std::printf("  warning: %s\n", Cs(result.engineVersionWarning.AsView()));

@@ -16,7 +16,6 @@ target_link_libraries(AnimatedCrowd PRIVATE
     Foundation::Scene
     Engine::Scene
     Engine::Render
-    Extensions::Imgui
     Foundation::Geometry
     Foundation::Materials
     Pipeline::ModelImporter
@@ -33,3 +32,6 @@ target_link_libraries(AnimatedCrowd PRIVATE
     Foundation::Policy)
 
 util_copy_sdl3_dll(AnimatedCrowd)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(AnimatedCrowd ROLE player PLUGINS imgui)

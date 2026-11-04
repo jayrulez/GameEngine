@@ -45,6 +45,7 @@ namespace editor
         foundation::core::Serialize(ar, "compiler", compiler);
         foundation::core::Serialize(ar, "symbols", symbols);
         SerializeAppended(ar, "icon", icon); // after the rest, since older manifests lack it
+        SerializeAppended(ar, "plugins", plugins);
         if (ar.Mode() == SerializeMode::Read && config.IsEmpty())
         {
             config = String(u8"Release"); // an empty config resolves to Release

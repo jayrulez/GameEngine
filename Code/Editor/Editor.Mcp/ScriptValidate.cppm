@@ -13,6 +13,11 @@
 // language sees the call (AngelScript compiles against the bound API; Luau resolves a member at
 // run time); a typed check would need the Luau analyzer toolchain. The tool's description says
 // so.
+//
+// With a `platform`, the script is also checked against what the open project's plugins leave on
+// that platform: the types of the plugins this host loaded that the project does not enable there
+// are left out, as an export for that platform checks it, so an agent finds a use of a plugin's
+// facade before the export refuses it.
 
 module;
 #include "Core/Prelude.h"
@@ -24,6 +29,8 @@ import foundation.json;
 import foundation.mcp;
 import foundation.script.resource;
 import script.pipeline;
+import editor.project; // detail::AbsentPluginTypes (what a platform lacks of the project's plugins)
+import :session;
 
 using namespace foundation::core;
 using foundation::json::JsonValue;
@@ -41,9 +48,10 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // Registers script_validate. It is project-independent (it compiles in-memory source); the
-    // host's language cooks must be registered first (Pipeline::Registration does it).
-    inline void RegisterScriptValidateTool(foundation::mcp::McpServer& server)
+    // Registers script_validate. It compiles in-memory source, so it needs no project but for a
+    // `platform` (the open project's plugins on it); the host's language cooks must be registered
+    // first (Pipeline::Registration does it).
+    inline void RegisterScriptValidateTool(foundation::mcp::McpServer& server, ProjectSession& session)
     {
         using foundation::mcp::SchemaBuilder;
         using foundation::mcp::ToolResult;
@@ -56,17 +64,26 @@ export namespace editor::mcp
             u8"usesCoroutines) - confirm the engine recognized what you wrote. Use as the "
             u8"validation loop while authoring scripts, BEFORE creating the asset. Limits: "
             u8"compile only - a misspelled engine method is a compile error only where the "
-            u8"language sees the call; check signatures with script_api.",
+            u8"language sees the call; check signatures with script_api. With `platform`, also "
+            u8"checks it against what the open project's plugins leave there (a plugin the project "
+            u8"does not enable on that platform takes its facades with it), as an export for it does.",
             SchemaBuilder()
                 .Str(u8"source", u8"the full script source text", true)
                 .Enum(u8"language", detail::ScriptLanguageChoices(),
                       u8"the script backend to compile against", true)
                 .Str(u8"name", u8"a display name for error messages (e.g. the intended file "
                                u8"name; default 'script')")
+                .Str(u8"platform", u8"also check it for this platform's plugins (Linux64, Win64, Web); "
+                                   u8"needs an open project")
                 .Build(),
                 foundation::mcp::ToolAnnotations::ReadOnly(),
-            [](const JsonValue& args) -> ToolResult
+            [&session](const JsonValue& args) -> ToolResult
             {
+                const String platform = args.Get(u8"platform").AsString();
+                if (!platform.IsEmpty() && session.project == nullptr)
+                {
+                    return Err(String(u8"a `platform` check needs an open project (its plugins)"));
+                }
                 const String language = args.Get(u8"language").AsString();
                 String name = args.Get(u8"name").AsString();
                 if (name.IsEmpty())
@@ -86,7 +103,21 @@ export namespace editor::mcp
                 const String source = args.Get(u8"source").AsString();
                 pipeline::CookScriptErrorSink sink;
                 foundation::script::ScriptClassSource harvested;
-                const bool ok = cook->Cook(source.AsView(), name.AsView(), sink, harvested);
+                bool ok = cook->Cook(source.AsView(), name.AsView(), sink, harvested);
+                // Then against the platform's surface, when one is asked for and lacks plugins.
+                String absent;
+                if (ok && !platform.IsEmpty() && session.plugins != nullptr)
+                {
+                    Array<TypeId> hidden;
+                    editor::detail::AbsentPluginTypes(*session.project, *session.plugins, platform.AsView(), hidden,
+                                                      absent);
+                    if (!hidden.IsEmpty())
+                    {
+                        String className;
+                        ok = cook->Check(source.AsView(), name.AsView(), sink, className,
+                                         Span<const TypeId>(hidden.Data(), hidden.Size()));
+                    }
+                }
 
                 JsonValue errors = JsonValue::MakeArray();
                 for (const pipeline::CookScriptErrorSink::Entry& e : sink.errors)
@@ -102,6 +133,12 @@ export namespace editor::mcp
                 JsonValue out = JsonValue::MakeObject();
                 out.Set(u8"valid", JsonValue::MakeBool(ok));
                 out.Set(u8"errors", Move(errors));
+                if (!platform.IsEmpty())
+                {
+                    // The plugins the platform lacks, whose types the check left out.
+                    out.Set(u8"platform", JsonValue::MakeString(platform));
+                    out.Set(u8"absentPlugins", JsonValue::MakeString(absent));
+                }
                 if (ok)
                 {
                     out.Set(u8"className", JsonValue::MakeString(harvested.className));

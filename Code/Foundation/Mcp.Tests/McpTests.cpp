@@ -603,3 +603,45 @@ TEST_CASE("mcp: an unfinished call keeps its own state across its re-entries, un
     CHECK(server.CallsInFlight() == 0u);
     CHECK(alive == 0u);
 }
+
+// A tool can leave the server (a plugin's, as its plugin unloads): it is no longer listed or
+// callable, and a call to it in flight ends, its state destroyed.
+TEST_CASE("mcp: an unregistered tool is gone from the list and the calls, its calls in flight with it")
+{
+    McpServer server;
+    Setup(server);
+    u32 alive = 0;
+    server.RegisterTool(
+        u8"slow", u8"never finishes", SchemaBuilder().Build(), ToolAnnotations::ReadOnly(),
+        [&alive](ToolCall& call, const JsonValue&) -> ToolOutcome
+        {
+            if (!call.isReentry)
+            {
+                call.state = MakeUnique<CallCounter>(DefaultAllocator(), &alive);
+            }
+            return ToolOutcome::NotFinished();
+        });
+    REQUIRE(server.ToolCount() == 3u);
+    const Array<String> names = server.ToolNames();
+    REQUIRE(names.Size() == 3u);
+    CHECK(names[2] == String(u8"slow"));
+    CHECK(server.HasTool(u8"echo"));
+
+    const StringView slow =
+        u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"slow\",\"arguments\":{}}}";
+    CHECK(server.HandleLine(slow, 5).state == LineState::NotFinished);
+    CHECK(alive == 1u);
+
+    CHECK(server.UnregisterTool(u8"slow"));
+    CHECK_FALSE(server.UnregisterTool(u8"slow")); // gone already
+    CHECK(server.ToolCount() == 2u);
+    CHECK_FALSE(server.HasTool(u8"slow"));
+    CHECK(server.CallsInFlight() == 0u);
+    CHECK(alive == 0u);
+    // Handed back, the call is to a tool there is none of.
+    const JsonValue again = Response(server.HandleLine(slow, 5));
+    CHECK(Contains(again.Get(u8"error").Get(u8"message").AsString().AsView(), u8"unknown tool 'slow'"));
+    const JsonValue listed =
+        Response(server.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}")).Get(u8"result").Get(u8"tools");
+    CHECK(listed.Count() == 2);
+}

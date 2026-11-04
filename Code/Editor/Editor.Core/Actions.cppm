@@ -149,6 +149,28 @@ export namespace editor
             return true;
         }
 
+        /// Removes the action `id` (a plugin's, as it unloads); false when there is none. A shortcut
+        /// the user bound to it is kept, so it holds again if the action comes back.
+        bool Unregister(StringView id)
+        {
+            for (usize i = 0; i < m_actions.Size(); ++i)
+            {
+                if (m_actions[i].id.AsView() != id)
+                {
+                    continue;
+                }
+                m_actions.RemoveAt(i);
+                m_index.Clear();
+                for (usize at = 0; at < m_actions.Size(); ++at)
+                {
+                    m_index.InsertOrAssign(Hash<StringView>{}(m_actions[at].id.AsView()), at);
+                }
+                NotifyChanged();
+                return true;
+            }
+            return false;
+        }
+
         [[nodiscard]] const EditorActionDeclaration* Find(StringView id) const noexcept
         {
             const usize* slot = m_index.Find(Hash<StringView>{}(id));

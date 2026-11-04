@@ -267,7 +267,8 @@ namespace pipeline{
             // The cook VM, from the registry by language, carrying the same global surface the
             // runtime registers (core math and the behavior facades) so top-level facade references
             // compile identically. Idempotent. Null (logged) when the backend is absent.
-            [[nodiscard]] static RefPtr<IScriptManager> CreateCookManager(StringView assetName)
+            [[nodiscard]] static RefPtr<IScriptManager> CreateCookManager(StringView assetName,
+                                                                           Span<const TypeId> hidden)
             {
                 RefPtr<IScriptManager> manager =
                     CreateScriptManagerForLanguage(u8"luau", DefaultAllocator());
@@ -279,7 +280,7 @@ namespace pipeline{
                 }
                 RegisterCoreTypes();
                 RegisterScriptFacadeReflection();
-                RegisterReflectedTypes(*manager);
+                RegisterReflectedTypes(*manager, GlobalTypeRegistry(), hidden);
                 return manager;
             }
 
@@ -303,11 +304,13 @@ namespace pipeline{
             // fingerprint so a vendor bump recooks every Luau script pack.
             [[nodiscard]] u32 CookVersion() const override { return LuauBytecodeVersion(); }
 
-            // Compiles through the manager's Check, so unlike Cook nothing in the source runs.
+            // Compiles through the manager's Check, so unlike Cook nothing in the source runs; the
+            // manager's Check also refuses a global naming a type it was not given (a hidden one).
             [[nodiscard]] bool Check(StringView source, StringView assetName,
-                                     CookScriptErrorSink& sink, String& className) override
+                                     CookScriptErrorSink& sink, String& className,
+                                     Span<const TypeId> hidden) override
             {
-                RefPtr<IScriptManager> manager = CreateCookManager(assetName);
+                RefPtr<IScriptManager> manager = CreateCookManager(assetName, hidden);
                 if (manager.Get() == nullptr || !manager->Check(source, assetName, sink))
                 {
                     return false;
@@ -323,7 +326,7 @@ namespace pipeline{
                 out.sourceName = String(assetName); // the source file identity (breakpoint key)
                 out.source = String(source);
 
-                RefPtr<IScriptManager> manager = CreateCookManager(assetName);
+                RefPtr<IScriptManager> manager = CreateCookManager(assetName, Span<const TypeId>{});
                 if (manager.Get() == nullptr)
                 {
                     return false;

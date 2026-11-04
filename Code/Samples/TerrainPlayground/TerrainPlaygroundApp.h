@@ -30,7 +30,6 @@ namespace samples
     namespace runtime = foundation::runtime;
     namespace graphics = foundation::graphics;
     namespace scene = foundation::scene;
-    namespace imgui = extensions::imgui;
     namespace hf = foundation::heightfield;
     namespace terrain = foundation::terrain;
     namespace geometry = foundation::geometry;
@@ -120,10 +119,14 @@ namespace samples
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -275,6 +278,7 @@ namespace samples
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         void ApplySun()
         {
             if (m_scene == nullptr)

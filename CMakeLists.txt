@@ -33,14 +33,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # is passed explicitly.
 option(ENGINE_SHARED_LIBS "Build engine libraries as shared libraries" OFF)
 
-# A game project's native directory, added to this build as a subdirectory. The game's
-# module builds like any engine library (full C++20 module and BMI access through
-# util_add_engine_library), so the dev .so and the shipping static library come from the
-# same source. Engine.GamePlayer, the shipping player with the game statically linked,
-# exists when ENGINE_GAME_NATIVE_TARGET names the game's target. The exporter sets these;
-# setting them by hand works too.
-set(ENGINE_GAME_NATIVE_DIR "" CACHE PATH "Game project's native source directory (adds it to this build)")
-set(ENGINE_GAME_NATIVE_TARGET "" CACHE STRING "The game native target name (enables Engine.GamePlayer)")
+# A project's own plugin packages (its game code and project-local plugins: each a folder with its
+# Plugin.xml), added to this build after every engine target. Their parts build like any engine
+# library, so a shared-engine tree makes the development libraries the editor loads and a static
+# one the archives Engine.GamePlayer, the project's player, links. The editor's development build
+# and the exporter set it; setting it by hand works too.
+set(ENGINE_PROJECT_PLUGINS "" CACHE STRING "A project's plugin package folders, ;-separated (adds them and Engine.GamePlayer)")
+# Engine.GamePlayer with no packages of the project's: the engine's plugins alone, for an export whose
+# template does not carry a plugin the project enables. The exporter sets it.
+option(ENGINE_GAME_PLAYER "Build Engine.GamePlayer, the project's player, without packages of its own" OFF)
 # The GitHub repository (owner/name) whose releases carry what an editor downloads for its own
 # version, such as the sample games: release v<project VERSION> of it. Stamped into engine.project.
 set(ENGINE_RELEASE_REPOSITORY "jayrulez/GameEngine" CACHE STRING "GitHub owner/name whose releases carry the editor's downloads (the sample games)")
@@ -117,6 +118,7 @@ endif()
 
 # Reusable helpers (util_copy_runtime_deps, ...).
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Helpers.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Plugins.cmake) # util_add_plugin: plugin packages from their Plugin.xml
 # BUILDSYSTEM_NOTICES_FILE: the third-party notices every shipped executable stages beside it.
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThirdPartyNotices.cmake)
 
@@ -134,10 +136,10 @@ option(OPTION_BUILD_TESTS "Build unit tests" ON)
 option(OPTION_BUILD_SAMPLES "Build sample applications" ON)
 option(OPTION_BUILD_TOOLS "Build editor/authoring tooling (the editor libraries + CLI exes)" ON)
 option(OPTION_BUILD_DEPRECATED "Build Code/Deprecated (the old UI framework and its UISandbox)" OFF)
-# Optional extensions are independently switchable; each exposes an OPTION_HAS_* compile define
+# Optional plugins are independently switchable; each exposes an OPTION_HAS_* compile define
 # (see the policy block) so C++ can guard usage with #if.
 option(OPTION_GUI_LIBFUZZER "Build a libFuzzer executable per GUI fuzz target (clang; configure the tree with -fsanitize=fuzzer-no-link,address)" OFF)
-option(OPTION_EXTENSION_IMGUI  "Build the Dear ImGui debug-UI extension (extensions.imgui)" ON)
+option(OPTION_PLUGIN_IMGUI  "Build the Dear ImGui debug-UI plugin (imgui.engine)" ON)
 # Script backends are independently switchable; each defines OPTION_HAS_<backend> (presence macro,
 # guard C++ with `#ifdef`) when enabled. At least one must stay on. AngelScript additionally needs
 # its vendored lib to have built (reconciled after ThirdParty is added, before the backend subdirs).
@@ -150,7 +152,7 @@ option(OPTION_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 # game has the engine's GUI (Engine.GUI) as a desktop one does.
 if(EMSCRIPTEN)
     set(OPTION_BUILD_TOOLS OFF)
-    # OPTION_EXTENSION_IMGUI stays available on web: Dear ImGui and extensions.imgui compile for
+    # OPTION_PLUGIN_IMGUI stays available on web: Dear ImGui and imgui.engine compile for
     # wasm (the renderer is pure RHI, the subsystem consumes the shell's input), so the debug
     # panel works in the browser too (WebScene's tweak UI).
 
@@ -231,8 +233,8 @@ target_compile_definitions(policy INTERFACE
     BUILD_CONFIG=\"$<CONFIG>\"
     BUILD_COMPILER=\"${_dr_comp}\"
     # Optional-module presence flags (0 or 1); guard their use in C++ with, for example,
-    # `#if OPTION_HAS_EXTENSION_IMGUI`.
-    OPTION_HAS_EXTENSION_IMGUI=$<BOOL:${OPTION_EXTENSION_IMGUI}>
+    # `#if OPTION_HAS_PLUGIN_IMGUI`.
+    OPTION_HAS_PLUGIN_IMGUI=$<BOOL:${OPTION_PLUGIN_IMGUI}>
     USER_DATA_DIR_NAME=u8\"${USER_DATA_DIR_NAME_VALUE}\"
     TEMPLATE_ID_PREFIX=u8\"${TEMPLATE_ID_PREFIX_VALUE}\")
 
@@ -307,7 +309,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/Code/Engine
     ${CMAKE_SOURCE_DIR}/Code/Editor
     ${CMAKE_SOURCE_DIR}/Code/Tools
-    ${CMAKE_SOURCE_DIR}/Code/Extensions)
+    ${CMAKE_SOURCE_DIR}/Code/Plugins)
 
 # --- Targets -----------------------------------------------------------------
 # One dependency-ordered list for every platform. The order must stay a valid topological order,
@@ -539,9 +541,13 @@ add_subdirectory(Code/Engine/Engine.Script) # entity behaviors (ScriptComponent 
 add_subdirectory(Code/Engine/Engine.Integration) # cross-subsystem composition helpers (the bridge from physics contacts to scripts) over Physics and Script
 add_subdirectory(Code/Engine/Engine.GUI) # the engine's GUI on foundation.gui
 add_subdirectory(Code/Engine/Engine.Composition) # the composition root: the one list of domains and the facets built from it on demand (scene, reflection, resource types, factories, facades)
-if(OPTION_EXTENSION_IMGUI)
-    add_subdirectory(Code/Extensions/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime
+if(OPTION_PLUGIN_IMGUI)
+    util_add_plugin(Code/Plugins/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime, from its Plugin.xml
 endif()
+# The plugins the engine's hosts link (the players, the editor and the CLI tools, each the parts its
+# role loads), so a project can enable them: the engine's official plugins. Imgui is the framework
+# samples' debug UI and is in none of them.
+set(UTIL_HOST_PLUGINS "")
 add_subdirectory(Code/Engine/Engine.Player)        # Generic game runner
 
 
@@ -856,6 +862,11 @@ if(OPTION_BUILD_TESTS)
         util_test_suite(Code/Integration/Integration.GuiScript         Foundation::GUI.Gamekit)
     endif()
     util_test_suite(Code/Integration/Integration.Mcp                Editor::Mcp)  # golden flow: create, open and inspect a project
+    # A project's own plugin package (NativeSample's, four parts) built here and loaded by each host;
+    # a build adding a project's packages (ENGINE_PROJECT_PLUGINS) has its own copy of it.
+    if(NOT ENGINE_PROJECT_PLUGINS)
+        util_test_suite(Code/Integration/Integration.Plugins        Editor::App)
+    endif()
     # Engine composition against pipeline registration: every factory description's cooked form has a builder.
     util_test_suite(Code/Integration/Integration.Composition        Pipeline::Registration)
     # Animation and physics in a running scene: root motion walking a character, which still collides.
@@ -875,15 +886,16 @@ if(EMSCRIPTEN)
     if(OPTION_BUILD_SAMPLES)
         add_subdirectory(Code/Samples/WebTriangle)  # WebShell, the web runner and the WebGPU factory; builds WebTriangle.html
         add_subdirectory(Code/Samples/WebScene)     # DefaultApplication and a lit PBR scene; builds WebScene.html
-        if(OPTION_EXTENSION_IMGUI)
+        if(OPTION_PLUGIN_IMGUI)
             add_subdirectory(Code/Samples/TerrainPlayground) # a heightfield built in code, drawn by engine.terrain; builds TerrainPlayground.html
         endif()
     endif()
-    # Game native code: the wasm build hosts the game too, and the web shipping player
-    # compiles the module in (browsers have no dlopen). Mirrors the non-Emscripten block
-    # at the end of the file, which this branch return()s before reaching.
-    if(ENGINE_GAME_NATIVE_DIR)
-        add_subdirectory(${ENGINE_GAME_NATIVE_DIR} game-native)
+    # A project's packages: the web player compiles them in (browsers have no dlopen). Mirrors the
+    # non-Emscripten block at the end of the file, which this branch return()s before reaching.
+    if(ENGINE_PROJECT_PLUGINS)
+        util_add_project_plugins(${ENGINE_PROJECT_PLUGINS})
+    elseif(TARGET Engine.GamePlayer)
+        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
     endif()
     return()
 endif()
@@ -898,8 +910,10 @@ if(OPTION_BUILD_DEPRECATED)
     add_subdirectory(Code/Deprecated/UI)
 endif()
 
-# Game native code: the game's native directory joins the build after every engine
-# target exists, so it can link any of them.
-if(ENGINE_GAME_NATIVE_DIR)
-    add_subdirectory(${ENGINE_GAME_NATIVE_DIR} game-native)
+# A project's packages join the build after every engine target exists, so a part can link any of
+# them.
+if(ENGINE_PROJECT_PLUGINS)
+    util_add_project_plugins(${ENGINE_PROJECT_PLUGINS})
+elseif(TARGET Engine.GamePlayer)
+    util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
 endif()

@@ -148,7 +148,7 @@ entity outside a run, each running behaviour's properties under `live` beside wh
    engine, compare stamps: a stale host serves yesterday's engine.
 3. `resources/list` - the curated `docs://` shipping docs (Scripting/Assets/Scenes/
    Hosting/KnownIssues), the scene format reference this host generates from what it has
-   registered when you read it, its build and the open project's native module
+   registered when you read it, its build and the open project's loaded plugins
    (`docs://generated/SceneSchema.json` + `docs://generated/SceneExample.scene.xml`) and,
    once a project is open, every scene/prefab as `project://scene|prefab/<guid>`.
 
@@ -193,7 +193,27 @@ and `settingCategories`, how they group: the Project Settings dialog's tabs in o
 Startup, Audio, UI, Display), each with the names of its settings.
 `project_settings_set` changes them, by the names `project_info` reports: each asset setting must
 name an asset of its type, `""` clears it, `uiFontIds` and `guiStyleSheetIds` take the whole list, a choice takes one of its values by name, and nothing changes
-when any of it is refused. `project_health` is the
+when any of it is refused. `plugin_list` reports the plugins the project enables, in order: each
+entry's id, path (a project-local package, empty for the engine's), platforms (empty is every
+platform its manifest supports) and its state in this host (`loaded`, `notEnabled` on this
+platform, `refused` or `missing`, with the reason), plus `unsupportedPlatforms`, platforms the
+entry names that its plugin does not support. `available` lists what the project could enable: each package in its Plugins folder that no entry
+names and each plugin this host links that no entry enables (`path` empty), with its name, version,
+parts and platforms, and `offered` false with a `problem` when it cannot be (its manifest does not
+read or suit this engine, or its id is taken). A package in the folder is never enabled by being
+there. `plugin_enable` (`id`, optional `path` and
+`platforms`) adds an entry or changes an enabled one's path and platforms, keeping its settings;
+it refuses a platform the plugin's manifest does not support and a `path` whose package is
+another plugin. `plugin_disable` removes an entry and its settings. A host loads the project's
+plugins when it opens the project, so either takes effect there. `plugin_scaffold` (`parts`: any of
+Engine, Pipeline, Tooling, Editor; default Engine) makes the game's own native code, a plugin package
+at `Plugins/<Game>` enabled in the project, or adds to it the parts it lacks, as the editor's Add
+Native Code does; it never overwrites code, and the editor's Build Project Plugins builds it. A loaded plugin reports its `settings`, and
+`plugin_settings_set` (`id`, `settings` by name, each as `project_settings_set` takes its kind)
+changes them, checked in full first, then saved. An entry whose plugin is not loaded keeps its
+settings as written: no tool reads or changes them. A loaded plugin may serve tools of its own:
+`tools/list` shows them while it is loaded (each host loads the open project's plugins when it opens
+the project), and none takes a name the engine's tools hold. `project_health` is the
 one-call soundness sweep (dangling refs, broken sources, cook state); a dirty count alone
 is normal - clear it with `asset_cook`.
 
@@ -239,8 +259,8 @@ and documents by asset guid (`{guid}`), each a dependency of the cook. A scene s
 live preview.
 
 **Scenes**: read `docs://generated/SceneSchema.json` once (or `component_schema` for one
-component; a component a game's native module adds is there while the module is loaded, and a
-reload shows on the next read), copy from `docs://generated/SceneExample.scene.xml`, read the target with
+component; a component a project's plugin adds is there while the plugin is loaded, and a
+plugin reload shows on the next read), copy from `docs://generated/SceneExample.scene.xml`, read the target with
 `scene_read` (or the `project://` resource), author XML, loop on `scene_validate` (xml or
 guid; `valid` + empty `warnings` = the engine will load it), then `scene_write`. Prefabs
 mirror it with a single-root rule. To PLACE a prefab (an imported model's is the `Prefab` asset
@@ -403,13 +423,24 @@ when none); `export_preset_set` creates, changes or removes one by `name` - anot
 target, say, with its own render size or window. Its platform and config must be ones a template
 here has; its templateId need not, since presets travel with the project and templates do not.
 A project's custom shaders ship as bytecode in the dist's shader pack, their HLSL left out unless
-the preset's `includeShaderSource` is set.
+the preset's `includeShaderSource` is set. The result's `player` says which player the dist runs and
+why: the template's when it carries every plugin the project enables on the preset's platform, or one
+built for the project (its own packages, a plugin the template lacks or carries older), which needs
+the engine checkout and takes a while. Each enabled plugin's deploy files for the platform ship beside
+the player. The export is refused, with the reason, when an entry is enabled on a platform its plugin
+does not support or names a plugin no package holds, and when a script uses a plugin the project
+does not enable on the preset's platform: a plugin this host loaded but the platform lacks takes its
+script types with it, and the refusal names the script, the plugin and the line. Check first with
+`script_validate`'s `platform`.
 
 ## Per-tool gotchas
 
 - `script_validate` is a COMPILE check (`checkLevel: "compile"`): a call the language cannot
   see through, a misspelled member on a handle say, compiles and fails at runtime. Cross
-  check against `script_api`.
+  check against `script_api`. With `platform` (an open project needed), it also checks the source
+  against what the project's plugins leave on that platform, as an export for it does: `valid`
+  false with the errors, and `absentPlugins` naming the plugins the platform lacks. In Luau that
+  is any global naming one of their types, guarded or not.
 - `shader_validate` compiles every variant, the cook's check; an error under one flag says so
   (`(under ALPHA_TEST)`). An error in an engine include names that file, not yours.
 - `scene_validate` warnings mean component records of a type the engine does not know, or

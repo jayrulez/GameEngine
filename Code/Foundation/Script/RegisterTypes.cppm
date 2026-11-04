@@ -184,13 +184,25 @@ export namespace foundation::script
         }
     }
 
+    // Registers every type in `registry` with `manager` except those in `hidden`: the surface of a
+    // platform without some plugins is the full one less their types, so a script checked against
+    // it fails where it uses one of them.
     inline void
     RegisterReflectedTypes(IScriptManager& manager,
-                           const core::TypeRegistry& registry = core::GlobalTypeRegistry())
+                           const core::TypeRegistry& registry = core::GlobalTypeRegistry(),
+                           core::Span<const core::TypeId> hidden = {})
     {
         for (const core::TypeInfo* type : registry.All())
         {
-            manager.RegisterType(*type);
+            bool skip = false;
+            for (core::TypeId id : hidden)
+            {
+                skip = skip || id == type->id;
+            }
+            if (!skip)
+            {
+                manager.RegisterType(*type);
+            }
         }
         manager.FinalizeTypes(); // two-phase backends emit here (declare all, then bind)
     }

@@ -9,6 +9,7 @@ for every one.
 | Spec | Size | State |
 |---|---|---|
 | [2d-games.md](2d-games.md) | L | PROPOSED: 2D inside the 3D world, L0 to L7 |
+| [plugins.md](plugins.md) | L | APPROVED 2026-11-03: source plugins for every host and platform, X0 to X6 |
 | [whiteboxing.md](whiteboxing.md) | M | PROPOSED and reviewed 2026-09-23: parametric blockout pieces, P0 to P3 |
 | [script-run-modules.md](script-run-modules.md) | M (L with P2) | PROPOSED 2026-09-26: one script module per run, hot reload that migrates |
 

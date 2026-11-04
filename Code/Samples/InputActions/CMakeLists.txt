@@ -6,10 +6,14 @@ target_link_libraries(InputActions PRIVATE
     Foundation::Core
     Foundation::Runtime
     Foundation::Runtime.Client
+    Engine::Project
     Foundation::Shell.Desktop Foundation::Runtime.Desktop
     Foundation::Graphics
     Foundation::Graphics.Gpu
     Foundation::Input Engine::Input
-    Foundation::Settings Foundation::Xml.Serialization Extensions::Imgui
+    Foundation::Settings Foundation::Xml.Serialization
     Foundation::Policy)
 util_copy_sdl3_dll(InputActions)
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(InputActions ROLE player PLUGINS imgui)

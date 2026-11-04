@@ -7,7 +7,7 @@
 // As the renderer grows, this is where we exercise it.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (debug UI), used directly; extensions.imgui does the engine integration
+#include "imgui.h" // Dear ImGui (debug UI), used directly; imgui.engine does the engine integration
 
 import foundation.core;
 import foundation.rhi; // offscreen render target (Texture / ResourceState / Blit)
@@ -25,7 +25,7 @@ import engine.scene;
 import engine.render; // MeshComponent / CameraComponent and their managers
 import engine.model;  // InstantiateModel: a cooked model's nodes as entities
 import engine.animation; // SkeletalAnimation/AnimationGraph components (engine-driven skinning)
-import extensions.imgui;               // ImguiSubsystem (debug UI)
+import imgui.engine;               // ImguiSubsystem (debug UI)
 import foundation.particles;           // ParticleEffect and the CPU sim (the campfire demo)
 import engine.particles;    // ParticleEffectComponent and the subsystem
 import foundation.image;               // Image (HDR equirect pixels)
@@ -66,7 +66,6 @@ namespace content = foundation::content;
 namespace resource = foundation::resource;
 namespace model = foundation::model;
 namespace animation = foundation::animation;
-namespace imgui = extensions::imgui;
 namespace particles = foundation::particles;
 
 namespace
@@ -99,10 +98,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -1452,6 +1455,8 @@ namespace
                 }
             }
             core::ConsoleWrite(u8"Sandbox: shutting down.\n");
+            // The base last: its teardown (the plugins, the scenes, the runs) after this app's own.
+            engine::runtime::DefaultApplication::OnShutdown(host);
         }
 
         // Build a small procedural alpha-cutout texture (checkerboard: opaque cells and fully transparent
@@ -1575,6 +1580,7 @@ namespace
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         // Swap in a freshly built floor material for the current slider values. The mesh
         // renderer keys material instances by UID and prunes unreferenced ones, so replacing
         // the material is the clean live-tweak path (no instance-mutation API needed).

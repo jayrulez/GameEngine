@@ -9,7 +9,7 @@
 
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (isolate animation-drive cost)
-#include "imgui.h"             // Dear ImGui (HUD), used directly; extensions.imgui does the integration
+#include "imgui.h"             // Dear ImGui (HUD), used directly; imgui.engine does the integration
 
 import foundation.core;
 import foundation.profiler;
@@ -27,7 +27,7 @@ import foundation.scene;
 import engine.scene;
 import engine.render; // MeshComponent / CameraComponent and their managers
 import foundation.render;           // ViewCamera / ViewportRect (split-screen overrides)
-import extensions.imgui;            // ImguiSubsystem (HUD)
+import imgui.engine;            // ImguiSubsystem (HUD)
 import foundation.geometry;
 import foundation.geometry.resource; // StaticMeshFactory and the StaticMesh product
 import foundation.materials;
@@ -54,7 +54,6 @@ namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
 namespace render = foundation::render;
-namespace imgui = extensions::imgui;
 namespace geometry = foundation::geometry;
 namespace materials = foundation::materials;
 namespace texture = foundation::texture;
@@ -114,10 +113,14 @@ namespace
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
-            if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
+            // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
+            // from what the app offers (its graphics device and data mount).
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
-                                                                    DataFileSystem());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                foundation::runtime::EnabledPlugin imgui;
+                imgui.id = u8"imgui";
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -963,9 +966,12 @@ namespace
                 gfx->Raw()->WaitIdle();
             }
             core::ConsoleWrite(u8"AnimatedCrowd: shutting down.\n");
+            // The base last: its teardown (the plugins, the scenes, the runs) after this app's own.
+            engine::runtime::DefaultApplication::OnShutdown(host);
         }
 
     private:
+        // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_camera{};
         scene::EntityHandle m_floor{};

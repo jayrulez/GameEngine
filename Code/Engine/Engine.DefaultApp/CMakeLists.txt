@@ -42,3 +42,4 @@ target_sources(Engine.DefaultApp
             ProfilerOverlayHost.cppm)
 
 target_link_libraries(Engine.DefaultApp PUBLIC Engine::GUI) # the engine GUI
+target_link_libraries(Engine.DefaultApp PRIVATE Engine::Project) # the engine version a plugin host checks plugins against

@@ -15,9 +15,9 @@ if(TARGET Foundation::Shell.Desktop AND TARGET Foundation::Runtime.Desktop AND T
     add_subdirectory(HelloWindow)
     add_subdirectory(ScriptPlayground)   # script consumer proof (Mover/Spinner behaviors on the ScriptSubsystem)
     add_subdirectory(MultiWindow)
-    # Samples with an ImGui debug UI honor the extension option, or an
-    # -DOPTION_EXTENSION_IMGUI=OFF configure dies on a missing Extensions::Imgui target.
-    if(OPTION_EXTENSION_IMGUI)
+    # Samples with an ImGui debug UI honor the plugin option, or an
+    # -DOPTION_PLUGIN_IMGUI=OFF configure dies on util_link_plugins asking for a plugin not added.
+    if(OPTION_PLUGIN_IMGUI)
         add_subdirectory(InputActions)       # foundation.input consumer proof (named actions end-to-end)
         add_subdirectory(PhysicsPlayground)  # physics consumer proof (crates/trigger/raycast on Jolt)
         add_subdirectory(AudioPlayground)    # audio consumer proof (ambient loop and positional one-shots on miniaudio)
@@ -26,7 +26,7 @@ if(TARGET Foundation::Shell.Desktop AND TARGET Foundation::Runtime.Desktop AND T
     endif()
     # These dev harnesses link the authoring pipeline (ModelImporter and the cook libraries), so they
     # only build when the tooling is present (OPTION_BUILD_TOOLS; always off for web).
-    if(OPTION_BUILD_TOOLS AND OPTION_EXTENSION_IMGUI)
+    if(OPTION_BUILD_TOOLS AND OPTION_PLUGIN_IMGUI)
         add_subdirectory(Sandbox)            # the dev harness we grow the engine in
         add_subdirectory(AnimStressTest)     # animation/skinning benchmark (Sandbox copy, stripped toward a grid)
         add_subdirectory(AnimatedCrowd)      # skinned-crowd instancing (InstancedMeshComponent and InstancedSkinning)

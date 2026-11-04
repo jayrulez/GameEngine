@@ -63,7 +63,7 @@ export namespace foundation::core
             m_factories.Remove(id);
         }
 
-        // Registration observer (one at a time): the PluginHost recording hook; see
+        // Registration observer (one at a time): the PluginLoader recording hook; see
         // TypeRegistry::SetRegistrationObserver for the contract.
         void SetRegistrationObserver(void (*observer)(void*, TypeId), void* context) noexcept
         {

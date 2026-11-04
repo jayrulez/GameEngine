@@ -191,7 +191,7 @@ add_library(doctest::doctest ALIAS doctest)
 target_include_directories(doctest SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/doctest)
 
 # Dear ImGui - vendored (copied from upstream, not a submodule). Compiled as a static library;
-# the include dir is PUBLIC + SYSTEM so consumers (the extensions.imgui lib + apps) can
+# the include dir is PUBLIC + SYSTEM so consumers (the imgui.engine lib + apps) can
 # #include "imgui.h" and call ImGui:: directly. Does NOT link policy, so the vendored
 # sources build without our -Werror. No stock backends - The engine has its own RHI-based renderer.
 # Builds for Emscripten too (portable C++; the debug panel works in the browser).
@@ -203,11 +203,11 @@ add_library(imgui STATIC
     imgui/imgui_demo.cpp)
 add_library(ThirdParty::ImGui ALIAS imgui)
 target_include_directories(imgui SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/imgui)
-# OUTPUT_NAME, not just the target name: the engine extension target is `Imgui`, and every
+# OUTPUT_NAME, not just the target name: the engine plugin target is `Imgui`, and every
 # static lib lands in the same Bin/<cfg>/<plat>/lib. On Windows that directory is
 # case-INSENSITIVE, so `imgui.lib` and `Imgui.lib` are one file and whichever archived last
 # silently replaced the other - the executable then linked an Imgui.lib holding only the
-# extension's objects and every ImGui:: symbol came up undefined. Case-sensitive filesystems
+# plugin's objects and every ImGui:: symbol came up undefined. Case-sensitive filesystems
 # hide this entirely, so it does not reproduce on Linux. Renaming the VENDORED side costs
 # nothing: consumers refer to ThirdParty::ImGui, never to the file.
 set_target_properties(imgui PROPERTIES POSITION_INDEPENDENT_CODE ON

@@ -20,7 +20,6 @@ set(_terrain_common_libs
     Engine::Scene
     Engine::Render
     Foundation::Render
-    Extensions::Imgui
     Foundation::Geometry
     Foundation::Materials
     Foundation::Heightfield
@@ -88,3 +87,6 @@ else()
     util_copy_sdl3_dll(TerrainPlayground)
 
 endif()
+
+# Dear ImGui, which the app loads as a plugin (its part linked, and the registry listing it).
+util_link_plugins(TerrainPlayground ROLE player PLUGINS imgui)

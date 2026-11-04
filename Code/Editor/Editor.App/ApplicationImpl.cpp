@@ -79,7 +79,14 @@ namespace editor::app
         services.userSettings = &m_editorSettings;
         services.projects = &m_projectManager;
         services.runtime = &m_runtimeContext;
-        services.native = &m_native;
+        services.pluginsChanged = [this](foundation::runtime::PluginHost* plugins)
+        {
+            if (m_mcp)
+                m_mcp->SetPlugins(plugins); // its session reports and edits the project's plugins
+        };
+        services.linkedPlugins = m_config.linkedPlugins;
+        services.pluginTools = &m_mcpPluginTools;
+        services.exportHooks = &m_exportHooks;
         EditorApplication* self = this;
         services.seedNewProject = [self](editor::EditorContext& context, editor::EditorProject& project)
         {
@@ -270,6 +277,8 @@ namespace editor::app
         mcp.builders = &m_builders;
         mcp.userSettings = &m_editorSettings;
         mcp.log = m_config.logBuffer;
+        mcp.pluginTools = &m_mcpPluginTools;
+        mcp.linkedPlugins = m_config.linkedPlugins;
         mcp.dataRoot = m_config.dataRoot;
         mcp.forceEnabled = m_config.mcpEnabled;
         mcp.port = m_config.mcpPort;
@@ -564,6 +573,7 @@ namespace editor::app
             return;
         if (!m_projectSettings)
             m_projectSettings = MakeUnique<ProjectSettingsDialog>(m_editorAllocator, m_editorAllocator, m_context, RefServices(),
+                                                                  m_config.linkedPlugins,
                                                                   m_window.LoadMarkup(ProjectSettingsDialog::kPath));
         (void)m_projectSettings->Open(*root);
     }
@@ -1050,9 +1060,8 @@ namespace editor::app
         project.settings = [self]() { self->OpenProjectSettings(); };
         project.exportPresets = [self]() { self->OpenExport(); };
         project.addNativeCode = [self]() { self->AddNativeCode(); };
-        project.buildNativeModule = [self]() { self->BuildNativeModule(); };
-        project.reloadNativeModule = [self]()
-        { self->m_native.Reload(self->m_session.Project(), self->m_context, self->m_runtimeContext, self->m_session.Resources()); };
+        project.buildPlugins = [self]() { self->BuildProjectPlugins(); };
+        project.reloadPlugins = [self]() { self->m_session.ReloadPlugins(); };
         project.reportResourceMemory = [self]() { EditorExport::ReportResourceMemory(self->m_session.Resources()); };
         RegisterProjectActions(actions, Move(project));
 
@@ -1115,42 +1124,54 @@ namespace editor::app
     void EditorApplication::AddNativeCode()
     {
         editor::EditorProject* project = m_session.Project();
-        if (project == nullptr)
+        gui::SceneRoot* root = m_window.Root();
+        if (project == nullptr || root == nullptr)
             return;
-        if (!project->Settings().nativeModule.IsEmpty())
+        // The parts to scaffold, asked first: those the game's package has show checked.
+        NativeCodeRequest request;
+        if (const Optional<editor::GamePackage> package = editor::FindGamePackage(*project))
         {
-            m_context.Notify(editor::NoticeKind::Info, u8"This project already has native code (see Project Settings).");
-            return;
+            request.path = package->path;
+            request.existing = package->parts;
         }
-        const Status scaffolded = editor::ScaffoldNativeModule(*project);
-        if (scaffolded.IsOk())
-        {
-            m_context.Notify(editor::NoticeKind::Success, u8"Native code scaffolded in Native/ - use Project > Build Native Module, then Reload.");
-            LOG_INFO(u8"Editor", u8"native scaffold: Native/ created, manifest nativeModule = '{}'", project->Settings().nativeModule);
-        }
-        else if (scaffolded.Code() == ErrorCode::AlreadyExists)
-            m_context.Notify(editor::NoticeKind::Warning, u8"Native/ already exists - not touching it (set Project Settings > Native module manually).");
         else
-            m_context.Notify(editor::NoticeKind::Error, u8"Native scaffold failed (see Console).");
+            request.path = Format(u8"{}/{}", engine::project::kProjectPluginsDir,
+                                  editor::NativeTargetNameFromProjectName(project->Settings().name.AsView()));
+        EditorApplication* self = this;
+        request.accepted = [self](Span<const foundation::runtime::PluginPartKind> parts)
+        {
+            editor::EditorProject* open = self->m_session.Project();
+            if (open == nullptr)
+                return;
+            const Status scaffolded = editor::ScaffoldGamePackage(*open, parts);
+            if (scaffolded.IsOk())
+                self->m_context.Notify(editor::NoticeKind::Success,
+                                       u8"Native code scaffolded in the game's plugin package - use Project > Build Project Plugins, then Reload.");
+            else if (scaffolded.Code() == ErrorCode::AlreadyExists)
+                self->m_context.Notify(editor::NoticeKind::Warning, u8"Those parts are there already, or Plugins/ holds another folder of that name - nothing was touched.");
+            else
+                self->m_context.Notify(editor::NoticeKind::Error, u8"Native scaffold failed (see Console).");
+        };
+        m_nativeCodeDialog = NativeCodeDialog::Open(m_editorAllocator, *root, m_window.LoadMarkup(NativeCodeDialog::kPath), Move(request));
     }
 
-    void EditorApplication::BuildNativeModule()
+    void EditorApplication::BuildProjectPlugins()
     {
         editor::EditorProject* project = m_session.Project();
-        if (project == nullptr || project->Settings().nativeModule.IsEmpty())
+        if (project == nullptr || editor::ProjectPackageDirs(*project).IsEmpty())
         {
-            m_context.Notify(editor::NoticeKind::Info, u8"No native module declared - Project > Add Native Code... first.");
+            m_context.Notify(editor::NoticeKind::Info, u8"The project has no plugin packages of its own - Project > Add Native Code... first.");
             return;
         }
         editor::EditorContext* context = &m_context;
         (void)m_context.Tasks().Submit(
-            u8"Native Build", [project](TaskContext&) -> Status { return editor::BuildDevNativeModule(*project); },
+            u8"Plugin Build", [project](TaskContext&) -> Status { return editor::BuildProjectPlugins(*project); },
             [context](Status built) // main thread
             {
                 if (built.IsOk())
-                    context->Notify(editor::NoticeKind::Success, u8"Native module built - Project > Reload Native Module to pick it up.");
+                    context->Notify(editor::NoticeKind::Success, u8"Project plugins built - Project > Reload Project Plugins to pick them up.");
                 else
-                    context->Notify(editor::NoticeKind::Error, u8"Native build failed (see Console).");
+                    context->Notify(editor::NoticeKind::Error, u8"Project plugin build failed (see Console).");
             },
             m_context.BuildLane());
     }

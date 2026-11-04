@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Engine::Composition - implementation unit (the wide domain imports live here, keeping the
-// interface BMI lean). The full composition is built once from the domains' own declarations:
+// interface BMI lean). The full composition is built from the domains' own declarations:
 // each Engine.<Domain> library defines its DomainModule beside the functions it names, so a
 // manager, a registrar, a facade or a resource module added to a domain reaches every consumer.
 // There is no parallel list to drift, only this one of the domains themselves.
@@ -63,13 +63,89 @@ namespace
     };
 }
 
+namespace
+{
+    // The full composition and the plugin domains it is built from, beside the engine's list.
+    struct CompositionState
+    {
+        struct PluginDomain
+        {
+            u64 token;
+            const engine::DomainModule* module;
+        };
+        Array<PluginDomain> plugins;
+        u64 nextToken = 1;
+        engine::EngineComposition composition;
+
+        void Rebuild()
+        {
+            Array<const engine::DomainModule*> modules;
+            for (const engine::DomainModule* module : kAllDomains)
+            {
+                modules.PushBack(module);
+            }
+            for (const PluginDomain& plugin : plugins)
+            {
+                modules.PushBack(plugin.module);
+            }
+            composition = engine::EngineComposition::Build(
+                Span<const engine::DomainModule* const>{modules.Data(), modules.Size()});
+        }
+    };
+
+    CompositionState& State()
+    {
+        static CompositionState state;
+        static const bool built = (state.Rebuild(), true); // the first build, thread-safe
+        (void)built;
+        return state;
+    }
+}
+
 namespace engine
 {
-    const EngineComposition& FullComposition()
+    const EngineComposition& FullComposition() { return State().composition; }
+
+    u64 AddPluginDomain(const DomainModule& module)
     {
-        static const EngineComposition composition =
-            EngineComposition::Build(Span<const DomainModule* const>{kAllDomains});
-        return composition;
+        if (module.installScene != nullptr)
+        {
+            return 0;
+        }
+        CompositionState& state = State();
+        const u64 token = state.nextToken++;
+        state.plugins.PushBack(CompositionState::PluginDomain{token, &module});
+        state.Rebuild();
+        // What the engine registers at startup for its own domains, this one registers now: a
+        // host may have done its startup registration before the plugin loaded. Each is
+        // idempotent, and a plugin host records what they register, so unload reverses it.
+        if (module.registerReflection != nullptr)
+        {
+            module.registerReflection();
+        }
+        if (module.registerScriptFacade != nullptr)
+        {
+            module.registerScriptFacade();
+        }
+        for (const foundation::resource::ResourceModule* resources : module.resources)
+        {
+            resources->RegisterTypes();
+        }
+        return token;
+    }
+
+    void RemovePluginDomain(u64 token)
+    {
+        CompositionState& state = State();
+        for (usize i = 0; i < state.plugins.Size(); ++i)
+        {
+            if (state.plugins[i].token == token)
+            {
+                state.plugins.RemoveAt(i);
+                state.Rebuild();
+                return;
+            }
+        }
     }
 
     const scene::SceneComposition& FullSceneComposition() { return FullComposition().Scene(); }

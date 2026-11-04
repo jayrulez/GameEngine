@@ -2878,6 +2878,64 @@ namespace foundation::script
             return false;
         }
 
+        // A global naming a reflected type this manager was not given: a Luau compile resolves no
+        // globals, so without this a script using a facade the surface lacks (a type of a plugin
+        // its platform does not have) compiles and fails only when the line runs.
+        Array<const char*> absent;
+        for (const TypeInfo* type : GlobalTypeRegistry().All())
+        {
+            bool registered = false;
+            for (const TypeInfo* given : m_types)
+            {
+                registered = registered || given == type;
+            }
+            if (!registered)
+            {
+                absent.PushBack(ScriptTypeName(*type));
+            }
+        }
+        if (!absent.IsEmpty())
+        {
+            struct AbsentGlobals final : Luau::AstVisitor
+            {
+                const Array<const char*>* absent = nullptr;
+                IScriptErrorHandler* errors = nullptr;
+                StringView chunkName;
+                bool found = false;
+
+                bool visit(Luau::AstExprGlobal* node) override
+                {
+                    for (const char* name : *absent)
+                    {
+                        if (std::strcmp(name, node->name.value) == 0)
+                        {
+                            const String message = Format(u8"'{}' is not available here: its type is not "
+                                                          u8"registered on this surface",
+                                                          ViewOf(node->name.value));
+                            ScriptError error;
+                            error.kind = ScriptErrorKind::Compile;
+                            error.module = chunkName;
+                            error.line = static_cast<i32>(node->location.begin.line) + 1;
+                            error.column = static_cast<i32>(node->location.begin.column) + 1;
+                            error.message = message.AsView();
+                            errors->OnError(error);
+                            found = true;
+                            break;
+                        }
+                    }
+                    return true;
+                }
+            } walk;
+            walk.absent = &absent;
+            walk.errors = &errors;
+            walk.chunkName = chunkName;
+            parsed.root->visit(&walk);
+            if (walk.found)
+            {
+                return false;
+            }
+        }
+
         lua_CompileOptions options{};
         options.optimizationLevel = 1;
         options.debugLevel = 2;

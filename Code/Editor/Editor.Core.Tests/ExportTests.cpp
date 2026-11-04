@@ -8,6 +8,7 @@
 // format involved is a versioned payload.
 #include <atomic> // gcc modules: pull in std::atomic bodies before this import mix
 #include <doctest/doctest.h>
+#include <initializer_list>
 
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -18,6 +19,7 @@ import foundation.vfs.pak;
 import foundation.content;
 import foundation.resource;
 import engine.project;
+import foundation.runtime; // the project's packages
 import foundation.geometry;
 import geometry.pipeline;
 import foundation.geometry.resource;
@@ -2487,18 +2489,7 @@ TEST_CASE("export: player output name carries the executable or page extension (
     CHECK(PlayerOutputName(u8"Web", u8"", u8"Engine.Player.html") == StringView(u8"Engine.Player.html"));
 }
 
-// --- Native ship link derivations ----------------------------------------------------------
-TEST_CASE("export: native target derives from the manifest's dev-module path")
-{
-    using editor::detail::NativeTargetFromModulePath;
-    CHECK(NativeTargetFromModulePath(u8"Native/libScratchGame.so") == u8"ScratchGame");
-    CHECK(NativeTargetFromModulePath(u8"libGameOnly.so") == u8"GameOnly");
-    CHECK(NativeTargetFromModulePath(u8"Native/MyGame.dll") == u8"MyGame");
-    CHECK(NativeTargetFromModulePath(u8"Native\\libWinPath.dll") == u8"WinPath");
-    CHECK(NativeTargetFromModulePath(u8"BareName") == u8"BareName");
-    CHECK(NativeTargetFromModulePath(u8"") == u8"");
-}
-
+// --- The project's own packages ----------------------------------------------------------
 TEST_CASE("export: ship output suffix is per-project and filesystem-safe")
 {
     using editor::detail::ShipOutputSuffix;
@@ -2506,41 +2497,38 @@ TEST_CASE("export: ship output suffix is per-project and filesystem-safe")
     CHECK(ShipOutputSuffix(u8"My Game 2!") == u8"-Ship-My-Game-2-");
 }
 
-TEST_CASE("export: the NativeSample fixture pins the native-game conventions")
+TEST_CASE("export: the NativeSample fixture pins the game-package conventions")
 {
-    // The committed reference project (Data/SampleProjects/NativeSample) must stay a valid
-    // input to the native pipeline: manifest parses, the module path derives the target
-    // that its Native/CMakeLists.txt actually declares, and the source dir exists.
+    // The committed reference project (Data/SampleProjects/NativeSample) must stay a valid input
+    // to the package pipeline: its manifest enables its own package, whose Plugin.xml reads, names
+    // the same id and lists every part kind, each with its folder.
     const String root = Format(u8"{}/Data/SampleProjects/NativeSample",
                                StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)));
     foundation::vfs::NativeFileSystem fs(root.AsView(), foundation::core::DefaultAllocator());
     engine::project::ProjectSettings settings;
     REQUIRE(engine::project::LoadProjectSettings(fs, settings).IsOk());
     CHECK(settings.name == u8"NativeSample");
-    REQUIRE(settings.nativeModule == u8"Native/libNativeSample.so");
+    const foundation::runtime::EnabledPlugin* entry = settings.FindPlugin(u8"nativesample");
+    REQUIRE(entry != nullptr);
+    CHECK(entry->path == u8"Plugins/NativeSample");
 
-    const String target =
-        editor::detail::NativeTargetFromModulePath(settings.nativeModule.AsView());
-    CHECK(target == u8"NativeSample");
-
-    // The fixture's CMakeLists declares that target through util_add_engine_library.
-    UniquePtr<IStream> cml = fs.Open(u8"Native/CMakeLists.txt", FileMode::Read);
-    REQUIRE(static_cast<bool>(cml));
-    Array<char> text;
-    text.Resize(static_cast<usize>(cml->Size()));
-    REQUIRE(cml->Read(text.Data(), text.Size()) == text.Size());
-    const StringView body(reinterpret_cast<const utf8char*>(text.Data()), text.Size());
-    bool declaresTarget = false;
-    const StringView needle = u8"util_add_engine_library(NativeSample ";
-    for (usize i = 0; i + needle.Size() <= body.Size() && !declaresTarget; ++i)
+    foundation::runtime::PluginManifest manifest;
+    REQUIRE(foundation::runtime::LoadPluginManifest(PathJoin(root.AsView(), entry->path.AsView()).AsView(), manifest,
+                                                    DefaultAllocator())
+                .IsOk());
+    CHECK(manifest.id == u8"nativesample");
+    String why;
+    CHECK(foundation::runtime::CheckPluginManifest(manifest, engine::project::kEngineVersionString, why));
+    // Every part kind, each a folder with its CMakeLists (Integration.Plugins builds and loads them).
+    for (foundation::runtime::PluginPartKind kind : foundation::runtime::kPluginPartKinds)
     {
-        declaresTarget = StringView(body.Data() + i, needle.Size()) == needle;
+        CAPTURE(foundation::runtime::PluginPartKindName(kind));
+        CHECK(manifest.HasPart(kind));
+        CHECK(fs.Exists(Format(u8"Plugins/NativeSample/NativeSample.{}/CMakeLists.txt", foundation::runtime::PluginPartKindName(kind)).AsView()));
     }
-    CHECK(declaresTarget);
-    CHECK(fs.Exists(u8"Native/NativeSamplePlugin.cpp"));
 }
 
-TEST_CASE("export: Add Native Code scaffolds the reference shape and wires the manifest")
+TEST_CASE("export: Add Native Code scaffolds the game's package with the parts asked for, and adds parts to it")
 {
     const StringView dir = u8"scaffold-proj"; // harness cwd = .test-scratch
     NukeTree(dir);
@@ -2550,28 +2538,59 @@ TEST_CASE("export: Add Native Code scaffolds the reference shape and wires the m
 
     CHECK(editor::NativeTargetNameFromProjectName(u8"My Scaffold 7!") == u8"MyScaffold7");
     CHECK(editor::NativeTargetNameFromProjectName(u8"123!") == u8"Native"); // leading digits drop
+    CHECK(editor::ProjectPackageDirs(*project).IsEmpty());
+    CHECK_FALSE(editor::FindGamePackage(*project));
 
-    REQUIRE(editor::ScaffoldNativeModule(*project).IsOk());
-    // Platform-shaped: the manifest points at what this platform actually loads.
-#if PLATFORM_WINDOWS
-    const StringView expectedModule = u8"Native/MyScaffold7.dll";
-#else
-    const StringView expectedModule = u8"Native/libMyScaffold7.so";
-#endif
-    CHECK(project->Settings().nativeModule == expectedModule);
+    using foundation::runtime::PluginPartKind;
+    const PluginPartKind engine[] = {PluginPartKind::Engine};
+    REQUIRE(editor::ScaffoldGamePackage(*project, Span<const PluginPartKind>(engine, 1)).IsOk());
+    const foundation::runtime::EnabledPlugin* entry = project->Settings().FindPlugin(u8"myscaffold7");
+    REQUIRE(entry != nullptr);
+    CHECK(entry->path == u8"Plugins/MyScaffold7");
 
-    // The manifest persisted; the generated files exist and follow the fixture shape.
+    // The manifest persisted; the package reads, and its part follows the fixture's shape.
     foundation::vfs::NativeFileSystem fs(dir, DefaultAllocator());
     engine::project::ProjectSettings reread;
     REQUIRE(engine::project::LoadProjectSettings(fs, reread).IsOk());
-    CHECK(reread.nativeModule == expectedModule);
-    CHECK(fs.Exists(u8"Native/CMakeLists.txt"));
-    CHECK(fs.Exists(u8"Native/MyScaffold7Plugin.cpp"));
-    CHECK(editor::detail::NativeTargetFromModulePath(reread.nativeModule.AsView()) ==
-          u8"MyScaffold7");
+    CHECK(reread.FindPlugin(u8"myscaffold7") != nullptr);
+    foundation::runtime::PluginManifest manifest;
+    REQUIRE(foundation::runtime::LoadPluginManifest(PathJoin(dir, u8"Plugins/MyScaffold7").AsView(), manifest,
+                                                    DefaultAllocator())
+                .IsOk());
+    CHECK(manifest.id == u8"myscaffold7");
+    CHECK(manifest.name == u8"My Scaffold 7!");
+    String why;
+    CHECK(foundation::runtime::CheckPluginManifest(manifest, engine::project::kEngineVersionString, why));
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Engine/CMakeLists.txt"));
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Engine/MyScaffold7Engine.cpp"));
+    const Array<String> packages = editor::ProjectPackageDirs(*project);
+    REQUIRE(packages.Size() == 1u);
+    CHECK(packages[0].AsView().EndsWith(u8"Plugins/MyScaffold7"));
 
-    // It never overwrites: a second call refuses (the module is declared and the dir exists).
-    CHECK(editor::ScaffoldNativeModule(*project).Code() == ErrorCode::AlreadyExists);
+    // A part it has is refused, and nothing is written over.
+    CHECK(editor::ScaffoldGamePackage(*project, Span<const PluginPartKind>(engine, 1)).Code() == ErrorCode::AlreadyExists);
+
+    // Parts it lacks are added, listed in load order whatever order they were asked in, each with its
+    // service found at load.
+    const PluginPartKind more[] = {PluginPartKind::Editor, PluginPartKind::Pipeline, PluginPartKind::Engine};
+    REQUIRE(editor::ScaffoldGamePackage(*project, Span<const PluginPartKind>(more, 3)).IsOk());
+    const Optional<editor::GamePackage> package = editor::FindGamePackage(*project);
+    REQUIRE(package);
+    REQUIRE(package->parts.Size() == 3u);
+    CHECK(package->parts[0] == PluginPartKind::Engine);
+    CHECK(package->parts[1] == PluginPartKind::Pipeline);
+    CHECK(package->parts[2] == PluginPartKind::Editor);
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Pipeline/CMakeLists.txt"));
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Editor/MyScaffold7Editor.cpp"));
+    CHECK_FALSE(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Tooling"));
+    {
+        Result<Array<byte>> source = ReadFile(PathJoin(dir, u8"Plugins/MyScaffold7/MyScaffold7.Pipeline/MyScaffold7Pipeline.cpp").AsView());
+        REQUIRE(source.HasValue());
+        const StringView text(reinterpret_cast<const utf8char*>(source.Value().Data()), source.Value().Size());
+        CHECK(text.Contains(u8"context.Find<pipeline::PipelinePluginServices>()"));
+        CHECK(text.Contains(u8"PLUGIN_PART(&Load, &Unload)"));
+    }
+    CHECK(project->Settings().plugins.Size() == 1u); // one entry, as before
 
     NukeTree(dir);
 }
@@ -2672,3 +2691,421 @@ TEST_CASE("export: a created template carries its icon, the platform's unless on
     NukeTree(base.AsView());
     NukeTree(outFolder.AsView());
 }
+
+namespace
+{
+    // A plugin package on disk: its Plugin.xml (supported on `platforms`) and, for the host's
+    // platform, one deploy file.
+    void WritePackage(StringView dir, StringView id, StringView version, std::initializer_list<StringView> platforms)
+    {
+        NukeTree(dir);
+        REQUIRE(CreateDirectories(PathJoin(dir, u8"Deploy").AsView()));
+        foundation::runtime::PluginManifest manifest;
+        manifest.id = String(id);
+        manifest.version = String(version);
+        manifest.engineVersion = String(engine::project::kEngineVersionString);
+        manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+        for (StringView platform : platforms)
+        {
+            foundation::runtime::PluginPlatform entry{String(platform)};
+            if (platform == GetHostPlatformName())
+            {
+                entry.deploy.PushBack(Format(u8"Deploy/{}-runtime.bin", id));
+            }
+            manifest.platforms.PushBack(Move(entry));
+        }
+        MemoryStream xml;
+        REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+        REQUIRE(WriteFile(PathJoin(dir, u8"Plugin.xml").AsView(), xml.Bytes()).IsOk());
+        const String deploy = Format(u8"{} runtime\n", id);
+        REQUIRE(WriteFile(PathJoin(dir, Format(u8"Deploy/{}-runtime.bin", id).AsView()).AsView(),
+                          Span<const byte>(reinterpret_cast<const byte*>(deploy.Data()), deploy.Size()))
+                    .IsOk());
+    }
+}
+
+// A template records the plugins its player links (the build's <player>.plugins), each with its
+// version, and carries each one's Plugin.xml and deploy files for its platform, so an export has them
+// with no engine checkout.
+TEST_CASE("export: a created template records the plugins its player links and carries their package files")
+{
+    const String base = TempDir(u8"scratch_tmpl_plugins");
+    const String root = TempDir(u8"scratch_tmpl_plugins_root");
+    const String package = TempDir(u8"scratch_tmpl_plugins_pkg");
+    NukeTree(base.AsView());
+    NukeTree(root.AsView());
+    WritePackage(package.AsView(), u8"steamish", u8"1.4.0", {GetHostPlatformName()});
+
+    String leaf(GetHostPlatformName());
+    leaf += u8"-Clang";
+    const String binDir = PathJoin(PathJoin(PathJoin(base.AsView(), u8"Bin").AsView(), u8"Release").AsView(), leaf.AsView());
+    REQUIRE(CreateDirectories(binDir.AsView()));
+    foundation::vfs::NativeFileSystem binFs(binDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(binFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    SaveText(binFs, u8"Engine.Player.plugins", Format(u8"steamish|{}\n", package).AsView());
+
+    String createdId, createdDir;
+    REQUIRE(editor::CreateTemplate(binDir.AsView(), root.AsView(), editor::TemplateOutput::Install, &createdId, &createdDir).IsOk());
+    foundation::vfs::NativeFileSystem bundleFs(createdDir.AsView(), foundation::core::DefaultAllocator());
+    CHECK(bundleFs.Exists(u8"plugins/steamish/Plugin.xml"));
+    CHECK(bundleFs.Exists(u8"plugins/steamish/Deploy/steamish-runtime.bin"));
+    const Array<editor::PlayerPlugin> listed = editor::ReadPlayerPlugins(createdDir.AsView(), u8"Engine.Player");
+    REQUIRE(listed.Size() == 1u);
+    CHECK(listed[0].packageDir == PathJoin(createdDir.AsView(), u8"plugins/steamish")); // the bundle's copy
+
+    editor::ExportTemplate read;
+    REQUIRE(editor::LoadTemplateManifest(bundleFs, read).IsOk());
+    REQUIRE(read.plugins.Size() == 1u);
+    CHECK(read.plugins[0].id == u8"steamish");
+    CHECK(read.plugins[0].version == u8"1.4.0");
+
+    NukeTree(base.AsView());
+    NukeTree(root.AsView());
+    NukeTree(package.AsView());
+}
+
+// Which player a dist runs, from the plugins the project enables on the preset's platform: the
+// template's when it carries them all at a recent enough version, one built for the project
+// otherwise (its own package enabled there, a plugin the template lacks or carries older), and no
+// export at all for an entry enabled on a platform its plugin does not support or a plugin no
+// package holds.
+TEST_CASE("export: the template's player when it carries the project's plugins, a built one when not, a refusal when they cannot ship")
+{
+    const String projectDir = TempDir(u8"scratch_choose_player");
+    const String carriedDir = TempDir(u8"scratch_choose_player_carried");
+    NukeTree(projectDir.AsView());
+    const StringView host = GetHostPlatformName();
+    const StringView other = host == StringView(u8"Linux64") ? StringView(u8"Win64") : StringView(u8"Linux64");
+    WritePackage(carriedDir.AsView(), u8"carried", u8"1.0.0", {host});
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Choose").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+
+    // The template's player lists the carried plugin (as the host template does from Bin).
+    editor::ExportTemplate tmpl;
+    tmpl.id = String(u8"test-template");
+    tmpl.directory = TempDir(u8"scratch_choose_player_tmpl");
+    NukeTree(tmpl.directory.AsView());
+    REQUIRE(CreateDirectories(tmpl.directory.AsView()));
+    {
+        foundation::vfs::NativeFileSystem fs(tmpl.directory.AsView(), foundation::core::DefaultAllocator());
+        SaveText(fs, u8"Engine.Player.plugins", Format(u8"carried|{}\n", carriedDir).AsView());
+    }
+    tmpl.plugins.PushBack(editor::TemplatePlugin{String(u8"carried"), String(u8"1.0.0")});
+
+    const auto enable = [&](StringView id, StringView path, std::initializer_list<StringView> platforms)
+    {
+        project->Settings().plugins.Clear();
+        foundation::runtime::EnabledPlugin entry;
+        entry.id = String(id);
+        entry.path = String(path);
+        for (StringView platform : platforms)
+            entry.platforms.PushBack(String(platform));
+        project->Settings().plugins.PushBack(Move(entry));
+    };
+
+    // Carried, enabled here: the template's player, and the plugin's deploy files go with it.
+    enable(u8"carried", u8"", {});
+    editor::detail::PlayerChoice choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.refusal.IsEmpty());
+    CHECK_FALSE(choice.build);
+    REQUIRE(choice.enabled.Size() == 1u);
+    // Enabled elsewhere only: absent here, so nothing to carry.
+    enable(u8"carried", u8"", {other});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK_FALSE(choice.build);
+    CHECK(choice.enabled.IsEmpty());
+    // Carried older than the version known: built.
+    tmpl.plugins[0].version = String(u8"0.9.0");
+    enable(u8"carried", u8"", {});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.build);
+    CHECK(choice.reason.AsView().Contains(u8"older than 1.0.0"));
+    // Not carried at all: built.
+    tmpl.plugins.Clear();
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.build);
+    CHECK(choice.reason.AsView().Contains(u8"does not carry plugin 'carried'"));
+    // The project's own package enabled here: built.
+    WritePackage(PathJoin(projectDir.AsView(), u8"Plugins/Own").AsView(), u8"own", u8"0.1.0", {host});
+    enable(u8"own", u8"Plugins/Own", {});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.build);
+    CHECK(choice.reason.AsView().Contains(u8"the project's own package 'own'"));
+    // Named on a platform its manifest lacks: refused.
+    WritePackage(PathJoin(projectDir.AsView(), u8"Plugins/Elsewhere").AsView(), u8"elsewhere", u8"0.1.0", {other});
+    enable(u8"elsewhere", u8"Plugins/Elsewhere", {host});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.refusal.AsView().Contains(u8"is enabled on"));
+    CHECK(choice.refusal.AsView().Contains(u8"which it does not support"));
+    // A plugin in no package: refused.
+    enable(u8"nowhere_at_all", u8"", {});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.refusal.AsView().Contains(u8"plugin 'nowhere_at_all' is in no package"));
+
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(carriedDir.AsView());
+    NukeTree(tmpl.directory.AsView());
+}
+
+// An export whose template carries the project's plugins ships the template's player, with each
+// enabled plugin's deploy files beside it and the result saying which player it is; an export the
+// plugins cannot ship is refused, with the reason, and writes nothing.
+TEST_CASE("export: ExportOne ships an enabled plugin's deploy files beside the template's player, and refuses what cannot ship")
+{
+    const String projectDir = TempDir(u8"scratch_export_plugins_proj");
+    const String toolDir = TempDir(u8"scratch_export_plugins_tool");
+    const String outRoot = TempDir(u8"scratch_export_plugins_out");
+    const String package = TempDir(u8"scratch_export_plugins_pkg");
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    WritePackage(package.AsView(), u8"carried", u8"1.0.0", {GetHostPlatformName()});
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Plugins Export").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(u8"carried");
+    project->Settings().plugins.PushBack(Move(entry));
+    REQUIRE(project->SaveSettings().IsOk());
+
+    REQUIRE(CreateDirectory(toolDir.AsView()));
+    foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    SaveText(toolFs, u8"Engine.Player.plugins", Format(u8"carried|{}\n", package).AsView());
+    editor::TemplateRegistry registry;
+    registry.Refresh(StringView{}, nullptr, toolDir.AsView(), &toolFs); // the host template, which records the plugin
+
+    editor::ExportPreset preset;
+    preset.name = String(u8"Host Build");
+    preset.platform = String(GetHostPlatformName());
+    preset.outputSubdir = String(u8"host");
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    editor::ExportResult result;
+    REQUIRE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result).IsOk());
+    foundation::vfs::NativeFileSystem distFs(result.outputDir.AsView(), foundation::core::DefaultAllocator());
+    CHECK(distFs.Exists(GetExecutableName(u8"Engine.Player").AsView()));
+    CHECK(distFs.Exists(u8"carried-runtime.bin")); // beside the player
+    CHECK(result.playerReason.AsView().Contains(u8"carries every plugin"));
+
+    // A plugin no package holds: refused, with the reason.
+    project->Settings().plugins[0].id = String(u8"missing_plugin");
+    editor::ExportResult refused;
+    CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &refused).IsOk());
+    CHECK(refused.refusal.AsView().Contains(u8"plugin 'missing_plugin' is in no package"));
+
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    NukeTree(package.AsView());
+}
+
+// A plugin's export hooks run once a dist is staged, in the order they were added, over the staged
+// folder; one that fails fails the export, its reason in the result.
+TEST_CASE("export: ExportOne runs the plugins' export hooks over the staged dist, and a failing one fails it")
+{
+    const String projectDir = TempDir(u8"scratch_export_hooks_proj");
+    const String toolDir = TempDir(u8"scratch_export_hooks_tool");
+    const String outRoot = TempDir(u8"scratch_export_hooks_out");
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Hooked").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+    REQUIRE(CreateDirectory(toolDir.AsView()));
+    foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    editor::TemplateRegistry registry;
+    registry.Refresh(StringView{}, nullptr, toolDir.AsView(), &toolFs);
+    editor::ExportPreset preset;
+    preset.name = String(u8"Host Build");
+    preset.platform = String(GetHostPlatformName());
+    preset.outputSubdir = String(u8"host");
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+
+    editor::ExportPluginServices hooks(DefaultAllocator());
+    Array<String> ran;
+    REQUIRE(hooks.AddHook(u8"first", [&ran](const editor::ExportHookContext& at) -> String
+                          {
+                              ran.PushBack(String(u8"first"));
+                              CHECK(FileExists(PathJoin(at.outputDir, u8"player.xml").AsView())); // after staging
+                              CHECK(at.preset->name == u8"Host Build");
+                              return String{};
+                          }));
+    REQUIRE(hooks.AddHook(u8"second", [&ran](const editor::ExportHookContext&) -> String
+                          {
+                              ran.PushBack(String(u8"second"));
+                              return String{};
+                          }));
+    CHECK_FALSE(hooks.AddHook(u8"empty", editor::ExportHook{}));
+    editor::ExportResult result;
+    REQUIRE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result, {}, true,
+                              nullptr, nullptr, nullptr, editor::ExportPlugins{nullptr, &hooks})
+                .IsOk());
+    REQUIRE(ran.Size() == 2u);
+    CHECK(ran[0] == u8"first");
+    CHECK(ran[1] == u8"second");
+
+    REQUIRE(hooks.AddHook(u8"breaks", [](const editor::ExportHookContext&) -> String { return String(u8"no signing key"); }));
+    editor::ExportResult failed;
+    CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &failed, {}, true,
+                                  nullptr, nullptr, nullptr, editor::ExportPlugins{nullptr, &hooks})
+                    .IsOk());
+    CHECK(failed.refusal == u8"export hook breaks: no signing key");
+
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+// A plugin whose Engine part gives scripts a type of its own (`Beacon`), as a platform service's
+// facade would: what the per-platform script check is about.
+namespace scriptprobe
+{
+    struct Beacon
+    {
+        f32 level = 0.0f;
+        Beacon() = default;
+        explicit Beacon(f32 value) : level(value) {}
+    };
+    REFLECT_VALUE(Beacon, "rtti::scriptprobe")
+    {
+        builder.Property<&Beacon::level>("level").Constructor<f32>();
+    }
+}
+
+namespace
+{
+    constexpr char8_t kBeaconPlugin[] = u8"beaconplugin";
+
+    void LoadBeacon(foundation::runtime::PluginContext& context)
+    {
+        scriptprobe::RttiRegisterValue_Beacon();
+        context.Types().Register(TypeOf<scriptprobe::Beacon>());
+    }
+    const foundation::runtime::PluginPart* BeaconEngine()
+    {
+        static constexpr foundation::runtime::PluginPart part{kBeaconPlugin, foundation::runtime::PluginPartKind::Engine,
+                                                              &LoadBeacon, nullptr};
+        return &part;
+    }
+
+    // The beacon plugin linked as a host links it: its manifest (Linux64 and Win64) and its part.
+    struct BeaconLinked
+    {
+        Array<byte> manifest;
+        foundation::runtime::PluginPartEntryFn parts[1] = {&BeaconEngine};
+        foundation::runtime::LinkedPlugin linked{};
+
+        BeaconLinked()
+        {
+            foundation::runtime::PluginManifest m;
+            m.id = String(kBeaconPlugin);
+            m.version = String(u8"1.0.0");
+            m.engineVersion = String(engine::project::kEngineVersionString);
+            m.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+            m.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Linux64")});
+            m.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Win64")});
+            MemoryStream xml;
+            REQUIRE(foundation::runtime::WritePluginManifest(m, xml).IsOk());
+            for (byte b : xml.Bytes())
+            {
+                manifest.PushBack(b);
+            }
+            manifest.PushBack(byte{0});
+            linked = foundation::runtime::LinkedPlugin{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 1};
+        }
+    };
+
+    // A script asset in the project's root group, its source in Sources.
+    void AddScript(editor::EditorProject& project, StringView name, StringView fileName, StringView language,
+                   StringView source)
+    {
+        REQUIRE(WriteFile(PathJoin(project.SourcesRoot().AsView(), fileName).AsView(),
+                          Span<const byte>(reinterpret_cast<const byte*>(source.Data()), source.Size()))
+                    .IsOk());
+        pipeline::ScriptClassAsset asset;
+        asset.fileName = foundation::vfs::SourcePath(fileName);
+        asset.language = String(language);
+        foundation::content::Instance* instance =
+            project.SourceDb().RootGroup()->CreateInstance(name, pipeline::ScriptClassAsset::StaticType());
+        REQUIRE(instance != nullptr);
+        REQUIRE(instance->WriteObject(asset).IsOk());
+    }
+}
+
+// A plugin the project enables on Win64 only takes its types away from Linux64: a script using one
+// passes the check for Win64 and is refused for Linux64, naming the script, the platform, the plugin
+// and the line, and an export for Linux64 is refused with that reason before anything is cooked.
+TEST_CASE("export: a script using a plugin's type is refused on a platform the plugin is not enabled on")
+{
+    RegisterScriptExportDeps();
+    const String projectDir = TempDir(u8"scratch_export_script_plugins_proj");
+    const String toolDir = TempDir(u8"scratch_export_script_plugins_tool");
+    const String outRoot = TempDir(u8"scratch_export_script_plugins_out");
+    const String package = TempDir(u8"scratch_export_script_plugins_pkg");
+    WritePackage(package.AsView(), kBeaconPlugin, u8"1.0.0", {u8"Linux64", u8"Win64"});
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Script Plugins").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(kBeaconPlugin);
+    entry.platforms.PushBack(String(u8"Win64"));
+    project->Settings().plugins.PushBack(Move(entry));
+    AddScript(*project, u8"Lamp", u8"Lamp.as", u8"angelscript",
+              u8"double shine()\n{\n    Beacon b(2.0f);\n    return b.level;\n}\n");
+
+    // The project's plugins as a Win64 host loads them: the beacon plugin is there.
+    const BeaconLinked linked;
+    foundation::runtime::SubsystemManager subsystems(DefaultAllocator());
+    foundation::runtime::PluginHost host(DefaultAllocator(), subsystems, foundation::runtime::HostRole::Export,
+                                         engine::project::kEngineVersionString, u8"Win64");
+    REQUIRE(host.AddLinked(Span<const foundation::runtime::LinkedPlugin>(&linked.linked, 1)).IsOk());
+    REQUIRE(host.Load(Span<const foundation::runtime::EnabledPlugin>(project->Settings().plugins.Data(),
+                                                                     project->Settings().plugins.Size()))
+                .loaded.Size() == 1u);
+
+    CHECK(editor::detail::CheckScriptsOn(*project, &host, u8"Win64").IsEmpty());
+    const String linux = editor::detail::CheckScriptsOn(*project, &host, u8"Linux64");
+    CHECK(linux.AsView().Contains(u8"script 'Lamp' cannot run on Linux64, where plugin(s) 'beaconplugin' are not enabled"));
+    CHECK(linux.AsView().Contains(u8"line 3"));
+    CHECK(editor::detail::CheckScriptsOn(*project, nullptr, u8"Linux64").IsEmpty()); // no host: nothing to check
+
+    // The export for this host's platform is refused with it.
+    REQUIRE(CreateDirectory(toolDir.AsView()));
+    foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    SaveText(toolFs, u8"Engine.Player.plugins", Format(u8"{}|{}\n", StringView(kBeaconPlugin), package).AsView());
+    editor::TemplateRegistry registry;
+    registry.Refresh(StringView{}, nullptr, toolDir.AsView(), &toolFs); // the host template, which carries the plugin
+    editor::ExportPreset preset;
+    preset.name = String(u8"Host Build");
+    preset.platform = String(GetHostPlatformName());
+    preset.outputSubdir = String(u8"host");
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    if (StringView(GetHostPlatformName()) == StringView(u8"Linux64"))
+    {
+        editor::ExportResult refused;
+        CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false,
+                                      &refused, {}, true, nullptr, nullptr, nullptr,
+                                      editor::ExportPlugins{&host, nullptr})
+                        .IsOk());
+        CHECK(refused.refusal.AsView().Contains(u8"cannot run on Linux64"));
+    }
+
+    host.Unload();
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    NukeTree(package.AsView());
+}
+#endif // OPTION_HAS_ANGELSCRIPT

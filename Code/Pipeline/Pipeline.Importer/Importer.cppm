@@ -22,6 +22,7 @@ export module pipeline.importer;
 import foundation.core;
 import foundation.content;
 import pipeline.core; // Asset (the typed fileName back-reference re-import memory matches on)
+import foundation.runtime; // a plugin's Pipeline part adds through PipelinePluginServices
 
 using namespace foundation::core;
 
@@ -616,7 +617,10 @@ export namespace pipeline
 
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
-        void Register(UniquePtr<IFileImporter> importer);
+        /// Adds an importer; its key for Unregister (0, nothing added, for a null one).
+        u64 Register(UniquePtr<IFileImporter> importer);
+        /// Removes the importer Register gave `key` for; false when there is none.
+        bool Unregister(u64 key);
 
         /// First importer claiming the extension, or null.
         [[nodiscard]] IFileImporter* FindFor(StringView extension) const;
@@ -630,6 +634,8 @@ export namespace pipeline
     private:
         IAllocator* m_allocator;
         Array<UniquePtr<IFileImporter>> m_importers;
+        Array<u64> m_keys; // beside m_importers
+        u64 m_nextKey = 1;
     };
 
     // === shared import helpers ===
@@ -1106,4 +1112,120 @@ export namespace pipeline
         const StringView name = entry != nullptr && !entry->targetName.IsEmpty() ? entry->targetName.AsView() : stem;
         return FindImportClash(group, name, typeName, sourcePath, ledgerPath);
     }
+
+    /// The host's pipeline registries a plugin's Pipeline part adds to (a host without one, such as
+    /// the cook without importers, leaves it null).
+    struct PipelineRegistries
+    {
+        BuilderRegistry* builders = nullptr;
+        ImporterRegistry* importers = nullptr;
+        AssetCreatorRegistry* creators = nullptr;
+    };
+
+    /// What a Pipeline part adds, through the service its host provides
+    /// (PluginContext::Find<PipelinePluginServices>): asset builders, file importers and asset
+    /// creators, into the host's registries. The service records what each plugin added, so the
+    /// plugin host's unload takes it out again, in reverse. A part registers its asset and product
+    /// types through its context, which records those itself.
+    class PipelinePluginServices final : public foundation::runtime::IRegistrationRecorder
+    {
+    public:
+        PipelinePluginServices(IAllocator& allocator, PipelineRegistries registries)
+            : m_registries(registries), m_entries(allocator)
+        {
+        }
+        ~PipelinePluginServices() override = default;
+
+        PipelinePluginServices(const PipelinePluginServices&) = delete;
+        PipelinePluginServices& operator=(const PipelinePluginServices&) = delete;
+
+        /// Hands this service to `host`'s plugins and records what they add through it. Before the
+        /// host loads; this outlives the host.
+        [[nodiscard]] bool Attach(foundation::runtime::PluginHost& host)
+        {
+            if (!host.Provide(*this))
+            {
+                return false;
+            }
+            host.Loader().AddRecorder(this);
+            return true;
+        }
+
+        /// The registries this host has (null where it has none).
+        [[nodiscard]] const PipelineRegistries& Registries() const noexcept { return m_registries; }
+
+        /// Adds a builder to the host's; false (nothing added) where the host cooks nothing.
+        bool AddBuilder(UniquePtr<IAssetBuilder> builder)
+        {
+            return m_registries.builders != nullptr && Record(Kind::Builder, m_registries.builders->Register(Move(builder)));
+        }
+        /// Adds an importer to the host's; false (nothing added) where the host imports nothing.
+        bool AddImporter(UniquePtr<IFileImporter> importer)
+        {
+            return m_registries.importers != nullptr && Record(Kind::Importer, m_registries.importers->Register(Move(importer)));
+        }
+        /// Adds a creator to the host's; false (nothing added) where the host creates nothing.
+        bool AddCreator(AssetCreator creator)
+        {
+            return m_registries.creators != nullptr && Record(Kind::Creator, m_registries.creators->Register(Move(creator)));
+        }
+
+        // IRegistrationRecorder: armed around each part's load, so what it added is recorded
+        // against it, and reversed when it unloads.
+        void Arm(Array<TypeId>& sink) override { m_sink = &sink; }
+        void Disarm() override { m_sink = nullptr; }
+        void Reverse(TypeId id) override
+        {
+            for (usize i = 0; i < m_entries.Size(); ++i)
+            {
+                if (m_entries[i].token != id)
+                {
+                    continue;
+                }
+                const Entry entry = m_entries[i];
+                m_entries.RemoveAt(i);
+                switch (entry.kind)
+                {
+                case Kind::Builder: (void)m_registries.builders->Unregister(entry.key); break;
+                case Kind::Importer: (void)m_registries.importers->Unregister(entry.key); break;
+                case Kind::Creator: (void)m_registries.creators->Unregister(entry.key); break;
+                }
+                return;
+            }
+        }
+
+    private:
+        enum class Kind : u8
+        {
+            Builder,
+            Importer,
+            Creator,
+        };
+        struct Entry
+        {
+            u64 token; // this service's, what the recording keeps
+            Kind kind;
+            u64 key; // the registry's
+        };
+
+        bool Record(Kind kind, u64 key)
+        {
+            if (key == 0)
+            {
+                return false;
+            }
+            const u64 token = m_nextToken++;
+            m_entries.PushBack(Entry{token, kind, key});
+            if (m_sink != nullptr)
+            {
+                m_sink->PushBack(token);
+            }
+            return true;
+        }
+
+        PipelineRegistries m_registries;
+        Array<Entry> m_entries;
+        Array<TypeId>* m_sink = nullptr;
+        u64 m_nextToken = 1;
+    };
 }

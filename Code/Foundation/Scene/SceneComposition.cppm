@@ -117,7 +117,7 @@ export namespace foundation::scene
     // scenes already alive get them applied through the live-scene sink the SceneSubsystem
     // installs. Keyed by the installed system's TypeId (one manager type per contribution) so
     // removal can find it in live scenes. Process-single: the accessor is defined in the
-    // implementation unit so every shared library reaches one instance, and PluginHost records
+    // implementation unit so every shared library reaches one instance, and PluginLoader records
     // contributions through the observer so unload reverses them.
     class SceneModuleContributions
     {
@@ -165,7 +165,7 @@ export namespace foundation::scene
             m_liveInstallContext = context;
         }
 
-        // PluginHost's recording hook (one at a time; fires only on real inserts).
+        // PluginLoader's recording hook (one at a time; fires only on real inserts).
         void SetRegistrationObserver(void (*observer)(void*, TypeId), void* context) noexcept
         {
             m_observer = observer;

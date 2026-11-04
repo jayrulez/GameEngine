@@ -107,7 +107,7 @@ export namespace foundation::core
             }
         }
 
-        // Registration observer (one at a time): PluginHost records what a plugin's
+        // Registration observer (one at a time): PluginLoader records what a plugin's
         // OnLoad registers so unload can reverse it exactly, without the plugin keeping its
         // own list of registrations. Fires only on real inserts (a duplicate
         // Register is a no-op and stays owned by the first registrant).
@@ -119,8 +119,8 @@ export namespace foundation::core
         }
 
         // Collision observer (one at a time): told when a Register offers a different type under
-        // an id another type holds (`held`, which stays), so a host loading native code can refuse
-        // the code that offered it.
+        // an id another type holds (`held`, which stays); PluginLoader refuses the plugin whose
+        // load offered it.
         void SetCollisionObserver(void (*observer)(void*, const TypeInfo& held, const TypeInfo& offered),
                                   void* context) noexcept
         {

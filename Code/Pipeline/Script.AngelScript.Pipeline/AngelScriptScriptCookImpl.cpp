@@ -490,7 +490,7 @@ namespace pipeline{
             [[nodiscard]] bool Cook(StringView source, StringView assetName,
                                     CookScriptErrorSink& sink, ScriptClassSource& out) override
             {
-                const bool ok = CookOnThisThread(source, assetName, sink, out, false);
+                const bool ok = CookOnThisThread(source, assetName, sink, out, false, Span<const TypeId>{});
                 // AngelScript keeps per-thread local data (active-context stack, type-name
                 // scratch) that only asThreadCleanup releases. Cooks run on job workers that
                 // never exit through AngelScript's own teardown, so release it here, after
@@ -500,20 +500,22 @@ namespace pipeline{
             }
 
             [[nodiscard]] bool Check(StringView source, StringView assetName,
-                                     CookScriptErrorSink& sink, String& className) override
+                                     CookScriptErrorSink& sink, String& className,
+                                     Span<const TypeId> hidden) override
             {
                 ScriptClassSource out;
-                const bool ok = CookOnThisThread(source, assetName, sink, out, true);
+                const bool ok = CookOnThisThread(source, assetName, sink, out, true, hidden);
                 asThreadCleanup(); // as in Cook
                 className = Move(out.className);
                 return ok;
             }
 
             // `checkOnly` stops after the build (Check): no harvest, no bytecode, and the build
-            // leaves the global initializers unrun.
+            // leaves the global initializers unrun. The engine registers every type but `hidden`, so
+            // a use of one is a compile error.
             [[nodiscard]] bool CookOnThisThread(StringView source, StringView assetName,
                                                 CookScriptErrorSink& sink, ScriptClassSource& out,
-                                                bool checkOnly)
+                                                bool checkOnly, Span<const TypeId> hidden)
             {
                 out.language = String(u8"angelscript");
                 out.sourceName = String(assetName); // the source file identity (breakpoint key)
@@ -533,7 +535,7 @@ namespace pipeline{
                 // emits every reflected type into the engine CScriptBuilder builds against.
                 RegisterCoreTypes();
                 RegisterScriptFacadeReflection();
-                RegisterReflectedTypes(*manager);
+                RegisterReflectedTypes(*manager, GlobalTypeRegistry(), hidden);
 
                 asIScriptEngine* engine = static_cast<asIScriptEngine*>(
                     foundation::script::angelscript::AngelScriptEngineHandle(*manager));

@@ -4,7 +4,8 @@
 # ImportContext, so the editor's project model never appears here.
 
 util_add_engine_library(Pipeline.Importer ALIAS Pipeline::Importer)
-target_link_libraries(Pipeline.Importer PUBLIC Foundation::Core Foundation::Content Foundation::VFS Foundation::Policy Pipeline::Core)
+target_link_libraries(Pipeline.Importer PUBLIC Foundation::Core Foundation::Content Foundation::VFS Foundation::Policy Pipeline::Core
+    Foundation::Runtime) # a plugin's Pipeline part adds through PipelinePluginServices
 
 target_sources(Pipeline.Importer
     PRIVATE

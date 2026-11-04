@@ -10,9 +10,9 @@
 // language). With scripting, the player, scripts and cooked content are the game; projects that
 // outgrow scripts move to a native IApplication at the same point.
 //
-// This is the desktop boot, built as the Engine.Player.Main library: Main.cpp is the thin dev
-// stub, and ShipMain.cpp, the ship stub, calls PlayerMain with the game's static plugin. The
-// browser sibling is WebMain.cpp; both share PlayerApplication.h.
+// This is the desktop boot, built as the Engine.Player.Main library: Main.cpp is the stub both
+// players run, the project's player linking the project's packages besides. The browser sibling is
+// WebMain.cpp; both share PlayerApplication.h.
 //
 // Usage: Engine.Player <projectDir> [--scene <source-db-path>] [--exit-after <seconds>]
 //                      [--profile-capture <seconds>] [--profile-overlay]
@@ -107,8 +107,7 @@ using engine::player::PlayerOptions;
 
 extern "C" const char* BuildStamp();
 
-int engine::player::PlayerMain(int argc, char** argv,
-                               foundation::runtime::IRuntimePlugin* nativeGame)
+int engine::player::PlayerMain(int argc, char** argv)
 {
     // --version: report the engine version and build identity and exit, before any startup work.
     for (int i = 1; i < argc; ++i)
@@ -226,10 +225,6 @@ int engine::player::PlayerMain(int argc, char** argv,
         std::fprintf(stderr, "Engine.Player: failed to create the graphics device\n");
         return 1;
     }
-
-    // The statically-provided native game plugin (ship stubs), carried on the options so dev
-    // and ship builds converge on one path.
-    options.nativeGame = nativeGame;
 
     PlayerApplication app(static_cast<PlayerOptions&&>(options));
     // Engine data (shaders, built-in fonts): an explicit --data-root, else the discovery walk

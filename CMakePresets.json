@@ -38,6 +38,18 @@
       }
     },
     {
+      "name": "clang-reldbg-shared",
+      "displayName": "Clang (Ninja, RelWithDebInfo, shared engine libraries)",
+      "description": "The editor distribution and its CLI tools: shared, so they load a project's own plugin packages.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang-reldbg-shared",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ENGINE_SHARED_LIBS": "ON"
+      }
+    },
+    {
       "name": "gcc",
       "displayName": "GCC (Ninja, Debug)",
       "generator": "Ninja",
@@ -137,6 +149,18 @@
       }
     },
     {
+      "name": "msvc-reldbg-shared",
+      "displayName": "MSVC (Ninja, RelWithDebInfo, shared engine libraries)",
+      "description": "The editor distribution and its CLI tools: shared, so they load a project's own plugin packages. Requires a Developer Command Prompt (vcvars64).",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/msvc-reldbg-shared",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ENGINE_SHARED_LIBS": "ON"
+      }
+    },
+    {
       "name": "msvc-shipping",
       "displayName": "MSVC (Ninja, Shipping: no asserts, stripped)",
       "description": "Requires a Developer Command Prompt (vcvars64) so cl.exe and the Windows SDK are on PATH; Ninja is used for C++20 module support.",
@@ -199,6 +223,10 @@
       "configurePreset": "clang-reldbg"
     },
     {
+      "name": "clang-reldbg-shared",
+      "configurePreset": "clang-reldbg-shared"
+    },
+    {
       "name": "gcc",
       "configurePreset": "gcc"
     },
@@ -233,6 +261,10 @@
     {
       "name": "msvc-reldbg",
       "configurePreset": "msvc-reldbg"
+    },
+    {
+      "name": "msvc-reldbg-shared",
+      "configurePreset": "msvc-reldbg-shared"
     },
     {
       "name": "msvc-shipping",

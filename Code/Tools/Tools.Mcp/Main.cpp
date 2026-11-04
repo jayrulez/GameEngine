@@ -20,6 +20,7 @@ import foundation.shaders.system; // kShaderFolder (shader_validate's include pa
 import foundation.json;
 import foundation.content; // Instance, the primary object passed to onImported
 import foundation.mcp;
+import foundation.runtime; // the plugins this host links (LinkedPluginList)
 import pipeline.core;
 import pipeline.importer;
 import pipeline.registration;
@@ -100,6 +101,11 @@ int main(int argc, char** argv)
     pipeline::AssetCreatorRegistry creators{foundation::core::DefaultAllocator()};
     (void)pipeline::RegisterAllCreators(creators);
 
+    // The MCP tools a project's plugins add through their Tooling parts: served by this server,
+    // and gone from it with their plugin. It outlives the server and the project's plugins.
+    editor::mcp::McpPluginServices pluginTools{foundation::core::DefaultAllocator()};
+    editor::ExportPluginServices exportHooks{foundation::core::DefaultAllocator()}; // and their export hooks
+
     McpServer server;
     server.SetServerInfo(u8"engine-mcp", u8"0.1.0");
 
@@ -128,7 +134,14 @@ int main(int argc, char** argv)
     editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
                                      paths, operations);
     // This host's additions: an agent opens (or scaffolds) the project it wants to work on.
-    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, dataRoot.AsView());
+    // A project's plugins (those this host links) add to the registries above, and their tools to
+    // this server, as it opens.
+    pluginTools.AttachServer(server, session);
+    editor::mcp::RegisterProjectOpenTools(
+        server, session, owner, &creators, dataRoot.AsView(),
+        editor::mcp::ProjectPlugins{foundation::runtime::LinkedPluginList(),
+                                    pipeline::PipelineRegistries{&builders, &importers, &creators}, &pluginTools,
+                                    &exportHooks});
     // host_info: the process id, build stamp, versions and open-project state.
     RegisterHostInfoTool(
         server, String(reinterpret_cast<const char8_t*>(BuildStamp())),

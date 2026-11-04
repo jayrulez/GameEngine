@@ -6,12 +6,15 @@
 // recognized), and broken source must come back with real compile errors carrying line numbers.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
 import foundation.core;
 import foundation.json;
 import foundation.mcp;
 import pipeline.core;
 import pipeline.registration;
 import script.pipeline;
+import foundation.runtime; // a plugin host that loaded a plugin with a script type
+import engine.project;
 import editor.project;
 import editor.mcp;
 
@@ -73,7 +76,8 @@ TEST_CASE("integration.mcp: script_validate - every enabled backend's starter co
     pipeline::RegisterPipelineTypes(); // registers the enabled language cooks (idempotent)
 
     McpServer server;
-    editor::mcp::RegisterScriptValidateTool(server);
+    editor::mcp::ProjectSession session; // no project: the tool compiles in-memory source
+    editor::mcp::RegisterScriptValidateTool(server, session);
 
     const StringView languages[] = {u8"angelscript", u8"luau"};
     usize enabled = 0;
@@ -160,7 +164,7 @@ TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, 
     editor::mcp::ProjectOwner owner;
     editor::mcp::RegisterProjectOpenTools(server, session, owner);
     editor::mcp::RegisterProjectInfoTool(server, session);
-    editor::mcp::RegisterScriptValidateTool(server);
+    editor::mcp::RegisterScriptValidateTool(server, session);
     editor::mcp::RegisterScriptCreateTool(server, session);
 
     // With no project open, the tool refuses with guidance.
@@ -220,3 +224,111 @@ TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, 
         CHECK(second.Get(u8"guid").AsString() != created.Get(u8"guid").AsString());
     }
 }
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+// A plugin whose Engine part gives scripts a type of its own (`Lantern`), enabled on Win64 only.
+namespace validateprobe
+{
+    struct Lantern
+    {
+        f32 glow = 0.0f;
+        Lantern() = default;
+        explicit Lantern(f32 value) : glow(value) {}
+    };
+    REFLECT_VALUE(Lantern, "rtti::validateprobe")
+    {
+        builder.Property<&Lantern::glow>("glow").Constructor<f32>();
+    }
+}
+
+namespace
+{
+    constexpr char8_t kLanternPlugin[] = u8"lanternplugin";
+
+    void LoadLantern(foundation::runtime::PluginContext& context)
+    {
+        validateprobe::RttiRegisterValue_Lantern();
+        context.Types().Register(TypeOf<validateprobe::Lantern>());
+    }
+    const foundation::runtime::PluginPart* LanternEngine()
+    {
+        static constexpr foundation::runtime::PluginPart part{kLanternPlugin, foundation::runtime::PluginPartKind::Engine,
+                                                              &LoadLantern, nullptr};
+        return &part;
+    }
+}
+
+// With a `platform`, script_validate also checks the source against what the open project's
+// plugins leave there: a script using a type of a plugin the project enables on Win64 only is valid
+// for Win64 and refused for Linux64, which names the absent plugin; without a project a platform is
+// refused.
+TEST_CASE("integration.mcp: script_validate - a platform check leaves out the plugins the project does not enable there")
+{
+    pipeline::RegisterPipelineTypes();
+    const StringView dir = u8"mcp_script_platform_project";
+    RemoveDirectoryRecursive(dir);
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir, u8"Lanterns").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(project);
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(kLanternPlugin);
+    entry.platforms.PushBack(String(u8"Win64"));
+    project->Settings().plugins.PushBack(Move(entry));
+
+    foundation::runtime::PluginManifest manifest;
+    manifest.id = String(kLanternPlugin);
+    manifest.version = String(u8"1.0.0");
+    manifest.engineVersion = String(engine::project::kEngineVersionString);
+    manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+    manifest.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Linux64")});
+    manifest.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Win64")});
+    MemoryStream xml;
+    REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+    Array<byte> manifestText;
+    for (byte b : xml.Bytes())
+    {
+        manifestText.PushBack(b);
+    }
+    manifestText.PushBack(byte{0});
+    const foundation::runtime::PluginPartEntryFn parts[] = {&LanternEngine};
+    const foundation::runtime::LinkedPlugin linked{reinterpret_cast<const char8_t*>(manifestText.Data()), parts, 1};
+    foundation::runtime::SubsystemManager subsystems(DefaultAllocator());
+    foundation::runtime::PluginHost host(DefaultAllocator(), subsystems, foundation::runtime::HostRole::Mcp,
+                                         engine::project::kEngineVersionString, u8"Win64");
+    REQUIRE(host.AddLinked(Span<const foundation::runtime::LinkedPlugin>(&linked, 1)).IsOk());
+    REQUIRE(host.Load(Span<const foundation::runtime::EnabledPlugin>(project->Settings().plugins.Data(),
+                                                                     project->Settings().plugins.Size()))
+                .loaded.Size() == 1u);
+
+    McpServer server;
+    editor::mcp::ProjectSession session;
+    editor::mcp::RegisterScriptValidateTool(server, session);
+    constexpr StringView kSource = u8"double shine()\n{\n    Lantern l(2.0f);\n    return l.glow;\n}\n";
+    const auto onPlatform = [&](StringView platform)
+    {
+        JsonValue args = SvArgs(u8"angelscript", kSource);
+        args.Set(u8"platform", JsonValue::MakeString(String(platform)));
+        return args;
+    };
+    {
+        const JsonValue refused = SvCall(server, onPlatform(u8"Linux64"));
+        CHECK(refused.Get(u8"result").Get(u8"isError").AsBool()); // no project open
+    }
+
+    session.project = project.Get();
+    session.plugins = &host;
+    const JsonValue win = SvOk(server, onPlatform(u8"Win64"));
+    CHECK(win.Get(u8"valid").AsBool());
+    CHECK(win.Get(u8"absentPlugins").AsString().IsEmpty());
+    const JsonValue linux = SvOk(server, onPlatform(u8"Linux64"));
+    CHECK_FALSE(linux.Get(u8"valid").AsBool());
+    CHECK(linux.Get(u8"absentPlugins").AsString() == String(u8"'lanternplugin'"));
+    CHECK(linux.Get(u8"errors").Count() > 0u);
+
+    session.project = nullptr;
+    session.plugins = nullptr;
+    host.Unload();
+    project.Reset();
+    RemoveDirectoryRecursive(dir);
+}
+#endif // OPTION_HAS_ANGELSCRIPT

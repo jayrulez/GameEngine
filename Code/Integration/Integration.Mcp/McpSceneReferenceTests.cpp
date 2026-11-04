@@ -35,7 +35,7 @@ namespace
 {
     constexpr StringView kDbDir = u8"mcp_scene_reference_db";
 
-    // A component a game's native module would contribute at run time, after the host's tools are registered.
+    // A component a plugin would contribute at run time, after the host's tools are registered.
     struct ProbeComponent
     {
         f32 rate = 2.0f;
@@ -476,8 +476,8 @@ TEST_CASE("integration.mcp: scene reference - RegisterEngineTools serves both ge
 }
 
 // The reference describes what is registered when it is read: a component contributed after the
-// tools are registered (a game's native module loading) is in component_schema and both documents,
-// and gone again once its contribution is removed (the module unloading).
+// tools are registered (a project's plugin loading) is in component_schema and both documents, and
+// gone again once its contribution is removed (the plugin unloading).
 TEST_CASE("integration.mcp: scene reference - a component contributed after the tools are registered is served, and leaves with its contribution")
 {
     pipeline::BuilderRegistry builders{DefaultAllocator()};

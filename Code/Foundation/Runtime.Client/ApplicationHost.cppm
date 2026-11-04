@@ -28,6 +28,7 @@ export module foundation.runtime.client;
 export import :app;           // ApplicationSettings, IApplicationHost, IApplication
 export import :embedded_host; // EmbeddedApplicationHost (editor-embedded runtime)
 export import :device_counters; // DeviceCounterPublisher (the device's counts to the profiler)
+export import :client_services; // ClientServices (what a windowed app offers its plugins)
 
 import foundation.core;
 import foundation.runtime;

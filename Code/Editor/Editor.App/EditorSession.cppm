@@ -6,8 +6,8 @@
 // EditorSession: the project the editor has open, kept out of the application. Opening one (or,
 // from the command line, scaffolding a bare folder into one) sets up what lives as long as the
 // project: the context's project, the per-project editor store (dock layout, favorites, open
-// pages), the resources over its cooked database attached to the embedded runtime, its native
-// module, the cook service and the hooks the context reaches it through, the thumbnails, and the
+// pages), the resources over its cooked database attached to the embedded runtime, its plugins
+// (those this editor links and its own packages, reloaded on request), the cook service and the hooks the context reaches it through, the thumbnails, and the
 // game UI's defaults. It also records the open in the user's project registry and seeds a new
 // project's starter content. Closing takes these down in reverse order. What the views do at
 // those moments (the pages, the layout, the MCP host) goes through the hooks the application
@@ -27,13 +27,16 @@ import foundation.runtime;
 import foundation.runtime.client; // IApplicationHost
 import foundation.settings;
 import pipeline.core;
+import pipeline.importer; // PipelinePluginServices (a plugin's builders, importers, creators)
 import engine.project;    // kProjectCacheDir
 import engine.defaultapp; // the embedded game application
 import engine.gui;        // GuiSubsystem (the engine GUI's fonts and sheets)
 import editor.core;
 import editor.mcp;        // SourceAssetTypesFor
 import editor.preview;    // ThumbnailStage (the GPU half of the thumbnails)
-import :native_module;
+import foundation.scene;
+import foundation.scene.resource; // SceneSnapshot (the reload's scene bracket)
+import engine.scene;              // SceneSubsystem (the live scenes a reload carries across)
 import :layout; // the per-project store's sections and files
 
 using namespace foundation::core;
@@ -56,7 +59,15 @@ export namespace editor::app
             foundation::runtime::SubsystemManager* runtime = nullptr;
             foundation::runtime::IApplicationHost* embeddedHost = nullptr;
             engine::runtime::DefaultApplication* embeddedApp = nullptr;
-            EditorNativeModule* native = nullptr;
+            /// The plugins this editor links; each project's enabled ones load with it.
+            Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
+            /// What the project's plugins' Tooling parts add their MCP tools through (null: none).
+            editor::mcp::McpPluginServices* pluginTools = nullptr;
+            /// What the project's plugins' Tooling parts add their export hooks through (null: none).
+            editor::ExportPluginServices* exportHooks = nullptr;
+            /// Called when the project's plugin host changed (made at open, remade at a reload, gone
+            /// at close), so what holds it follows (the MCP host's session).
+            Function<void(foundation::runtime::PluginHost*)> pluginsChanged;
             /// Seeds a new project's starter content (the executable composes it); null: none.
             Function<void(editor::EditorContext&, editor::EditorProject&)> seedNewProject;
             /// Called when the project has opened and its services are up: the application brings
@@ -113,6 +124,7 @@ export namespace editor::app
             }
             editor::EditorProject& project = *m_project;
             context.SetProject(&project);
+            LoadPlugins(project, context);
             ConfigureThumbnails(directory);
             {
                 // Log what the open-time header scans cost (the parse volume informs the partial-parse work).
@@ -130,8 +142,7 @@ export namespace editor::app
             // unstages.
             if (m_services.embeddedHost != nullptr && m_services.thumbnails != nullptr)
                 m_thumbnailStage = MakeUnique<editor::ThumbnailStage>(m_allocator, *m_services.embeddedHost, *m_services.thumbnails, m_resources.Get());
-            if (m_services.native != nullptr)
-                m_services.native->Load(project, context, *m_services.runtime);
+            ReportPluginsNotLoaded(project, context);
             if (m_services.embeddedApp != nullptr)
                 m_services.embeddedApp->SetContentDatabase(&project.SourceDb()); // scripted scene loads read the sources
             ApplyGameUiDefaults();
@@ -165,8 +176,122 @@ export namespace editor::app
             return true;
         }
 
+        /// Loads the plugins the project enables into the embedded runtime's plugin host, before
+        /// anything reads their types (the resources, the pages): those this editor links, and the
+        /// project's own packages from copies of their development build (a shared editor loads
+        /// them; a static one refuses them). Their Engine, Pipeline, Tooling and Editor parts load,
+        /// each part given the editor's context. Without an embedded runtime no plugin loads.
+        void LoadPlugins(editor::EditorProject& project, editor::EditorContext& context)
+        {
+            if (m_services.embeddedApp == nullptr)
+                return;
+            foundation::runtime::PluginHost* plugins = m_services.embeddedApp->CreatePluginHost(foundation::runtime::HostRole::Editor);
+            if (plugins == nullptr)
+                return;
+            (void)plugins->Provide(context);
+            if (!m_pipelinePlugins)
+                m_pipelinePlugins = MakeUnique<pipeline::PipelinePluginServices>(
+                    m_allocator, m_allocator, pipeline::PipelineRegistries{m_services.builders, &context.Importers(), &context.Creators()});
+            (void)m_pipelinePlugins->Attach(*plugins);
+            if (m_services.pluginTools != nullptr)
+                (void)m_services.pluginTools->Attach(*plugins);
+            if (m_services.exportHooks != nullptr)
+                (void)m_services.exportHooks->Attach(*plugins);
+            context.SetExportHooks(m_services.exportHooks);
+            engine::project::AddProjectPackages(*plugins, project.Directory(), project.Settings(), m_allocator,
+                                                [this, &project](StringView library) { return StageLibrary(project, library); });
+            (void)engine::project::LoadProjectPlugins(*plugins, m_services.linkedPlugins, project.Settings());
+            context.SetPlugins(plugins);
+            if (m_services.pluginsChanged)
+                m_services.pluginsChanged(plugins);
+        }
+
+        /// Reloads the project's plugins, its packages as last built (Project > Build Project
+        /// Plugins). Every game run stops, every live scene is captured, the plugins unload and load
+        /// again, and the scenes are restored, their components rehydrating through the plugins'
+        /// registrations; the scenes are restored whatever loads, so they are never left stripped.
+        void ReloadPlugins()
+        {
+            editor::EditorContext& context = *m_services.context;
+            if (!m_project || m_services.embeddedApp == nullptr)
+            {
+                context.Notify(editor::NoticeKind::Info, u8"No project is open.");
+                return;
+            }
+            for (const UniquePtr<editor::EditorPage>& open : context.OpenPages())
+                if (editor::IGameRunPage* run = editor::ServiceOf<editor::IGameRunPage>(open.Get()))
+                    run->StopRun();
+            struct SceneBracket
+            {
+                foundation::scene::Scene* scene;
+                UniquePtr<foundation::scene::SceneSnapshot> snapshot;
+            };
+            Array<SceneBracket> brackets;
+            if (m_services.runtime != nullptr)
+                if (auto* scenes = m_services.runtime->GetSubsystem<engine::scene::SceneSubsystem>())
+                    scenes->Registry().ForEachScene(
+                        [&](foundation::scene::Scene& scene)
+                        {
+                            SceneBracket b{&scene, foundation::scene::SceneSnapshot::Capture(scene)};
+                            if (b.snapshot)
+                                brackets.PushBack(Move(b));
+                        });
+            context.SetPlugins(nullptr);
+            m_services.embeddedApp->DestroyPluginHost(/*closeLibraries*/ false);
+            LoadPlugins(*m_project, context);
+            for (SceneBracket& b : brackets) // after the plugins, so their components rehydrate
+                if (!b.snapshot->Restore(*b.scene, m_resources.Get()).IsOk())
+                    LOG_ERROR(u8"Editor", u8"plugin reload: scene '{}' failed to restore", b.scene->Name());
+            const foundation::runtime::PluginHost* plugins = context.Plugins();
+            const bool refused = plugins == nullptr || !plugins->Report().refused.IsEmpty();
+            context.Notify(refused ? editor::NoticeKind::Warning : editor::NoticeKind::Success,
+                           refused ? u8"Plugins reloaded; some did not load (see Console)." : u8"Plugins reloaded.");
+        }
+
+        /// A copy of a package's built library to load (Windows holds a loaded library open against
+        /// the next build's write, and a reload must map a fresh path): numbered, under the project's
+        /// cache. Empty (logged) when it cannot be read or written.
+        [[nodiscard]] String StageLibrary(const editor::EditorProject& project, StringView library)
+        {
+            Result<Array<byte>> bytes = ReadFile(library, m_allocator);
+            if (!bytes.HasValue())
+            {
+                LOG_ERROR(u8"Editor", u8"plugin library '{}' cannot be read (Project > Build Project Plugins first)", library);
+                return String{};
+            }
+            const String hotDir = PathJoin(project.Directory(), Format(u8"{}/plugins-hot", engine::project::kProjectCacheDir).AsView());
+            (void)CreateDirectories(hotDir.AsView());
+            const String staged = Format(u8"{}/{}-{}", hotDir, ++m_stagedLibraries, PathFilename(library));
+            if (!WriteFile(staged.AsView(), Span<const byte>{bytes.Value().Data(), bytes.Value().Size()}).IsOk())
+            {
+                LOG_ERROR(u8"Editor", u8"plugin library '{}' cannot be staged at '{}'", library, staged);
+                return String{};
+            }
+            return staged;
+        }
+
+        /// Tells the user which of the project's plugins did not load here (missing or refused), each
+        /// with why in the log; their entries and settings are kept as written.
+        static void ReportPluginsNotLoaded(editor::EditorProject& project, editor::EditorContext& context)
+        {
+            String names;
+            for (const foundation::runtime::EnabledPlugin& entry : project.Settings().plugins)
+            {
+                const engine::project::PluginStatus status = engine::project::PluginStatusOf(entry, context.Plugins(), project.Allocator());
+                if (status.state != engine::project::PluginState::Missing && status.state != engine::project::PluginState::Refused)
+                    continue;
+                if (context.Plugins() == nullptr) // a host logged its own refusals as it loaded
+                    LOG_WARNING(u8"Editor", u8"{}; its entry and settings are kept as written", status.reason);
+                names += names.IsEmpty() ? u8"" : u8", ";
+                names += entry.id.AsView();
+            }
+            if (!names.IsEmpty())
+                context.Notify(editor::NoticeKind::Warning,
+                               Format(u8"Plugins not loaded: {} (the Console says why; their settings are kept).", names).AsView());
+        }
+
         /// Closes the project: the views first (the hook), then the cook, the thumbnails, the
-        /// native module, the resources and the store, the project last.
+        /// resources, the plugins and the store, the project last.
         void Close()
         {
             if (!m_project)
@@ -192,8 +317,6 @@ export namespace editor::app
             context.CookBusy = {};
             context.OnFavoritesChanged = {};
             context.OnProjectSettingsChanged = {};
-            if (m_services.native != nullptr)
-                m_services.native->Unload(); // its systems withdraw while the runtime and resources live
             if (m_services.embeddedApp != nullptr)
             {
                 m_services.embeddedApp->AttachResourceManager(nullptr, *m_services.embeddedHost);
@@ -201,6 +324,12 @@ export namespace editor::app
             }
             context.SetResources(nullptr);
             m_resources.Reset();
+            // The project's plugins after what may hold their types (the resources), before the project.
+            context.SetPlugins(nullptr);
+            if (m_services.embeddedApp != nullptr)
+                m_services.embeddedApp->DestroyPluginHost();
+            if (m_services.pluginsChanged)
+                m_services.pluginsChanged(nullptr);
             context.SetProjectEditorSettings(nullptr);
             context.OnProjectEditorSettingsSaveRequested = {};
             m_store.Reset();
@@ -376,5 +505,9 @@ export namespace editor::app
         bool m_closingViews = false; // Close is closing the views: a save writes the store without capturing them
         UniquePtr<foundation::resource::ResourceManager> m_resources;
         UniquePtr<editor::ThumbnailStage> m_thumbnailStage;
+        // What the projects' Pipeline parts add to the editor's registries, attached to each
+        // project's plugin host, which goes before it.
+        UniquePtr<pipeline::PipelinePluginServices> m_pipelinePlugins;
+        u32 m_stagedLibraries = 0; // numbers the staged copies of the packages' libraries
     };
 }

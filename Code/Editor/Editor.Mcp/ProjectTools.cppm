@@ -20,6 +20,8 @@ export import :operations;
 export import :asset_create;
 export import :asset_data;
 export import :project_settings;
+export import :plugin_tools;
+export import :plugin_services;
 export import :reflected_fields;
 export import :export_presets;
 export import :asset_delete;
@@ -43,6 +45,7 @@ import foundation.vfs;
 import foundation.mcp;
 import foundation.mcp.reflection;
 import foundation.mcp.script;
+import foundation.runtime; // the plugins this host links
 import pipeline.core;
 import pipeline.importer;
 import pipeline.cook;
@@ -105,7 +108,7 @@ export namespace editor::mcp
     inline void RegisterProjectOpenTools(foundation::mcp::McpServer& server,
                                          ProjectSession& session, ProjectOwner& owner,
                                          const pipeline::AssetCreatorRegistry* creators = nullptr,
-                                         StringView dataRoot = {})
+                                         StringView dataRoot = {}, ProjectPlugins plugins = {})
     {
         using foundation::mcp::SchemaBuilder;
         using foundation::mcp::ToolResult;
@@ -161,7 +164,7 @@ export namespace editor::mcp
             u8"current project.",
             SchemaBuilder().Str(u8"directory", u8"the project directory", true).Build(),
             foundation::mcp::ToolAnnotations::Rebuilds(),
-            [s, o](const JsonValue& args) -> ToolResult
+            [s, o, plugins](const JsonValue& args) -> ToolResult
             {
                 const String directory = args.Get(u8"directory").AsString();
                 UniquePtr<editor::EditorProject> opened =
@@ -175,9 +178,28 @@ export namespace editor::mcp
                 JsonValue out = JsonValue::MakeObject();
                 out.Set(u8"name", JsonValue::MakeString(String(opened->Name())));
                 out.Set(u8"directory", JsonValue::MakeString(String(opened->Directory())));
-                s->project = nullptr; // the previous project dies with its owner slot
+                // The previous project's plugins go before it, then it goes with its owner slot.
+                s->plugins = nullptr;
+                o->plugins.Reset();
+                s->project = nullptr;
                 o->project = Move(opened);
                 s->project = o->project.Get();
+                // The plugins this project enables that this host links, with their parts for MCP.
+                McpPluginServices* tools = plugins.tools;
+                editor::ExportPluginServices* exportHooks = plugins.exportHooks;
+                o->plugins = MakeUnique<editor::ToolPlugins>(
+                    editor::EditorRootAllocator(), editor::EditorRootAllocator(), foundation::runtime::HostRole::Mcp,
+                    *o->project, plugins.linked, plugins.registries,
+                    [tools, exportHooks](foundation::runtime::PluginHost& host)
+                    {
+                        if (tools != nullptr)
+                            (void)tools->Attach(host);
+                        if (exportHooks != nullptr)
+                            (void)exportHooks->Attach(host);
+                    });
+                s->exportHooks = exportHooks;
+                s->linkedPlugins = plugins.linked;
+                s->plugins = &o->plugins->Host();
                 return out;
             });
     }
@@ -196,7 +218,7 @@ export namespace editor::mcp
             u8"Details about the currently-open project: name, directory, sources root, and its "
             u8"`settings`, what the editor's Project Settings dialog edits - the default scene, "
             u8"startup script, default input map, bus layout, UI theme, loading screen and UI font "
-            u8"(each {guid, path}, or null when unset), the native module and the MSAA samples - "
+            u8"(each {guid, path}, or null when unset) and the MSAA samples - "
             u8"and `settingCategories`, the dialog's tabs in order, each with its settings' "
             u8"names. project_settings_set changes them.",
             SchemaBuilder().Build(),
@@ -746,7 +768,7 @@ export namespace editor::mcp
     // The number of tools RegisterEngineTools registers. Adding an engine tool means bumping
     // this by hand, so a lost registration fails the test loudly. host_info and the stdio host's
     // project_create and project_open are not counted: each host registers its own.
-    inline constexpr usize kEngineToolCount = 33;
+    inline constexpr usize kEngineToolCount = 38;
 
     // Every *.md in `docsDir` as a read-only `docs://<FileName>` resource: the curated,
     // distribution-facing docs set (internal design and process docs are never exposed).
@@ -794,8 +816,9 @@ export namespace editor::mcp
     }
 
     // The engine tool surface every MCP host serves, listed once: reflection (type_list,
-    // type_info), script_api, project_info and project_settings_set, export_presets and
-    // export_preset_set, the asset tools (list, info, import, cook, uses, delete, creators,
+    // type_info), script_api, project_info and project_settings_set, the plugin tools (list,
+    // enable, disable, settings, scaffold), export_presets and export_preset_set, the asset tools (list, info,
+    // import, cook, uses, delete, creators,
     // create, data read and write), project_health, the log tools (log_read, log_write,
     // known_issues), the scene and prefab tools, component_schema, script_validate and
     // script_create, shader_validate, gui_validate, material_set_shader, project_export, and the
@@ -814,6 +837,7 @@ export namespace editor::mcp
         foundation::mcp::RegisterScriptTools(server);
         RegisterProjectInfoTool(server, session);
         RegisterProjectSettingsTool(server, session);
+        RegisterPluginTools(server, session);
         RegisterExportPresetTools(server, session, GetExecutableDirectory()); // the host's own player
 
         RegisterAssetTools(server, session);
@@ -826,10 +850,10 @@ export namespace editor::mcp
         RegisterLogTools(server, logBuffer, paths.knownIssues);
         RegisterSceneTools(server, session);
         // The scene format reference, generated from this host's own registrations (the engine
-        // composition's managers, settings systems and factory descriptions, a game's native
-        // module's among them, plus its builders) each time it is read: docs://generated/* beside
-        // the shipping docs, component_schema for one entry. Every host answers the same for the
-        // same build and native module.
+        // composition's managers, settings systems and factory descriptions, the project's plugins'
+        // among them, plus its builders) each time it is read: docs://generated/* beside the
+        // shipping docs, component_schema for one entry. Every host answers the same for the same
+        // build and plugins.
         RegisterComponentSchemaTool(server, editor::EditorRootAllocator(), builders);
         if (!paths.shippingDocsDir.IsEmpty())
         {
@@ -837,7 +861,7 @@ export namespace editor::mcp
         }
         RegisterSceneReferenceResources(server, editor::EditorRootAllocator(), builders);
         RegisterProjectResources(server, session);
-        RegisterScriptValidateTool(server);
+        RegisterScriptValidateTool(server, session);
         RegisterShaderValidateTool(server, paths.shaderLibrary.AsView());
         RegisterGuiValidateTool(server);
         RegisterMaterialShaderTool(server, session, paths.shaderLibrary.AsView());

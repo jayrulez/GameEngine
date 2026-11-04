@@ -25,7 +25,8 @@ export import :profiler_overlay; // ProfilerOverlayHost (F3, --profile-overlay)
 
 import foundation.core;
 import foundation.rhi;
-import foundation.runtime.client;       // IApplication, IApplicationHost
+import foundation.runtime;              // PluginHost (the process's plugins, CreatePluginHost)
+import foundation.runtime.client;       // IApplication, IApplicationHost, ClientServices
 import engine.gameinstance; // GameInstance: this app's running game (scene and script bracket)
 import foundation.shell;                // IShell, IKeyboard, KeyCode (the profile-dump hotkey)
 import foundation.graphics;             // GraphicsDevice, FrameContext
@@ -163,6 +164,20 @@ export namespace engine::runtime
         {
             return *m_dataFileSystem;
         }
+
+        /// The process's plugin host, for `role`: over this app's subsystem manager, checking
+        /// plugins against this engine's version, and given what this app offers its plugins (the
+        /// client services, its host and data mount, and the engine's service for Engine parts).
+        /// One per process, owned by the app: the caller adds the plugins it links and loads the
+        /// enabled ones. A host made before is unloaded and replaced (the editor makes one per open
+        /// project). The app destroys it in OnShutdown, so no plugin outlives the subsystems it
+        /// added to, and an app overriding OnShutdown calls this one. Null before Configure.
+        [[nodiscard]] foundation::runtime::PluginHost* CreatePluginHost(foundation::runtime::HostRole role);
+        /// Unloads the process's plugins and destroys their host (nothing when there is none).
+        /// `closeLibraries` false keeps their shared libraries mapped (a hot reload of them).
+        void DestroyPluginHost(bool closeLibraries = true);
+        /// The process's plugin host, or null when none is made.
+        [[nodiscard]] foundation::runtime::PluginHost* Plugins() const noexcept { return m_plugins.Get(); }
 
         // ---- infrastructure preset: shared pieces are handed in before Startup; anything not
         // preset the app creates for itself and owns. The editor presets its existing manager (a
@@ -304,6 +319,10 @@ export namespace engine::runtime
         core::String m_dataRootOverride; // preset (SetDataRoot); empty = discover
         core::String m_dataRoot;         // resolved in Configure
         core::UniquePtr<foundation::vfs::NativeFileSystem> m_dataFileSystem; // the data mount (owned)
+        // What CreatePluginHost hands the process's plugin host, which goes before them.
+        foundation::runtime::ClientServices m_clientServices;
+        core::UniquePtr<engine::EnginePluginServices> m_enginePluginServices;
+        core::UniquePtr<foundation::runtime::PluginHost> m_plugins;
         engine::physics::PhysicsSubsystem* m_physics = nullptr;
         engine::audio::AudioSubsystem* m_audio = nullptr;
         engine::render::RenderSubsystem* m_render = nullptr; // for the `DebugDraw.of(scene)` service

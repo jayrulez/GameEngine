@@ -31,6 +31,7 @@ import pipeline.core;
 import pipeline.importer;
 import editor.core;
 import editor.mcp;
+import foundation.runtime; // PluginHost (the project's plugins the session reports)
 import :mcp_host;
 import :mcp_operations;
 import :mcp_page_tools;
@@ -56,6 +57,10 @@ export namespace editor::app
             pipeline::BuilderRegistry* builders = nullptr;
             foundation::settings::Settings* userSettings = nullptr; // EditorMcpSettings: enabled, port, token
             editor::EditorLogBuffer* log = nullptr;                 // what log_read serves
+            /// The tools the project's plugins add; the host's server serves them while it runs.
+            editor::mcp::McpPluginServices* pluginTools = nullptr;
+            /// The plugins the editor links (plugin_list offers those the project does not enable).
+            Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
             String dataRoot;
             /// Set from the command line: enabled whatever the preference says, with a port of its own (0: the preference's).
             bool forceEnabled = false;
@@ -124,6 +129,9 @@ export namespace editor::app
             // shader_validate compiles against the engine's shader library under the data root.
             paths.shaderLibrary = foundation::vfs::DataPath(m_services.dataRoot.AsView(), foundation::shaders::kShaderFolder);
             m_session.project = project;
+            m_session.plugins = m_services.context->Plugins(); // the project's plugins, loaded with it
+            m_session.exportHooks = m_services.context->ExportHooks(); // what project_export runs after staging
+            m_session.linkedPlugins = m_services.linkedPlugins;
 
             EditorProjectOperationsSeams operations;
             operations.allocator = &m_allocator;
@@ -193,6 +201,9 @@ export namespace editor::app
             RegisterProfilerTools(m_host->Server(), Move(profiler));
             if (m_services.addTools)
                 m_services.addTools(m_host->Server());
+            // The project's plugins' tools, last, so none takes a name the editor's own tools hold.
+            if (m_services.pluginTools != nullptr)
+                m_services.pluginTools->AttachServer(m_host->Server(), m_session);
 
             EditorMcpHostConfig config;
             config.port = static_cast<u16>(m_services.port != 0 ? m_services.port : settings.port);
@@ -213,12 +224,22 @@ export namespace editor::app
             return true;
         }
 
+        /// The session the host's tools work over: the project, its plugins, their hooks.
+        [[nodiscard]] const editor::mcp::ProjectSession& Session() const noexcept { return m_session; }
+
+        /// The project's plugin host, which the session's plugin tools report and edit (null: none).
+        void SetPlugins(foundation::runtime::PluginHost* plugins) noexcept { m_session.plugins = plugins; }
+
         /// Stops the host: a waiting agent sees its connection close.
         void Stop()
         {
+            if (m_host && m_services.pluginTools != nullptr)
+                m_services.pluginTools->DetachServer(m_host->Server()); // its plugins' tools leave before it goes
             m_host.Reset();
             m_operations.Reset();
             m_session.project = nullptr;
+            m_session.plugins = nullptr;
+            m_session.exportHooks = nullptr;
         }
 
         /// Called each frame: answers the calls that arrived, on the main thread.

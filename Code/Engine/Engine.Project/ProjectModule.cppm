@@ -10,6 +10,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
 export module engine.project;
@@ -17,6 +18,7 @@ export module engine.project;
 import foundation.core;
 import foundation.vfs;
 import foundation.xml.serialization;
+import foundation.runtime; // the plugins' entries
 
 using namespace foundation::core;
 using namespace foundation;
@@ -60,6 +62,12 @@ export namespace engine::project
     inline constexpr StringView kProjectCookedDir = u8"Cooked";
     inline constexpr StringView kProjectEditorDir = u8"Editor";
     inline constexpr StringView kProjectCacheDir = u8".cache";
+    // A project's own plugin packages (its game code, project-local plugins): Plugins/<Name>/, each a
+    // Plugin.xml and its parts, built for development as shared libraries in a shared-engine tree
+    // under the cache, which lists each part's library in kPluginLibrariesFile.
+    inline constexpr StringView kProjectPluginsDir = u8"Plugins";
+    inline constexpr StringView kProjectPluginsBuildDir = u8".cache/plugins-dev";
+    inline constexpr StringView kPluginLibrariesFile = u8"plugin-libraries.txt";
     inline constexpr StringView kSourceAssetExtension = u8".xasset"; // readable, diffable envelopes
     inline constexpr StringView kCookedAssetExtension = u8".rasset"; // binary envelopes
 
@@ -90,6 +98,25 @@ export namespace engine::project
     // shows there ("Input map" for the default input map).
     inline constexpr const char* kSettingSummaryAttribute = "summary";
 
+    /// A plugin id from a package's name ("NativeSample" gives "nativesample"): lower case, anything
+    /// but letters, digits and underscores an underscore, prefixed when it does not start with a
+    /// letter, so it is always a valid id.
+    [[nodiscard]] inline String PluginIdFromName(StringView name)
+    {
+        String id;
+        for (char8_t c : name)
+        {
+            const char8_t lower = (c >= u8'A' && c <= u8'Z') ? static_cast<char8_t>(c - u8'A' + u8'a') : c;
+            const bool ok = (lower >= u8'a' && lower <= u8'z') || (lower >= u8'0' && lower <= u8'9') || lower == u8'_';
+            id.PushBack(ok ? lower : u8'_');
+        }
+        if (id.IsEmpty() || !(id[0] >= u8'a' && id[0] <= u8'z'))
+        {
+            id = Format(u8"game_{}", id);
+        }
+        return id;
+    }
+
     /// How the player's window takes the screen.
     enum class WindowMode : u8
     {
@@ -114,7 +141,6 @@ export namespace engine::project
         // play-in-editor. Nil: none.
         String
             startupScript; // its source-DB path: the human-readable mirror
-        String nativeModule;    // optional native game module: a project-relative path (empty: scripts only)
         Guid defaultInputMapId; // the input map the player binds at startup (nil: none)
         Guid defaultBusLayoutId; // the audio mixer layout applied at startup (nil: built-in)
         Guid defaultUiFontId; // the cooked FontResource the game UI defaults to (nil: the dev
@@ -154,6 +180,24 @@ export namespace engine::project
         // upright).
         ScreenOrientation orientation = ScreenOrientation::Any;
 
+        // The plugins the project enables, in order, each with its platforms and settings. An entry
+        // whose plugin is missing is kept as read and written back unchanged. Appended: a manifest
+        // saved before it reads none.
+        Array<foundation::runtime::EnabledPlugin> plugins;
+
+        /// The project's entry for plugin `id`, or null when it enables no such plugin.
+        [[nodiscard]] foundation::runtime::EnabledPlugin* FindPlugin(StringView id) noexcept
+        {
+            for (foundation::runtime::EnabledPlugin& entry : plugins)
+            {
+                if (entry.id.AsView() == id)
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        }
+
         /// The player's window in a few words: "1280 × 720, windowed", "1280 × 720, fullscreen",
         /// or "borderless, the display's size".
         [[nodiscard]] String WindowSummary() const
@@ -174,21 +218,29 @@ export namespace engine::project
             startupScript = startupScriptId.IsNil() ? String() : pathOf(startupScriptId);
         }
 
-        // The current data version's layout (REFLECT_MEMBERS' DataVersion, 10). A version 9
-        // manifest still reads: it carries a theme and loading document for a UI library the
-        // engine no longer has, read and dropped. Older versions are refused by the versioned-payload reader;
-        // outside a payload (CopyProjectSettings) the version reads 0, the current layout.
+        // The current data version's layout (REFLECT_MEMBERS' DataVersion, 11). Versions 9 and 10
+        // still read: both name the native game module by its library path (nativeModule), which
+        // becomes the entry of the game's package (NativeModulePackageEntry); version 9 also
+        // carries a theme and loading document for a UI library the engine no longer has, read and
+        // dropped. Older versions are refused by the versioned-payload reader; outside a payload
+        // (CopyProjectSettings) the version reads 0, the current layout.
         void Serialize(ISerializer& ar) override
         {
-            const bool v9 = ar.Mode() == SerializeMode::Read && ar.Version() == 9;
+            const bool reading = ar.Mode() == SerializeMode::Read;
+            const bool v9 = reading && ar.Version() == 9;
+            const bool hasNativeModule = reading && (ar.Version() == 9 || ar.Version() == 10);
             Guid dropped;
+            String nativeModule;
             foundation::core::Serialize(ar, "name", name);
             foundation::core::Serialize(ar, "engineVersion", engineVersion);
             ar.Key("defaultSceneId");
             ar.GuidValue(defaultSceneId);
             foundation::core::Serialize(ar, "defaultScene", defaultScene);
             foundation::core::Serialize(ar, "startupScript", startupScript);
-            foundation::core::Serialize(ar, "nativeModule", nativeModule);
+            if (hasNativeModule)
+            {
+                foundation::core::Serialize(ar, "nativeModule", nativeModule);
+            }
             ar.Key("defaultInputMapId");
             ar.GuidValue(defaultInputMapId);
             ar.Key("defaultBusLayoutId");
@@ -223,6 +275,42 @@ export namespace engine::project
                 ar.Key("guiLoadingDocumentId");
                 ar.GuidValue(guiLoadingDocumentId);
             }
+            SerializeAppended(ar, "plugins", plugins);
+            if (!nativeModule.IsEmpty())
+            {
+                foundation::runtime::EnabledPlugin entry = NativeModulePackageEntry(nativeModule.AsView());
+                if (!entry.id.IsEmpty() && FindPlugin(entry.id.AsView()) == nullptr)
+                {
+                    plugins.PushBack(Move(entry));
+                }
+            }
+        }
+
+        /// The entry a project before version 11 means by its nativeModule (a library path such as
+        /// "Native/libGame.so" or "Native/Game.dll"): the game's package, Plugins/<Game>, its id the
+        /// name in lower case. The package's own files are the game's to port; until they are there,
+        /// the entry is missing. Empty when the path names no library.
+        [[nodiscard]] static foundation::runtime::EnabledPlugin NativeModulePackageEntry(StringView nativeModule)
+        {
+            foundation::runtime::EnabledPlugin entry;
+            StringView name = PathFilename(nativeModule);
+            const usize dot = name.FindLast(u8'.');
+            if (dot != StringView::kNotFound)
+            {
+                const StringView extension = name.SubStr(dot + 1, name.Size() - dot - 1);
+                name = name.SubStr(0, dot);
+                if (extension == StringView(u8"so") && name.StartsWith(u8"lib"))
+                {
+                    name = name.SubStr(3, name.Size() - 3);
+                }
+            }
+            if (name.IsEmpty())
+            {
+                return entry;
+            }
+            entry.id = PluginIdFromName(name);
+            entry.path = Format(u8"{}/{}", kProjectPluginsDir, name);
+            return entry;
         }
     };
 
@@ -285,6 +373,336 @@ export namespace engine::project
                 }
             }
         }
+    }
+
+    /// What became of a project's plugin entry in a host.
+    enum class PluginState : u8
+    {
+        Loaded,
+        NotEnabled, // not enabled on the host's platform: absent, as the entry asks
+        Refused,    // known, and refused (the reason says why)
+        Missing,    // not in this host: its entry and settings are kept as written
+    };
+
+    [[nodiscard]] constexpr StringView PluginStateName(PluginState state) noexcept
+    {
+        switch (state)
+        {
+        case PluginState::Loaded: return u8"loaded";
+        case PluginState::NotEnabled: return u8"notEnabled";
+        case PluginState::Refused: return u8"refused";
+        case PluginState::Missing: return u8"missing";
+        }
+        return u8"";
+    }
+
+    struct PluginStatus
+    {
+        PluginState state = PluginState::Missing;
+        String reason;                    // why it is not loaded; empty when it is
+        Array<String> unsupportedPlatforms; // platforms the entry names that its manifest lacks
+    };
+
+    /// The status of `entry` in `host`, the process's plugin host after it loaded the project's
+    /// entries; a null host is one that loads no plugins, where every entry is missing.
+    [[nodiscard]] inline PluginStatus PluginStatusOf(const foundation::runtime::EnabledPlugin& entry,
+                                                     const foundation::runtime::PluginHost* host,
+                                                     IAllocator& allocator)
+    {
+        PluginStatus status;
+        const StringView id = entry.id.AsView();
+        if (host == nullptr)
+        {
+            status.reason = Format(u8"plugin '{}' is not loaded: this host loads no plugins", id);
+            return status;
+        }
+        if (const foundation::runtime::PluginManifest* manifest = host->Manifest(id); manifest != nullptr)
+        {
+            status.unsupportedPlatforms = foundation::runtime::UnsupportedPlatforms(entry, *manifest, allocator);
+        }
+        if (host->IsLoaded(id))
+        {
+            status.state = PluginState::Loaded;
+            return status;
+        }
+        const foundation::runtime::PluginLoadReport& report = host->Report();
+        for (const String& absent : report.notEnabled)
+        {
+            if (absent.AsView() == id)
+            {
+                status.state = PluginState::NotEnabled;
+                status.reason = Format(u8"plugin '{}' is not enabled on {}", id, host->Platform());
+                return status;
+            }
+        }
+        if (const foundation::runtime::PluginRefusal* refusal = report.FindRefusal(id);
+            refusal != nullptr && host->Knows(id))
+        {
+            status.state = PluginState::Refused;
+            status.reason = refusal->reason;
+            return status;
+        }
+        status.reason = Format(u8"plugin '{}' is not in this build", id);
+        return status;
+    }
+
+    /// One built part of a project's package, as the development build lists it.
+    struct BuiltPluginPart
+    {
+        String id;
+        foundation::runtime::PluginPartKind kind = foundation::runtime::PluginPartKind::Engine;
+        String library; // the shared library's path
+    };
+
+    /// The parts a project's development build made (<project>/.cache/plugins-dev/plugin-libraries.txt,
+    /// one `id|Kind|library` line each); empty when the project has never been built.
+    [[nodiscard]] inline Array<BuiltPluginPart> ReadBuiltPluginParts(StringView projectDir, IAllocator& allocator)
+    {
+        Array<BuiltPluginPart> parts(allocator);
+        const String listPath = PathJoin(PathJoin(projectDir, kProjectPluginsBuildDir, allocator).AsView(), kPluginLibrariesFile, allocator);
+        Result<Array<byte>> bytes = ReadFile(listPath.AsView(), allocator);
+        if (!bytes.HasValue())
+        {
+            return parts;
+        }
+        const StringView text(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        usize start = 0;
+        for (usize i = 0; i <= text.Size(); ++i)
+        {
+            if (i < text.Size() && text[i] != u8'\n')
+            {
+                continue;
+            }
+            const StringView line = Trim(text.SubStr(start, i - start));
+            start = i + 1;
+            const usize first = line.Find(u8'|');
+            const usize second = first == StringView::kNotFound ? StringView::kNotFound : line.Find(u8'|', first + 1);
+            if (second == StringView::kNotFound)
+            {
+                continue;
+            }
+            const Optional<foundation::runtime::PluginPartKind> kind =
+                foundation::runtime::ParsePluginPartKind(line.SubStr(first + 1, second - first - 1));
+            if (!kind)
+            {
+                continue;
+            }
+            parts.PushBack(BuiltPluginPart{String(line.SubStr(0, first), allocator), *kind,
+                                           String(line.SubStr(second + 1, line.Size() - second - 1), allocator)});
+        }
+        return parts;
+    }
+
+    /// Adds the project's own packages (the entries with a path) to `host` as development packages:
+    /// each package's manifest, and the shared libraries its development build made of the parts
+    /// the host's role loads. `stage` gives the path to load a library from (the editor loads a
+    /// fresh copy at each reload); none loads it where it was built. A package with no manifest is
+    /// left out, so its entry stays missing, and a part never built is refused when it loads. A
+    /// plugin this binary links wins over its package.
+    inline void AddProjectPackages(foundation::runtime::PluginHost& host, StringView projectDir, const ProjectSettings& settings,
+                                   IAllocator& allocator, const Function<String(StringView)>& stage = {})
+    {
+        const Array<BuiltPluginPart> built = ReadBuiltPluginParts(projectDir, allocator);
+        for (const foundation::runtime::EnabledPlugin& entry : settings.plugins)
+        {
+            if (entry.path.IsEmpty())
+            {
+                continue;
+            }
+            UniquePtr<foundation::runtime::PluginManifest> manifest = MakeUnique<foundation::runtime::PluginManifest>(allocator);
+            const String packageDir = PathJoin(projectDir, entry.path.AsView(), allocator);
+            if (!foundation::runtime::LoadPluginManifest(packageDir.AsView(), *manifest, allocator).IsOk() || manifest->id != entry.id)
+            {
+                LOG_WARNING(u8"Plugins", u8"plugin '{}': '{}' holds no Plugin.xml of that id", entry.id, entry.path);
+                continue;
+            }
+            Array<foundation::runtime::PluginLibrary> libraries(allocator);
+            for (const BuiltPluginPart& part : built)
+            {
+                if (part.id != entry.id || !foundation::runtime::RoleLoads(host.Role(), part.kind))
+                {
+                    continue;
+                }
+                String path = stage ? stage(part.library.AsView()) : String(part.library.AsView(), allocator);
+                if (!path.IsEmpty())
+                {
+                    libraries.PushBack(foundation::runtime::PluginLibrary{part.kind, Move(path)});
+                }
+            }
+            host.AddShared(Move(manifest), Span<const foundation::runtime::PluginLibrary>(libraries.Data(), libraries.Size()));
+        }
+    }
+
+    /// A plugin a project could enable and does not: a package in its Plugins folder that no entry
+    /// names, or a plugin the binary links that no entry enables. `problem` says why one is not
+    /// offered (its manifest does not read or does not suit this engine, or its id is taken), empty
+    /// when it is.
+    struct AvailablePlugin
+    {
+        String id;
+        String path; // the package's folder from the project ("Plugins/<Name>"); empty for a linked plugin
+        String name;
+        String version;
+        Array<String> parts;     // the part kinds its manifest lists
+        Array<String> platforms; // the platforms it supports
+        String problem;
+    };
+
+    /// What a project could enable (DiscoverPlugins), its packages first, by folder name.
+    [[nodiscard]] inline Array<AvailablePlugin> DiscoverPlugins(StringView projectDir, const ProjectSettings& settings,
+                                                                Span<const foundation::runtime::LinkedPlugin> linked,
+                                                                IAllocator& allocator)
+    {
+        Array<AvailablePlugin> found(allocator);
+        const auto describe = [&allocator](const foundation::runtime::PluginManifest& manifest, AvailablePlugin& out)
+        {
+            out.id = String(manifest.id.AsView(), allocator);
+            out.name = String(manifest.name.AsView(), allocator);
+            out.version = String(manifest.version.AsView(), allocator);
+            for (const foundation::runtime::PluginManifestPart& part : manifest.parts)
+            {
+                out.parts.PushBack(String(part.kind.AsView(), allocator));
+            }
+            for (const foundation::runtime::PluginPlatform& platform : manifest.platforms)
+            {
+                out.platforms.PushBack(String(platform.platform.AsView(), allocator));
+            }
+        };
+        const auto entryWithId = [&settings](StringView id) -> const foundation::runtime::EnabledPlugin*
+        {
+            for (const foundation::runtime::EnabledPlugin& entry : settings.plugins)
+            {
+                if (entry.id == id)
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        };
+        Array<UniquePtr<foundation::runtime::PluginManifest>> linkedManifests(allocator);
+        for (const foundation::runtime::LinkedPlugin& plugin : linked)
+        {
+            UniquePtr<foundation::runtime::PluginManifest> manifest = MakeUnique<foundation::runtime::PluginManifest>(allocator);
+            MemoryStream stream;
+            const StringView xml{plugin.manifestXml};
+            (void)stream.Write(xml.Data(), xml.Size());
+            (void)stream.Seek(0, SeekOrigin::Begin);
+            if (foundation::runtime::ReadPluginManifest(stream, *manifest).IsOk())
+            {
+                linkedManifests.PushBack(Move(manifest));
+            }
+        }
+
+        // The packages: each folder of Plugins/ holding a Plugin.xml, by name.
+        Array<String> folders(allocator);
+        const String pluginsDir = PathJoin(projectDir, kProjectPluginsDir, allocator);
+        (void)ListDirectory(
+            pluginsDir.AsView(),
+            [](void* ctx, StringView name, bool isDirectory)
+            {
+                if (isDirectory)
+                {
+                    static_cast<Array<String>*>(ctx)->PushBack(String(name));
+                }
+            },
+            &folders);
+        for (usize i = 1; i < folders.Size(); ++i)
+        {
+            for (usize j = i; j > 0 && folders[j].AsView().Compare(folders[j - 1].AsView()) < 0; --j)
+            {
+                Swap(folders[j], folders[j - 1]);
+            }
+        }
+        for (const String& folder : folders)
+        {
+            const String path = Format(u8"{}/{}", kProjectPluginsDir, folder);
+            bool named = false;
+            for (const foundation::runtime::EnabledPlugin& entry : settings.plugins)
+            {
+                named = named || entry.path == path;
+            }
+            const String packageDir = PathJoin(projectDir, path.AsView(), allocator);
+            if (named || !FileExists(PathJoin(packageDir.AsView(), foundation::runtime::kPluginManifestFile, allocator).AsView()))
+            {
+                continue; // an entry's package, or a folder that is no package
+            }
+            AvailablePlugin plugin;
+            plugin.path = path;
+            foundation::runtime::PluginManifest manifest;
+            if (!foundation::runtime::LoadPluginManifest(packageDir.AsView(), manifest, allocator).IsOk())
+            {
+                plugin.problem = Format(u8"'{}': its Plugin.xml does not read", path);
+                found.PushBack(Move(plugin));
+                continue;
+            }
+            describe(manifest, plugin);
+            String whyNot;
+            if (!foundation::runtime::CheckPluginManifest(manifest, kEngineVersionString, whyNot))
+            {
+                plugin.problem = Move(whyNot);
+            }
+            else if (const foundation::runtime::EnabledPlugin* entry = entryWithId(manifest.id.AsView()))
+            {
+                plugin.problem = entry->path.IsEmpty()
+                                     ? Format(u8"plugin '{}' is already enabled, as the engine's", manifest.id)
+                                     : Format(u8"plugin '{}' is already enabled from '{}'", manifest.id, entry->path);
+            }
+            else
+            {
+                for (const UniquePtr<foundation::runtime::PluginManifest>& other : linkedManifests)
+                {
+                    if (other->id == manifest.id)
+                    {
+                        plugin.problem = Format(u8"plugin '{}' is linked into this build", manifest.id);
+                    }
+                }
+                for (const AvailablePlugin& earlier : found)
+                {
+                    if (plugin.problem.IsEmpty() && earlier.id == manifest.id)
+                    {
+                        plugin.problem = Format(u8"plugin '{}' is also in '{}'", manifest.id, earlier.path);
+                    }
+                }
+            }
+            found.PushBack(Move(plugin));
+        }
+
+        // The plugins this binary links that no entry enables.
+        for (const UniquePtr<foundation::runtime::PluginManifest>& manifest : linkedManifests)
+        {
+            if (entryWithId(manifest->id.AsView()) != nullptr)
+            {
+                continue;
+            }
+            AvailablePlugin plugin;
+            describe(*manifest, plugin);
+            found.PushBack(Move(plugin));
+        }
+        return found;
+    }
+
+    /// Loads the plugins `settings` enables into `host`, the process's plugin host for its role,
+    /// after adding the plugins this binary links. What loaded is logged, and what did not, each
+    /// with why; the report says the same. A plugin that does not load leaves its entry as it is.
+    inline foundation::runtime::PluginLoadReport LoadProjectPlugins(foundation::runtime::PluginHost& host,
+                                                                    Span<const foundation::runtime::LinkedPlugin> linked,
+                                                                    const ProjectSettings& settings)
+    {
+        if (!host.AddLinked(linked).IsOk())
+        {
+            LOG_ERROR(u8"Plugins", u8"a plugin linked into this build has a manifest that does not read");
+        }
+        foundation::runtime::PluginLoadReport report = host.Load(
+            Span<const foundation::runtime::EnabledPlugin>(settings.plugins.Data(), settings.plugins.Size()));
+        for (const String& id : report.loaded)
+        {
+            LOG_INFO(u8"Plugins", u8"plugin '{}' loaded ({})", id, foundation::runtime::HostRoleName(host.Role()));
+        }
+        for (const foundation::runtime::PluginRefusal& refusal : report.refused)
+        {
+            LOG_WARNING(u8"Plugins", u8"{}; its entry and settings are kept", refusal.reason);
+        }
+        return report;
     }
 
     /// Read a manifest (Project.xml / player.xml) from `root`. NotFound when absent.

@@ -123,7 +123,13 @@ namespace foundation::core::sys
         return 0;
     }
 
+    // Emscripten builds this backend too; there the platform is the web, the tag export,
+    // templates and plugin manifests name it by.
+#if defined(__EMSCRIPTEN__)
+    const char* GetHostPlatformName() noexcept { return "Web"; }
+#else
     const char* GetHostPlatformName() noexcept { return "Linux64"; }
+#endif
     const char* ExecutableExtension() noexcept { return ""; }
 
     std::size_t GetExecutablePath(char* out, std::size_t outSize) noexcept

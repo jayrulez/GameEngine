@@ -392,7 +392,8 @@ export namespace foundation::core
 
     // --- Platform identity -------------------------------------------------
 
-    // Host platform tag ("Win64" / "Linux64" / "Mac64"), matching the Bin/<Config>/<Platform> layout.
+    // Host platform tag: "Win64" or "Linux64" (the Bin/<Config>/<Platform> layout), "Web" on wasm;
+    // export presets and plugin manifests name platforms by it.
     [[nodiscard]] inline StringView GetHostPlatformName() noexcept
     {
         return StringView(reinterpret_cast<const utf8char*>(sys::GetHostPlatformName()));

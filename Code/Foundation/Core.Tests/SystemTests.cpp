@@ -88,6 +88,17 @@ TEST_CASE("system: info queries are sane")
     CHECK(IsPowerOfTwo(pageSize));
 }
 
+TEST_CASE("system: the host platform tag is the one export and plugin manifests name it by")
+{
+#if defined(__EMSCRIPTEN__)
+    CHECK(GetHostPlatformName() == StringView(u8"Web"));
+#elif defined(_WIN32)
+    CHECK(GetHostPlatformName() == StringView(u8"Win64"));
+#else
+    CHECK(GetHostPlatformName() == StringView(u8"Linux64"));
+#endif
+}
+
 TEST_CASE("system: page allocation is usable and page-aligned")
 {
     const usize pageSize = PageSize();

@@ -35,6 +35,23 @@ namespace
 {
     constexpr StringView kDbDir = u8"mcp_scene_reference_db";
 
+    // A component a game's native module would contribute at run time, after the host's tools are registered.
+    struct ProbeComponent
+    {
+        f32 rate = 2.0f;
+    };
+
+    void Serialize(ISerializer& ar, ProbeComponent& component)
+    {
+        foundation::core::Serialize(ar, "rate", component.rate);
+    }
+
+    class ProbeManager final : public scene::SerializableComponentManager<ProbeComponent>
+    {
+    public:
+        ProbeManager() : SerializableComponentManager<ProbeComponent>(u8"test.Probe") {}
+    };
+
     void RemoveDb()
     {
         RemoveDirectoryRecursive(kDbDir);
@@ -456,6 +473,51 @@ TEST_CASE("integration.mcp: scene reference - RegisterEngineTools serves both ge
     const JsonValue refused = CallResponse(server, u8"component_schema", Move(bad));
     CHECK(refused.Get(u8"result").Get(u8"isError").AsBool() == true);
     CHECK(refused.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString().AsView().ContainsIgnoreCase(u8"light"));
+}
+
+// The reference describes what is registered when it is read: a component contributed after the
+// tools are registered (a game's native module loading) is in component_schema and both documents,
+// and gone again once its contribution is removed (the module unloading).
+TEST_CASE("integration.mcp: scene reference - a component contributed after the tools are registered is served, and leaves with its contribution")
+{
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    pipeline::RegisterAllBuilders(builders, foundation::vfs::FindDataRoot());
+    pipeline::ImporterRegistry importers{DefaultAllocator()};
+    editor::EditorLogBuffer logBuffer{DefaultAllocator()};
+    editor::mcp::ProjectSession session;
+    McpServer server;
+    editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
+    pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+    (void)pipeline::RegisterAllCreators(creators);
+    editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
+                                     editor::mcp::EngineToolPaths{}, operations);
+
+    const auto probeArgs = []()
+    {
+        JsonValue args = JsonValue::MakeObject();
+        args.Set(u8"type", JsonValue::MakeString(u8"test.Probe"));
+        return args;
+    };
+    const auto served = [&server]()
+    { return json::Parse(ReadResource(server, editor::mcp::kSceneSchemaUri).AsView()).value; };
+    CHECK(CallResponse(server, u8"component_schema", probeArgs()).Get(u8"result").Get(u8"isError").AsBool());
+
+    scene::SceneModuleContributions::Contribution probe;
+    probe.id = u8"test.probe";
+    probe.install = [](scene::Scene& target) { target.AddSystem<ProbeManager>(); };
+    probe.systemType = TypeOf<ProbeManager>().id;
+    scene::SceneModuleContributions::Global().Add(probe);
+
+    const JsonValue entry = CallOk(server, u8"component_schema", probeArgs());
+    CHECK(entry.Get(u8"wireName").AsString() == StringView(u8"test.Probe"));
+    CHECK(Field(entry.Get(u8"fields"), u8"rate").Get(u8"kind").AsString() == StringView(u8"f32"));
+    CHECK_FALSE(editor::mcp::FindSchemaEntry(served(), u8"test.Probe").IsNull());
+    CHECK(ReadResource(server, editor::mcp::kSceneExampleUri).AsView().ContainsIgnoreCase(u8"test.Probe"));
+
+    scene::SceneModuleContributions::Global().Remove(probe.systemType);
+    CHECK(CallResponse(server, u8"component_schema", probeArgs()).Get(u8"result").Get(u8"isError").AsBool());
+    CHECK(editor::mcp::FindSchemaEntry(served(), u8"test.Probe").IsNull());
+    CHECK_FALSE(ReadResource(server, editor::mcp::kSceneExampleUri).AsView().ContainsIgnoreCase(u8"test.Probe"));
 }
 
 // The documented prefab instance record matches what the writer produces: a scene holding one

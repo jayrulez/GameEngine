@@ -147,7 +147,8 @@ entity outside a run, each running behaviour's properties under `live` beside wh
 2. `host_info` - pid (kill a hung host by it) and `buildStamp`. After rebuilding the
    engine, compare stamps: a stale host serves yesterday's engine.
 3. `resources/list` - the curated `docs://` shipping docs (Scripting/Assets/Scenes/
-   Hosting/KnownIssues), the scene format reference this host generated from its own build
+   Hosting/KnownIssues), the scene format reference this host generates from what it has
+   registered when you read it, its build and the open project's native module
    (`docs://generated/SceneSchema.json` + `docs://generated/SceneExample.scene.xml`) and,
    once a project is open, every scene/prefab as `project://scene|prefab/<guid>`.
 
@@ -238,7 +239,8 @@ and documents by asset guid (`{guid}`), each a dependency of the cook. A scene s
 live preview.
 
 **Scenes**: read `docs://generated/SceneSchema.json` once (or `component_schema` for one
-component), copy from `docs://generated/SceneExample.scene.xml`, read the target with
+component; a component a game's native module adds is there while the module is loaded, and a
+reload shows on the next read), copy from `docs://generated/SceneExample.scene.xml`, read the target with
 `scene_read` (or the `project://` resource), author XML, loop on `scene_validate` (xml or
 guid; `valid` + empty `warnings` = the engine will load it), then `scene_write`. Prefabs
 mirror it with a single-root rule. To PLACE a prefab (an imported model's is the `Prefab` asset

@@ -13,7 +13,9 @@
 //     (SchemaRecorder): keys, kinds and defaults in wire order, the data-version chain, joined to
 //     reflection for enum names, attributes and reference targets.
 // Both are deterministic: seeded guids, composition order, no stamps. The hosts serve them as
-// `docs://generated/*` beside the shipping docs, and `component_schema` answers one entry.
+// `docs://generated/*` beside the shipping docs, and `component_schema` answers one entry; each is
+// generated when it is asked for, so it describes what is registered then, the scene managers a
+// game's native module adds included.
 
 module;
 #include "Core/Prelude.h"
@@ -60,11 +62,13 @@ export namespace editor::mcp
     FindSchemaEntry(const foundation::json::JsonValue& schema, StringView name);
 
     /// `docs://generated/SceneExample.scene.xml` (application/xml) and
-    /// `docs://generated/SceneSchema.json` (application/json), serving `reference`'s bytes.
-    void RegisterSceneReferenceResources(foundation::mcp::McpServer& server,
-                                         const SceneReference& reference);
+    /// `docs://generated/SceneSchema.json` (application/json), each read generating the reference
+    /// from what is registered then. `allocator` and `builders` outlive the server.
+    void RegisterSceneReferenceResources(foundation::mcp::McpServer& server, IAllocator& allocator,
+                                         const pipeline::BuilderRegistry& builders);
 
-    /// `component_schema`: one component's or settings block's schema entry by name.
-    void RegisterComponentSchemaTool(foundation::mcp::McpServer& server,
-                                     const SceneReference& reference);
+    /// `component_schema`: one component's or settings block's schema entry by name, from the
+    /// reference generated for the call. `allocator` and `builders` outlive the server.
+    void RegisterComponentSchemaTool(foundation::mcp::McpServer& server, IAllocator& allocator,
+                                     const pipeline::BuilderRegistry& builders);
 }

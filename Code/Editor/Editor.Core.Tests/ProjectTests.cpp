@@ -963,3 +963,106 @@ TEST_CASE("project: a version 10 manifest's native module becomes the entry of t
         (void)RemoveDirectoryRecursive(dir);
     }
 }
+
+namespace
+{
+    // A package folder under the project's Plugins/ with a manifest of `id` (and `engineVersion`).
+    void WriteProjectPackage(StringView projectDir, StringView folder, StringView id,
+                             StringView engineVersion = engine::project::kEngineVersionString)
+    {
+        foundation::runtime::PluginManifest manifest;
+        manifest.id = String(id);
+        manifest.name = Format(u8"{} package", id);
+        manifest.version = String(u8"0.3.0");
+        manifest.engineVersion = String(engineVersion);
+        manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+        manifest.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Linux64")});
+        const String dir = PathJoin(PathJoin(projectDir, u8"Plugins").AsView(), folder);
+        REQUIRE(CreateDirectories(dir.AsView()));
+        MemoryStream xml;
+        REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+        REQUIRE(WriteFile(PathJoin(dir.AsView(), u8"Plugin.xml").AsView(), xml.Bytes()).IsOk());
+    }
+
+    [[nodiscard]] const engine::project::AvailablePlugin* FindAvailable(const Array<engine::project::AvailablePlugin>& found,
+                                                                        StringView id, StringView path)
+    {
+        for (const engine::project::AvailablePlugin& plugin : found)
+        {
+            if (plugin.id == id && plugin.path == path)
+            {
+                return &plugin;
+            }
+        }
+        return nullptr;
+    }
+}
+
+// A package extracted into the project's Plugins folder is available, not enabled: discovery lists
+// each package no entry names (with what its manifest says) and each linked plugin no entry
+// enables, and reports, without offering it, a package whose manifest does not read, whose engine
+// is another, or whose id is taken; a folder with no Plugin.xml is no package, and an entry's own
+// package is not listed.
+TEST_CASE("project: discovery lists the packages in Plugins/ and the linked plugins no entry enables")
+{
+    const StringView dir = u8"scratch_project_discovery";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"Discovery").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    WriteProjectPackage(dir, u8"Lantern", u8"lantern");
+    WriteProjectPackage(dir, u8"LanternCopy", u8"lantern");
+    WriteProjectPackage(dir, u8"Old", u8"old_engine", u8"0.0");
+    WriteProjectPackage(dir, u8"Mine", u8"mine");
+    WriteProjectPackage(dir, u8"Taken", u8"taken");
+    REQUIRE(CreateDirectories(PathJoin(dir, u8"Plugins/Broken").AsView()));
+    const StringView garbage = u8"not xml";
+    REQUIRE(WriteFile(PathJoin(dir, u8"Plugins/Broken/Plugin.xml").AsView(),
+                      Span<const byte>(reinterpret_cast<const byte*>(garbage.Data()), garbage.Size()))
+                .IsOk());
+    REQUIRE(CreateDirectories(PathJoin(dir, u8"Plugins/Notes").AsView())); // no Plugin.xml: no package
+    foundation::runtime::EnabledPlugin mine;
+    mine.id = String(u8"mine");
+    mine.path = String(u8"Plugins/Mine");
+    project->Settings().plugins.PushBack(Move(mine));
+    foundation::runtime::EnabledPlugin taken;
+    taken.id = String(u8"taken");
+    taken.path = String(u8"Elsewhere/Taken");
+    project->Settings().plugins.PushBack(Move(taken));
+    const FourPartsLinked linked;
+
+    const Array<engine::project::AvailablePlugin> found =
+        engine::project::DiscoverPlugins(dir, project->Settings(), linked.List(), DefaultAllocator());
+
+    const engine::project::AvailablePlugin* lantern = FindAvailable(found, u8"lantern", u8"Plugins/Lantern");
+    REQUIRE(lantern != nullptr);
+    CHECK(lantern->problem.IsEmpty());
+    CHECK(lantern->name == String(u8"lantern package"));
+    CHECK(lantern->version == String(u8"0.3.0"));
+    REQUIRE(lantern->parts.Size() == 1u);
+    CHECK(lantern->parts[0] == String(u8"Engine"));
+    REQUIRE(lantern->platforms.Size() == 1u);
+    const engine::project::AvailablePlugin* copy = FindAvailable(found, u8"lantern", u8"Plugins/LanternCopy");
+    REQUIRE(copy != nullptr);
+    CHECK(copy->problem.AsView().Contains(u8"is also in 'Plugins/Lantern'"));
+    const engine::project::AvailablePlugin* old = FindAvailable(found, u8"old_engine", u8"Plugins/Old");
+    REQUIRE(old != nullptr);
+    CHECK_FALSE(old->problem.IsEmpty());
+    const engine::project::AvailablePlugin* takenPackage = FindAvailable(found, u8"taken", u8"Plugins/Taken");
+    REQUIRE(takenPackage != nullptr);
+    CHECK(takenPackage->problem.AsView().Contains(u8"already enabled from 'Elsewhere/Taken'"));
+    const engine::project::AvailablePlugin* broken = FindAvailable(found, u8"", u8"Plugins/Broken");
+    REQUIRE(broken != nullptr);
+    CHECK(broken->problem.AsView().Contains(u8"does not read"));
+    CHECK(FindAvailable(found, u8"mine", u8"Plugins/Mine") == nullptr); // an entry's own package
+    const engine::project::AvailablePlugin* fourParts = FindAvailable(found, kFourParts, u8"");
+    REQUIRE(fourParts != nullptr); // linked, no entry
+    CHECK(fourParts->problem.IsEmpty());
+    for (const engine::project::AvailablePlugin& plugin : found)
+    {
+        CHECK(plugin.path != String(u8"Plugins/Notes"));
+    }
+
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}

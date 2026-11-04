@@ -533,6 +533,154 @@ export namespace engine::project
         }
     }
 
+    /// A plugin a project could enable and does not: a package in its Plugins folder that no entry
+    /// names, or a plugin the binary links that no entry enables. `problem` says why one is not
+    /// offered (its manifest does not read or does not suit this engine, or its id is taken), empty
+    /// when it is.
+    struct AvailablePlugin
+    {
+        String id;
+        String path; // the package's folder from the project ("Plugins/<Name>"); empty for a linked plugin
+        String name;
+        String version;
+        Array<String> parts;     // the part kinds its manifest lists
+        Array<String> platforms; // the platforms it supports
+        String problem;
+    };
+
+    /// What a project could enable (DiscoverPlugins), its packages first, by folder name.
+    [[nodiscard]] inline Array<AvailablePlugin> DiscoverPlugins(StringView projectDir, const ProjectSettings& settings,
+                                                                Span<const foundation::runtime::LinkedPlugin> linked,
+                                                                IAllocator& allocator)
+    {
+        Array<AvailablePlugin> found(allocator);
+        const auto describe = [&allocator](const foundation::runtime::PluginManifest& manifest, AvailablePlugin& out)
+        {
+            out.id = String(manifest.id.AsView(), allocator);
+            out.name = String(manifest.name.AsView(), allocator);
+            out.version = String(manifest.version.AsView(), allocator);
+            for (const foundation::runtime::PluginManifestPart& part : manifest.parts)
+            {
+                out.parts.PushBack(String(part.kind.AsView(), allocator));
+            }
+            for (const foundation::runtime::PluginPlatform& platform : manifest.platforms)
+            {
+                out.platforms.PushBack(String(platform.platform.AsView(), allocator));
+            }
+        };
+        const auto entryWithId = [&settings](StringView id) -> const foundation::runtime::EnabledPlugin*
+        {
+            for (const foundation::runtime::EnabledPlugin& entry : settings.plugins)
+            {
+                if (entry.id == id)
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        };
+        Array<UniquePtr<foundation::runtime::PluginManifest>> linkedManifests(allocator);
+        for (const foundation::runtime::LinkedPlugin& plugin : linked)
+        {
+            UniquePtr<foundation::runtime::PluginManifest> manifest = MakeUnique<foundation::runtime::PluginManifest>(allocator);
+            MemoryStream stream;
+            const StringView xml{plugin.manifestXml};
+            (void)stream.Write(xml.Data(), xml.Size());
+            (void)stream.Seek(0, SeekOrigin::Begin);
+            if (foundation::runtime::ReadPluginManifest(stream, *manifest).IsOk())
+            {
+                linkedManifests.PushBack(Move(manifest));
+            }
+        }
+
+        // The packages: each folder of Plugins/ holding a Plugin.xml, by name.
+        Array<String> folders(allocator);
+        const String pluginsDir = PathJoin(projectDir, kProjectPluginsDir, allocator);
+        (void)ListDirectory(
+            pluginsDir.AsView(),
+            [](void* ctx, StringView name, bool isDirectory)
+            {
+                if (isDirectory)
+                {
+                    static_cast<Array<String>*>(ctx)->PushBack(String(name));
+                }
+            },
+            &folders);
+        for (usize i = 1; i < folders.Size(); ++i)
+        {
+            for (usize j = i; j > 0 && folders[j].AsView().Compare(folders[j - 1].AsView()) < 0; --j)
+            {
+                Swap(folders[j], folders[j - 1]);
+            }
+        }
+        for (const String& folder : folders)
+        {
+            const String path = Format(u8"{}/{}", kProjectPluginsDir, folder);
+            bool named = false;
+            for (const foundation::runtime::EnabledPlugin& entry : settings.plugins)
+            {
+                named = named || entry.path == path;
+            }
+            const String packageDir = PathJoin(projectDir, path.AsView(), allocator);
+            if (named || !FileExists(PathJoin(packageDir.AsView(), foundation::runtime::kPluginManifestFile, allocator).AsView()))
+            {
+                continue; // an entry's package, or a folder that is no package
+            }
+            AvailablePlugin plugin;
+            plugin.path = path;
+            foundation::runtime::PluginManifest manifest;
+            if (!foundation::runtime::LoadPluginManifest(packageDir.AsView(), manifest, allocator).IsOk())
+            {
+                plugin.problem = Format(u8"'{}': its Plugin.xml does not read", path);
+                found.PushBack(Move(plugin));
+                continue;
+            }
+            describe(manifest, plugin);
+            String whyNot;
+            if (!foundation::runtime::CheckPluginManifest(manifest, kEngineVersionString, whyNot))
+            {
+                plugin.problem = Move(whyNot);
+            }
+            else if (const foundation::runtime::EnabledPlugin* entry = entryWithId(manifest.id.AsView()))
+            {
+                plugin.problem = entry->path.IsEmpty()
+                                     ? Format(u8"plugin '{}' is already enabled, as the engine's", manifest.id)
+                                     : Format(u8"plugin '{}' is already enabled from '{}'", manifest.id, entry->path);
+            }
+            else
+            {
+                for (const UniquePtr<foundation::runtime::PluginManifest>& other : linkedManifests)
+                {
+                    if (other->id == manifest.id)
+                    {
+                        plugin.problem = Format(u8"plugin '{}' is linked into this build", manifest.id);
+                    }
+                }
+                for (const AvailablePlugin& earlier : found)
+                {
+                    if (plugin.problem.IsEmpty() && earlier.id == manifest.id)
+                    {
+                        plugin.problem = Format(u8"plugin '{}' is also in '{}'", manifest.id, earlier.path);
+                    }
+                }
+            }
+            found.PushBack(Move(plugin));
+        }
+
+        // The plugins this binary links that no entry enables.
+        for (const UniquePtr<foundation::runtime::PluginManifest>& manifest : linkedManifests)
+        {
+            if (entryWithId(manifest->id.AsView()) != nullptr)
+            {
+                continue;
+            }
+            AvailablePlugin plugin;
+            describe(*manifest, plugin);
+            found.PushBack(Move(plugin));
+        }
+        return found;
+    }
+
     /// Loads the plugins `settings` enables into `host`, the process's plugin host for its role,
     /// after adding the plugins this binary links. What loaded is logged, and what did not, each
     /// with why; the report says the same. A plugin that does not load leaves its entry as it is.

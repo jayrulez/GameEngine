@@ -55,8 +55,14 @@ export namespace foundation::core
         void Register(const TypeInfo& info, TypeDomain domain = kRuntimeTypeDomain)
         {
             ScopedLock lock(m_lock);
-            if (m_byId.Contains(info.id))
+            if (const TypeInfo* const* held = m_byId.Find(info.id))
             {
+                // Another type under the same id (a TypeInfo is one object per type, in every
+                // library): the held one stays, and the collision observer hears of it.
+                if (*held != &info && m_collisionObserver != nullptr)
+                {
+                    m_collisionObserver(m_collisionContext, **held, info);
+                }
                 // Already registered: the domain may only widen to Runtime. Registration
                 // order is arbitrary, and if any path the player takes registers the type,
                 // the player has it. It never narrows.
@@ -112,6 +118,16 @@ export namespace foundation::core
             m_observerContext = context;
         }
 
+        // Collision observer (one at a time): told when a Register offers a different type under
+        // an id another type holds (`held`, which stays), so a host loading native code can refuse
+        // the code that offered it.
+        void SetCollisionObserver(void (*observer)(void*, const TypeInfo& held, const TypeInfo& offered),
+                                  void* context) noexcept
+        {
+            m_collisionObserver = observer;
+            m_collisionContext = context;
+        }
+
         // The domain `id` was registered under; unknown ids (and unregistered types)
         // read as Runtime: the default is the absence of a tag.
         [[nodiscard]] TypeDomain DomainOf(TypeId id) const noexcept
@@ -152,6 +168,8 @@ export namespace foundation::core
         HashMap<TypeId, const TypeInfo*> m_byId;
         void (*m_observer)(void*, TypeId) = nullptr;
         void* m_observerContext = nullptr;
+        void (*m_collisionObserver)(void*, const TypeInfo&, const TypeInfo&) = nullptr;
+        void* m_collisionContext = nullptr;
         Array<const TypeInfo*> m_all;
         HashMap<TypeId, TypeDomain> m_domains; // sparse: only non-Runtime entries
     };

@@ -33,14 +33,24 @@ export namespace foundation::core
     class SerializableRegistry
     {
     public:
-        void Register(TypeId id, SerializableFactory factory)
+        // Registers `type`'s factory. A held id keeps the factory it holds: the same type registered
+        // again (from another library, whose factory is its own copy) changes nothing, and a
+        // different type under the id is a collision, told to the collision observer.
+        void Register(const TypeInfo& type, SerializableFactory factory)
         {
             ScopedLock lock(m_lock); // registrars run from cook workers too (TypeRegistry rule)
-            const bool inserted = m_factories.Find(id) == nullptr;
-            m_factories.InsertOrAssign(id, factory);
-            if (inserted && m_observer != nullptr)
+            if (const Entry* held = m_factories.Find(type.id))
             {
-                m_observer(m_observerContext, id); // fires only on a real insert
+                if (held->type != &type && m_collisionObserver != nullptr)
+                {
+                    m_collisionObserver(m_collisionContext, *held->type, type);
+                }
+                return;
+            }
+            m_factories.InsertOrAssign(type.id, Entry{factory, &type});
+            if (m_observer != nullptr)
+            {
+                m_observer(m_observerContext, type.id); // fires only on a real insert
             }
         }
 
@@ -61,20 +71,36 @@ export namespace foundation::core
             m_observerContext = context;
         }
 
+        // Collision observer (one at a time); see TypeRegistry::SetCollisionObserver.
+        void SetCollisionObserver(void (*observer)(void*, const TypeInfo& held, const TypeInfo& offered),
+                                  void* context) noexcept
+        {
+            m_collisionObserver = observer;
+            m_collisionContext = context;
+        }
+
         // Default-builds the ISerializable for `id`, or null if unregistered.
         [[nodiscard]] RefPtr<ISerializable> Create(TypeId id) const
         {
-            const SerializableFactory* factory = m_factories.Find(id);
-            return (factory != nullptr) ? (*factory)() : RefPtr<ISerializable>{};
+            const Entry* entry = m_factories.Find(id);
+            return (entry != nullptr) ? entry->factory() : RefPtr<ISerializable>{};
         }
 
         [[nodiscard]] bool Contains(TypeId id) const { return m_factories.Find(id) != nullptr; }
 
     private:
+        struct Entry
+        {
+            SerializableFactory factory;
+            const TypeInfo* type; // whose factory it is
+        };
+
         Mutex m_lock;
-        HashMap<TypeId, SerializableFactory> m_factories;
+        HashMap<TypeId, Entry> m_factories;
         void (*m_observer)(void*, TypeId) = nullptr;
         void* m_observerContext = nullptr;
+        void (*m_collisionObserver)(void*, const TypeInfo&, const TypeInfo&) = nullptr;
+        void* m_collisionContext = nullptr;
     };
 
     [[nodiscard]] SerializableRegistry& GlobalSerializableRegistry() noexcept
@@ -88,7 +114,7 @@ export namespace foundation::core
     template <typename T>
     void RegisterSerializable(SerializableRegistry& registry = GlobalSerializableRegistry())
     {
-        registry.Register(T::StaticType().id,
+        registry.Register(T::StaticType(),
                           []() -> RefPtr<ISerializable> { return MakeRef<T>(DefaultAllocator()); });
     }
 

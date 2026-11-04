@@ -681,3 +681,61 @@ TEST_CASE("io: binary arrays of scalars move as one block, byte-identical to the
     CHECK(bytesBack[999] == static_cast<u8>(999 * 7));
     CHECK(floatsBack[299] == 299.0f * 0.25f - 3.0f);
 }
+
+// Another type under Widget's reflected name, so Widget's id: what a second library defining
+// rtti::test::Widget would register.
+namespace iorival
+{
+    class Widget final : public ISerializable
+    {
+        RTTI_OBJECT(Widget, ISerializable)
+    public:
+        void Serialize(ISerializer&) override {}
+    };
+    RTTI_DEFINE_OBJECT(Widget, "rtti::test")
+}
+
+// An id held by one type keeps it in both registries: the same type registered again changes
+// nothing, and another type under the id is told to the collision observer, never displacing the
+// held one (its factory too, which a later unload of the second would not put back).
+TEST_CASE("serialization: a held type id keeps its type and factory; another type under it is a collision")
+{
+    REQUIRE(Widget::StaticType().id == iorival::Widget::StaticType().id);
+    struct Seen
+    {
+        const TypeInfo* held = nullptr;
+        const TypeInfo* offered = nullptr;
+        int count = 0;
+    } seen;
+    const auto observe = [](void* ctx, const TypeInfo& held, const TypeInfo& offered)
+    {
+        Seen& s = *static_cast<Seen*>(ctx);
+        s.held = &held;
+        s.offered = &offered;
+        ++s.count;
+    };
+
+    SerializableRegistry registry;
+    registry.SetCollisionObserver(observe, &seen);
+    RegisterSerializable<Widget>(registry);
+    RegisterSerializable<Widget>(registry); // the same type again: no collision
+    CHECK(seen.count == 0);
+    RegisterSerializable<iorival::Widget>(registry);
+    CHECK(seen.count == 1);
+    CHECK(seen.held == &Widget::StaticType());
+    CHECK(seen.offered == &iorival::Widget::StaticType());
+    const RefPtr<ISerializable> made = registry.Create(Widget::StaticType().id);
+    REQUIRE(made.Get() != nullptr);
+    CHECK(made->GetType() == &Widget::StaticType());
+
+    seen = Seen{};
+    TypeRegistry types;
+    types.SetCollisionObserver(observe, &seen);
+    types.Register(Widget::StaticType());
+    types.Register(Widget::StaticType());
+    CHECK(seen.count == 0);
+    types.Register(iorival::Widget::StaticType());
+    CHECK(seen.count == 1);
+    CHECK(seen.offered == &iorival::Widget::StaticType());
+    CHECK(types.FindById(Widget::StaticType().id) == &Widget::StaticType());
+}

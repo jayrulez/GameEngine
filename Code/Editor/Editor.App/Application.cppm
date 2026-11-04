@@ -276,6 +276,7 @@ export namespace editor::app
         UniquePtr<AssetPickerWindow> m_assetPicker; // an asset slot's picker, made the first time
         RefPtr<foundation::gui::Window> m_createAsset; // Create Asset, while open
         RefPtr<foundation::gui::Window> m_namePrompt;  // the name prompt, while open
+        RefPtr<foundation::gui::Window> m_nativeCodeDialog; // Add Native Code's parts, while open
         ResourceRefServices m_refs;                 // what an asset slot asks of the editor
         UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
         UniquePtr<TemplatesDialog> m_templates;             // Edit > Export Templates

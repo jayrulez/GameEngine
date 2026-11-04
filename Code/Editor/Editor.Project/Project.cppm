@@ -30,6 +30,7 @@ import foundation.vfs;
 import foundation.content;
 import foundation.xml.serialization;
 import engine.project;
+import foundation.runtime; // PluginPartKind (the game package's parts)
 import pipeline.core; // AssetCreatorRegistry (the starter content's primitives)
 import :export_roots; // the project owns its "Always Export" set (export_roots.xml)
 
@@ -265,12 +266,28 @@ export namespace editor
     // nothing survives).
     [[nodiscard]] String NativeTargetNameFromProjectName(StringView projectName);
 
-    // "Add Native Code": generates the game's plugin package, <project>/Plugins/<Game> (its
-    // Plugin.xml, and its Engine part's CMakeLists and <Game>Engine.cpp, the NativeSample shape with
-    // the name filled in), adds the project's entry for it and saves the manifest. Fails with
-    // AlreadyExists when the project already enables that id or the folder exists, so it never
-    // overwrites user code. Defined in ProjectScaffoldImpl.cpp.
-    [[nodiscard]] Status ScaffoldGamePackage(EditorProject& project);
+    // The game's package (<project>/Plugins/<Game>, its name from the project's): its id, name,
+    // path and the parts its manifest lists, in load order.
+    struct GamePackage
+    {
+        String id;
+        String name;
+        String path; // relative to the project
+        Array<foundation::runtime::PluginPartKind> parts;
+    };
+
+    // The game's package when its Plugin.xml is there; none otherwise. Defined in
+    // ProjectScaffoldImpl.cpp.
+    [[nodiscard]] Optional<GamePackage> FindGamePackage(const EditorProject& project);
+
+    // "Add Native Code": generates the game's plugin package, <project>/Plugins/<Game>, with the
+    // `parts` asked for (each <Game>.<Kind>/ with its CMakeLists and <Game><Kind>.cpp, the
+    // NativeSample shape with the name filled in), or adds to the package there the parts it lacks;
+    // lists them in its Plugin.xml in load order, adds the project's entry for it when there is none
+    // and saves the manifest. AlreadyExists when every part asked for is there, or the folder or
+    // the entry is not this package's, so it never overwrites user code. Defined in
+    // ProjectScaffoldImpl.cpp.
+    [[nodiscard]] Status ScaffoldGamePackage(EditorProject& project, Span<const foundation::runtime::PluginPartKind> parts);
 
     // The folders of the project's own packages: each entry with a path whose folder holds a
     // Plugin.xml, as absolute paths. Defined in ProjectScaffoldImpl.cpp.

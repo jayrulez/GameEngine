@@ -2523,7 +2523,7 @@ TEST_CASE("export: the NativeSample fixture pins the game-package conventions")
     CHECK(fs.Exists(u8"Plugins/NativeSample/NativeSample.Engine/NativeSampleEngine.cpp"));
 }
 
-TEST_CASE("export: Add Native Code scaffolds the game's package and enables it")
+TEST_CASE("export: Add Native Code scaffolds the game's package with the parts asked for, and adds parts to it")
 {
     const StringView dir = u8"scaffold-proj"; // harness cwd = .test-scratch
     NukeTree(dir);
@@ -2534,8 +2534,11 @@ TEST_CASE("export: Add Native Code scaffolds the game's package and enables it")
     CHECK(editor::NativeTargetNameFromProjectName(u8"My Scaffold 7!") == u8"MyScaffold7");
     CHECK(editor::NativeTargetNameFromProjectName(u8"123!") == u8"Native"); // leading digits drop
     CHECK(editor::ProjectPackageDirs(*project).IsEmpty());
+    CHECK_FALSE(editor::FindGamePackage(*project));
 
-    REQUIRE(editor::ScaffoldGamePackage(*project).IsOk());
+    using foundation::runtime::PluginPartKind;
+    const PluginPartKind engine[] = {PluginPartKind::Engine};
+    REQUIRE(editor::ScaffoldGamePackage(*project, Span<const PluginPartKind>(engine, 1)).IsOk());
     const foundation::runtime::EnabledPlugin* entry = project->Settings().FindPlugin(u8"myscaffold7");
     REQUIRE(entry != nullptr);
     CHECK(entry->path == u8"Plugins/MyScaffold7");
@@ -2559,8 +2562,30 @@ TEST_CASE("export: Add Native Code scaffolds the game's package and enables it")
     REQUIRE(packages.Size() == 1u);
     CHECK(packages[0].AsView().EndsWith(u8"Plugins/MyScaffold7"));
 
-    // It never overwrites: a second call refuses (the id is enabled and the folder exists).
-    CHECK(editor::ScaffoldGamePackage(*project).Code() == ErrorCode::AlreadyExists);
+    // A part it has is refused, and nothing is written over.
+    CHECK(editor::ScaffoldGamePackage(*project, Span<const PluginPartKind>(engine, 1)).Code() == ErrorCode::AlreadyExists);
+
+    // Parts it lacks are added, listed in load order whatever order they were asked in, each with its
+    // service found at load.
+    const PluginPartKind more[] = {PluginPartKind::Editor, PluginPartKind::Pipeline, PluginPartKind::Engine};
+    REQUIRE(editor::ScaffoldGamePackage(*project, Span<const PluginPartKind>(more, 3)).IsOk());
+    const Optional<editor::GamePackage> package = editor::FindGamePackage(*project);
+    REQUIRE(package);
+    REQUIRE(package->parts.Size() == 3u);
+    CHECK(package->parts[0] == PluginPartKind::Engine);
+    CHECK(package->parts[1] == PluginPartKind::Pipeline);
+    CHECK(package->parts[2] == PluginPartKind::Editor);
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Pipeline/CMakeLists.txt"));
+    CHECK(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Editor/MyScaffold7Editor.cpp"));
+    CHECK_FALSE(fs.Exists(u8"Plugins/MyScaffold7/MyScaffold7.Tooling"));
+    {
+        Result<Array<byte>> source = ReadFile(PathJoin(dir, u8"Plugins/MyScaffold7/MyScaffold7.Pipeline/MyScaffold7Pipeline.cpp").AsView());
+        REQUIRE(source.HasValue());
+        const StringView text(reinterpret_cast<const utf8char*>(source.Value().Data()), source.Value().Size());
+        CHECK(text.Contains(u8"context.Find<pipeline::PipelinePluginServices>()"));
+        CHECK(text.Contains(u8"PLUGIN_PART(&Load, &Unload)"));
+    }
+    CHECK(project->Settings().plugins.Size() == 1u); // one entry, as before
 
     NukeTree(dir);
 }

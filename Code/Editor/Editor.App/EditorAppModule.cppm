@@ -38,6 +38,7 @@ export import :asset_page;
 export import :image_inspect_view;
 export import :image_file_preview;
 export import :name_prompt;
+export import :native_code_dialog;
 export import :asset_object_page;
 export import :preview_pane;
 export import :picker;

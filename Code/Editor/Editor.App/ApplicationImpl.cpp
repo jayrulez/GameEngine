@@ -1121,19 +1121,35 @@ namespace editor::app
     void EditorApplication::AddNativeCode()
     {
         editor::EditorProject* project = m_session.Project();
-        if (project == nullptr)
+        gui::SceneRoot* root = m_window.Root();
+        if (project == nullptr || root == nullptr)
             return;
-        const Status scaffolded = editor::ScaffoldGamePackage(*project);
-        if (scaffolded.IsOk())
+        // The parts to scaffold, asked first: those the game's package has show checked.
+        NativeCodeRequest request;
+        if (const Optional<editor::GamePackage> package = editor::FindGamePackage(*project))
         {
-            m_context.Notify(editor::NoticeKind::Success,
-                             u8"Native code scaffolded as a plugin package under Plugins/ - use Project > Build Project Plugins, then Reload.");
-            (void)project->SaveSettings(); // the package's entry
+            request.path = package->path;
+            request.existing = package->parts;
         }
-        else if (scaffolded.Code() == ErrorCode::AlreadyExists)
-            m_context.Notify(editor::NoticeKind::Warning, u8"The game's package already exists under Plugins/ - not touching it.");
         else
-            m_context.Notify(editor::NoticeKind::Error, u8"Native scaffold failed (see Console).");
+            request.path = Format(u8"{}/{}", engine::project::kProjectPluginsDir,
+                                  editor::NativeTargetNameFromProjectName(project->Settings().name.AsView()));
+        EditorApplication* self = this;
+        request.accepted = [self](Span<const foundation::runtime::PluginPartKind> parts)
+        {
+            editor::EditorProject* open = self->m_session.Project();
+            if (open == nullptr)
+                return;
+            const Status scaffolded = editor::ScaffoldGamePackage(*open, parts);
+            if (scaffolded.IsOk())
+                self->m_context.Notify(editor::NoticeKind::Success,
+                                       u8"Native code scaffolded in the game's plugin package - use Project > Build Project Plugins, then Reload.");
+            else if (scaffolded.Code() == ErrorCode::AlreadyExists)
+                self->m_context.Notify(editor::NoticeKind::Warning, u8"Those parts are there already, or Plugins/ holds another folder of that name - nothing was touched.");
+            else
+                self->m_context.Notify(editor::NoticeKind::Error, u8"Native scaffold failed (see Console).");
+        };
+        m_nativeCodeDialog = NativeCodeDialog::Open(m_editorAllocator, *root, m_window.LoadMarkup(NativeCodeDialog::kPath), Move(request));
     }
 
     void EditorApplication::BuildProjectPlugins()

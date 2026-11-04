@@ -734,3 +734,66 @@ TEST_CASE("integration.mcp: a plugin's MCP tool is served by a server there befo
     (void)RemoveDirectoryRecursive(dir);
     (void)RemoveDirectoryRecursive(plain);
 }
+
+// plugin_scaffold makes the game's own package, as Add Native Code does, and adds parts to it.
+TEST_CASE("integration.mcp: an agent scaffolds the game's native code and adds a part to it")
+{
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    pipeline::ImporterRegistry importers{DefaultAllocator()};
+    pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+    editor::EditorLogBuffer logBuffer{DefaultAllocator()};
+    editor::mcp::ProjectSession session;
+    editor::mcp::ProjectOwner owner;
+    McpServer server;
+    editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
+    editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
+                                     editor::mcp::EngineToolPaths{}, operations);
+    editor::mcp::RegisterProjectOpenTools(server, session, owner);
+    const StringView dir = u8"mcp_plugin_scaffold";
+    (void)RemoveDirectoryRecursive(dir);
+    {
+        JsonValue create = JsonValue::MakeObject();
+        create.Set(u8"directory", JsonValue::MakeString(String(dir)));
+        create.Set(u8"name", JsonValue::MakeString(String(u8"Hand Made")));
+        REQUIRE_FALSE(Call(server, u8"project_create", Move(create)).error);
+        JsonValue open = JsonValue::MakeObject();
+        open.Set(u8"directory", JsonValue::MakeString(String(dir)));
+        REQUIRE_FALSE(Call(server, u8"project_open", Move(open)).error);
+    }
+    const auto scaffold = [&server](std::initializer_list<const char8_t*> parts)
+    {
+        JsonValue args = JsonValue::MakeObject();
+        JsonValue list = JsonValue::MakeArray();
+        for (const char8_t* part : parts)
+        {
+            list.Add(JsonValue::MakeString(String(StringView(part))));
+        }
+        args.Set(u8"parts", Move(list));
+        return Call(server, u8"plugin_scaffold", Move(args));
+    };
+
+    const Called made = scaffold({});
+    REQUIRE_FALSE(made.error);
+    CHECK(made.value.Get(u8"id").AsString() == String(u8"handmade"));
+    CHECK(made.value.Get(u8"path").AsString() == String(u8"Plugins/HandMade"));
+    REQUIRE(made.value.Get(u8"parts").Count() == 1);
+    CHECK(made.value.Get(u8"parts").At(0).AsString() == String(u8"Engine"));
+    REQUIRE(session.project->Settings().FindPlugin(u8"handmade") != nullptr);
+
+    CHECK(scaffold({u8"Engine"}).error); // there already: nothing touched
+    const Called bogus = scaffold({u8"Runtime"});
+    CHECK(bogus.error);
+    CHECK(bogus.text.AsView().Contains(u8"'Runtime' is not a part"));
+
+    const Called tooling = scaffold({u8"Tooling"});
+    REQUIRE_FALSE(tooling.error);
+    REQUIRE(tooling.value.Get(u8"parts").Count() == 2);
+    CHECK(tooling.value.Get(u8"parts").At(1).AsString() == String(u8"Tooling"));
+    CHECK(FileExists(PathJoin(dir, u8"Plugins/HandMade/HandMade.Tooling/HandMadeTooling.cpp").AsView()));
+
+    session.plugins = nullptr;
+    owner.plugins.Reset();
+    session.project = nullptr;
+    owner.project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}

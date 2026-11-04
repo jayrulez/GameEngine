@@ -6,7 +6,8 @@
 // The open project's plugins over MCP: plugin_list reports each entry of the project's list as
 // the process's plugin host left it (loaded, not enabled here, refused, missing) with its
 // settings, plugin_enable adds an entry or changes its path and platforms, plugin_disable removes
-// one, and plugin_settings_set changes a loaded plugin's settings. A plugin's settings are
+// one, plugin_settings_set changes a loaded plugin's settings, and plugin_scaffold makes the game's
+// own package or adds parts to it (what the editor's Add Native Code does). A plugin's settings are
 // its own reflected type, labelled as the project's settings are, so both read and check them
 // through :reflected_fields. An entry whose plugin is not loaded keeps its settings as written:
 // nothing here can read them, so nothing here changes them.
@@ -274,6 +275,78 @@ export namespace editor::mcp
                     }
                 }
                 return Err(Format(u8"the project enables no plugin '{}' (plugin_list names them)", id));
+            });
+
+        server.RegisterTool(
+            u8"plugin_scaffold",
+            u8"Scaffold the game's native code, as the editor's Add Native Code does: the game's plugin "
+            u8"package, Plugins/<Game> (its name from the project's), with the `parts` asked for (Engine, "
+            u8"Pipeline, Tooling, Editor; default Engine), each <Game>.<Kind>/ with its CMakeLists and a "
+            u8"source whose Load finds the service its host hands that kind. A package already there gains "
+            u8"the parts it lacks. Lists them in its Plugin.xml, enables the package in the project and "
+            u8"saves. Refused when every part asked for is there, or Plugins/ holds another folder of that "
+            u8"name; it never overwrites code. Build it with the editor's Build Project Plugins, then reopen "
+            u8"or Reload Project Plugins. Returns the package's id, path and parts.",
+            SchemaBuilder()
+                .Arr(u8"parts", u8"string", u8"the parts to make: Engine, Pipeline, Tooling, Editor (default Engine)")
+                .Build(),
+            foundation::mcp::ToolAnnotations::Adjusts(),
+            [s](const JsonValue& args) -> ToolResult
+            {
+                if (s->project == nullptr)
+                {
+                    return Err(String(u8"no project is open (call project_open first)"));
+                }
+                Array<runtime::PluginPartKind> parts;
+                if (args.Has(u8"parts"))
+                {
+                    const JsonValue given = args.Get(u8"parts");
+                    for (i64 i = 0; i < given.Count(); ++i)
+                    {
+                        const Optional<runtime::PluginPartKind> kind =
+                            runtime::ParsePluginPartKind(given.At(static_cast<usize>(i)).AsString().AsView());
+                        if (!kind)
+                        {
+                            return Err(Format(u8"'{}' is not a part (Engine, Pipeline, Tooling or Editor)",
+                                              given.At(static_cast<usize>(i)).AsString()));
+                        }
+                        parts.PushBack(*kind);
+                    }
+                }
+                if (parts.IsEmpty())
+                {
+                    parts.PushBack(runtime::PluginPartKind::Engine);
+                }
+                editor::EditorProject& project = *s->project;
+                const Status scaffolded =
+                    editor::ScaffoldGamePackage(project, Span<const runtime::PluginPartKind>(parts.Data(), parts.Size()));
+                if (scaffolded.Code() == ErrorCode::AlreadyExists)
+                {
+                    return Err(String(u8"every part asked for is there already, or Plugins/ holds another folder of "
+                                      u8"the game package's name; nothing was touched"));
+                }
+                if (!scaffolded.IsOk())
+                {
+                    return Err(String(u8"the scaffold failed (log_read says why)"));
+                }
+                if (s->onSettingsChanged)
+                {
+                    s->onSettingsChanged();
+                }
+                const Optional<editor::GamePackage> package = editor::FindGamePackage(project);
+                JsonValue out = JsonValue::MakeObject();
+                if (package)
+                {
+                    out.Set(u8"id", JsonValue::MakeString(package->id));
+                    out.Set(u8"path", JsonValue::MakeString(package->path));
+                    JsonValue kinds = JsonValue::MakeArray();
+                    for (runtime::PluginPartKind kind : package->parts)
+                    {
+                        kinds.Add(JsonValue::MakeString(String(runtime::PluginPartKindName(kind))));
+                    }
+                    out.Set(u8"parts", Move(kinds));
+                }
+                return out;
             });
 
         server.RegisterTool(

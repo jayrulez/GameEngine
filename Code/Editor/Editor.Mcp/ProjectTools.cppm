@@ -763,7 +763,7 @@ export namespace editor::mcp
     // The number of tools RegisterEngineTools registers. Adding an engine tool means bumping
     // this by hand, so a lost registration fails the test loudly. host_info and the stdio host's
     // project_create and project_open are not counted: each host registers its own.
-    inline constexpr usize kEngineToolCount = 37;
+    inline constexpr usize kEngineToolCount = 38;
 
     // Every *.md in `docsDir` as a read-only `docs://<FileName>` resource: the curated,
     // distribution-facing docs set (internal design and process docs are never exposed).
@@ -812,7 +812,7 @@ export namespace editor::mcp
 
     // The engine tool surface every MCP host serves, listed once: reflection (type_list,
     // type_info), script_api, project_info and project_settings_set, the plugin tools (list,
-    // enable, disable, settings), export_presets and export_preset_set, the asset tools (list, info,
+    // enable, disable, settings, scaffold), export_presets and export_preset_set, the asset tools (list, info,
     // import, cook, uses, delete, creators,
     // create, data read and write), project_health, the log tools (log_read, log_write,
     // known_issues), the scene and prefab tools, component_schema, script_validate and

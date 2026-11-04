@@ -18,12 +18,6 @@ using namespace foundation::runtime;
 
 namespace
 {
-    // Build dirs hand us a narrow UTF-8 path; the IO/Library APIs take StringView.
-    [[nodiscard]] StringView PluginPath()
-    {
-        return StringView{reinterpret_cast<const utf8char*>(TEST_PLUGIN_PATH)};
-    }
-
     // Distinct subsystem types (distinct TypeOf<> keys). Each records its tag in a
     // shared log on Update and counts its lifecycle calls.
     template <int Tag>
@@ -254,83 +248,6 @@ TEST_CASE("runtime: RemoveSubsystem shuts down, unregisters, and destroys owned"
 
 namespace
 {
-    // A plugin defined in-process (statically linked). Owns its subsystem and
-    // registers/removes it non-owningly across load/unload.
-    class StaticTestPlugin final : public IRuntimePlugin
-    {
-    public:
-        [[nodiscard]] StringView Name() const noexcept override { return u8"StaticTestPlugin"; }
-        void OnLoad(SubsystemManager& ctx) override { ctx.RegisterSubsystem<Sys<7>>(&m_sys); }
-        void OnUnload(SubsystemManager& ctx) override { ctx.RemoveSubsystem<Sys<7>>(); }
-
-        Sys<7> m_sys{0, nullptr};
-    };
-}
-
-TEST_CASE("runtime: PluginLoader::Add registers a static plugin's subsystem")
-{
-    SubsystemManager ctx(DefaultAllocator());
-    StaticTestPlugin plugin;
-    {
-        PluginLoader host(ctx);
-        CHECK(host.Add(&plugin) == &plugin);
-        CHECK(host.Count() == 1u);
-        CHECK(ctx.HasSubsystem<Sys<7>>());
-
-        ctx.Startup();
-        ctx.Update(0.016f);
-        CHECK(plugin.m_sys.updates == 1);
-
-        host.UnloadAll();
-        CHECK(host.Count() == 0u);
-        CHECK_FALSE(ctx.HasSubsystem<Sys<7>>()); // OnUnload removed it
-    }
-    // Plugin object outlives the host (caller-owned) and was never freed by it.
-    CHECK(plugin.m_sys.shutdowns == 1);
-}
-
-TEST_CASE("runtime: PluginLoader::Load loads a plugin from a shared library")
-{
-    SubsystemManager ctx(DefaultAllocator());
-    {
-        PluginLoader host(ctx);
-
-        auto loaded = host.Load(PluginPath());
-        REQUIRE(loaded.HasValue());
-        CHECK(host.Count() == 1u);
-        CHECK(loaded.Value()->Name() == StringView{u8"TestPlugin"});
-
-        ctx.Startup();
-        ctx.Update(0.016f);
-
-        // Observe the library's subsystem ran via a C symbol it exports. A second
-        // handle to the same image shares the counter (dlopen refcounts).
-        DynamicLibrary probe{PluginPath()};
-        REQUIRE(probe.IsLoaded());
-        const auto ticks = probe.GetSymbol<int (*)()>(u8"TestPluginTicks");
-        REQUIRE(ticks != nullptr);
-        CHECK(ticks() == 1);
-
-        host.UnloadAll();
-        CHECK(host.Count() == 0u);
-
-        // After unload the plugin's subsystem is gone; updating must not tick it.
-        ctx.Update(0.016f);
-        CHECK(ticks() == 1);
-    }
-}
-
-TEST_CASE("runtime: PluginLoader::Load reports failure for a missing library")
-{
-    SubsystemManager ctx(DefaultAllocator());
-    PluginLoader host(ctx);
-    auto result = host.Load(u8"./definitely-not-a-real-plugin.so");
-    CHECK_FALSE(result.HasValue());
-    CHECK(host.Count() == 0u);
-}
-
-namespace
-{
     // A minimal app that records which context it configured into.
     struct EmbeddedProbeApp final : foundation::runtime::IApplication
     {
@@ -423,11 +340,14 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
         }
     } contributionRecorder;
 
-    PluginLoader host(ctx);
+    PluginLoader host;
     host.AddRecorder(&contributionRecorder);
-    auto loaded = host.Load(path);
+    PluginContext context(HostRole::Player, ctx, u8"cross_probe", Span<const PluginService>{}, Span<const u8>{},
+                          DefaultAllocator());
+    const StringView entry = u8"PluginPart_cross_probe_Engine";
+    auto loaded = host.LoadPart(path, entry, context);
     REQUIRE(loaded.HasValue());
-    CHECK(loaded.Value()->Name() == StringView{u8"CrossPlugin"});
+    CHECK(StringView(loaded.Value()->pluginId) == StringView{u8"cross_probe"});
     // The plugin contributed its Fancy manager: recorded, and reversed below.
     CHECK(foundation::scene::SceneModuleContributions::Global().Contains(
         TypeOf<crossprobe::FancyManager>().id));
@@ -482,10 +402,10 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
 
     //    ...and a reload (the rebuilt module in a real flow; the same one here)
     //    re-registers into the freed slot.
-    auto reloaded = host.Load(path);
+    auto reloaded = host.LoadPart(path, entry, context);
     REQUIRE(reloaded.HasValue());
     CHECK(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") != nullptr);
-    CHECK(resolved() == 41); // OnLoad ran again against the live host subsystem
+    CHECK(resolved() == 41); // its load ran again against the live host subsystem
 
     host.UnloadAll();
     CHECK(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") == nullptr);
@@ -496,7 +416,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
     //    in the freed slots.
     const StringView copyPath = u8".test-scratch/reload-copy-crossplugin.so";
     {
-        auto again = host.Load(path);
+        auto again = host.LoadPart(path, entry, context);
         REQUIRE(again.HasValue());
         REQUIRE(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") != nullptr);
         host.UnloadAll(/*closeLibraries*/ false); // old mapping stays; recording reversed
@@ -508,10 +428,10 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
         REQUIRE(WriteFile(copyPath, Span<const byte>{original.Value().Data(),
                                                      original.Value().Size()})
                     .IsOk());
-        auto reloadedCopy = host.Load(copyPath);
+        auto reloadedCopy = host.LoadPart(copyPath, entry, context);
         REQUIRE(reloadedCopy.HasValue());
         CHECK(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") != nullptr);
-        CHECK(resolved() == 41); // the copy's OnLoad ran against the live host subsystem
+        CHECK(resolved() == 41); // the copy's load ran against the live host subsystem
         host.UnloadAll();
         CHECK(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") == nullptr);
         CHECK_FALSE(foundation::scene::SceneModuleContributions::Global().Contains(
@@ -536,7 +456,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
             live);
 
         // Plugin loads after the scene exists: the contribution reaches the live scene.
-        auto again = host.Load(copyPath);
+        auto again = host.LoadPart(copyPath, entry, context);
         REQUIRE(again.HasValue());
         crossprobe::FancyManager* fancy = scene.GetSystem<crossprobe::FancyManager>();
         REQUIRE(fancy != nullptr);
@@ -550,7 +470,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
         host.UnloadAll(/*closeLibraries*/ false);
         CHECK(scene.GetSystem<crossprobe::FancyManager>() == nullptr);
 
-        auto rebuilt = host.Load(copyPath);
+        auto rebuilt = host.LoadPart(copyPath, entry, context);
         REQUIRE(rebuilt.HasValue());
         REQUIRE(scene.GetSystem<crossprobe::FancyManager>() != nullptr); // contributed anew
         REQUIRE(snapshot->Restore(scene).IsOk());

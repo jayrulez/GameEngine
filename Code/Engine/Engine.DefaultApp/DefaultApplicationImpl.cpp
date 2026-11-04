@@ -695,11 +695,11 @@ namespace engine::runtime
         return m_plugins.Get();
     }
 
-    void DefaultApplication::DestroyPluginHost()
+    void DefaultApplication::DestroyPluginHost(bool closeLibraries)
     {
         if (m_plugins)
         {
-            m_plugins->Unload();
+            m_plugins->Unload(closeLibraries);
             m_plugins.Reset();
         }
     }

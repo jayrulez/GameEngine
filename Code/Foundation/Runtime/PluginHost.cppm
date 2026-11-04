@@ -73,7 +73,7 @@ export namespace foundation::runtime
         PluginHost(core::IAllocator& allocator, SubsystemManager& subsystems, HostRole role,
                    core::StringView engineVersion, core::StringView platform = core::GetHostPlatformName())
             : m_allocator(&allocator), m_subsystems(&subsystems), m_role(role),
-              m_engineVersion(engineVersion, allocator), m_platform(platform, allocator), m_loader(subsystems),
+              m_engineVersion(engineVersion, allocator), m_platform(platform, allocator),
               m_services(allocator), m_candidates(allocator), m_contexts(allocator), m_loaded(allocator)
         {
         }
@@ -360,9 +360,12 @@ export namespace foundation::runtime
         }
 
         // Unloads every loaded part in reverse load order, reversing what each registered.
-        void Unload()
+        // `closeLibraries` false keeps the shared libraries mapped for the process's life (a hot
+        // reload: no page is freed under a pointer the teardown missed; the rebuilt parts load from
+        // fresh copies).
+        void Unload(bool closeLibraries = true)
         {
-            m_loader.UnloadAll();
+            m_loader.UnloadAll(closeLibraries);
             m_contexts.Clear();
             m_loaded.Clear();
             m_report = PluginLoadReport{};

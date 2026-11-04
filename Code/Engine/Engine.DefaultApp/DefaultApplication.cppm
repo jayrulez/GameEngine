@@ -174,7 +174,8 @@ export namespace engine::runtime
         /// added to, and an app overriding OnShutdown calls this one. Null before Configure.
         [[nodiscard]] foundation::runtime::PluginHost* CreatePluginHost(foundation::runtime::HostRole role);
         /// Unloads the process's plugins and destroys their host (nothing when there is none).
-        void DestroyPluginHost();
+        /// `closeLibraries` false keeps their shared libraries mapped (a hot reload of them).
+        void DestroyPluginHost(bool closeLibraries = true);
         /// The process's plugin host, or null when none is made.
         [[nodiscard]] foundation::runtime::PluginHost* Plugins() const noexcept { return m_plugins.Get(); }
 

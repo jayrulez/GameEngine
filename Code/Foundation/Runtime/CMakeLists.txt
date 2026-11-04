@@ -11,7 +11,6 @@ target_sources(Runtime
             RuntimeModule.cppm
             Subsystem.cppm
             SubsystemManager.cppm
-            Plugin.cppm
             PluginLoader.cppm
             PluginManifest.cppm
             EnabledPlugin.cppm

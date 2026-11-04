@@ -11,7 +11,6 @@ export module foundation.runtime;
 
 export import :subsystem;
 export import :subsystem_manager;
-export import :plugin;
 export import :plugin_loader;
 export import :plugin_manifest;
 export import :enabled_plugin;

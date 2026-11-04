@@ -3,12 +3,10 @@
 
 // Runtime - :plugin_loader partition
 //
-// PluginLoader: owns the set of loaded plugins and their backing shared libraries
-// and drives the load/unload contract against a SubsystemManager. Statically-created
-// plugins are registered with Add() (caller keeps ownership of the object);
-// shared-library plugins with Load() (the loader owns the library handle and
-// closes it on teardown). It records what each plugin registers and reverses it on unload;
-// PluginHost, which decides what a project loads, loads through it.
+// PluginLoader: loads plugin parts, those linked into the binary (AddPart) and those in shared
+// libraries (LoadPart, the loader owning the library and closing it on teardown), records what
+// each part registers and reverses it on unload. PluginHost, which decides what a project loads,
+// loads through it.
 
 module;
 #include "Core/Prelude.h"
@@ -16,15 +14,13 @@ module;
 export module foundation.runtime:plugin_loader;
 
 import foundation.core;
-import :subsystem_manager;
-import :plugin;
 import :plugin_part;
 
 namespace core = foundation::core;
 
 export namespace foundation::runtime
 {
-    // A registry the RegistrationScope can record: armed around a plugin's OnLoad, it
+    // A registry the RegistrationScope can record: armed around a part's load, it
     // reports every real insert to the sink; Reverse undoes one. The two core registries
     // are built in; layers above (scene-manager contributions, Engine.Scene) plug theirs
     // in through PluginLoader::AddRecorder so one unload reverses everything a plugin did.
@@ -40,7 +36,7 @@ export namespace foundation::runtime
     class PluginLoader
     {
     public:
-        explicit PluginLoader(SubsystemManager& subsystems) noexcept : m_subsystems(&subsystems) {}
+        PluginLoader() noexcept = default;
 
         // Registers an extra recorder (borrowed; must outlive the host). Add it before loading
         // plugins: later loads record through it, earlier ones do not.
@@ -56,25 +52,11 @@ export namespace foundation::runtime
         PluginLoader(const PluginLoader&) = delete;
         PluginLoader& operator=(const PluginLoader&) = delete;
 
-        // Registers an already-created plugin (the caller retains ownership of the
-        // object) and calls OnLoad immediately. Returns the plugin for chaining.
-        IRuntimePlugin* Add(IRuntimePlugin* plugin)
-        {
-            if (plugin == nullptr)
-            {
-                return nullptr;
-            }
-            Entry entry{plugin, nullptr, nullptr, core::DynamicLibrary{}, {}, {}, {}};
-            RecordedOnLoad(entry);
-            m_entries.PushBack(core::Move(entry));
-            return plugin;
-        }
-
         // Loads a part linked into this binary: calls its load with `context` (borrowed; it must
-        // outlive the part's unload) under the recording, like a plugin's OnLoad.
+        // outlive the part's unload) under the recording.
         void AddPart(const PluginPart& part, PluginContext& context)
         {
-            Entry entry{nullptr, &part, &context, core::DynamicLibrary{}, {}, {}, {}};
+            Entry entry{&part, &context, core::DynamicLibrary{}, {}, {}, {}};
             RecordedOnLoad(entry);
             m_entries.PushBack(core::Move(entry));
         }
@@ -100,46 +82,17 @@ export namespace foundation::runtime
             {
                 return core::Err(core::ErrorCode::Internal);
             }
-            Entry entry{nullptr, part, &context, core::Move(library), {}, {}, {}};
+            Entry entry{part, &context, core::Move(library), {}, {}, {}};
             RecordedOnLoad(entry);
             m_entries.PushBack(core::Move(entry));
             return part;
         }
 
-        // Loads a plugin from a shared library: resolves the factory, creates the
-        // plugin, and calls OnLoad. The library is closed when the host unloads.
-        core::Result<IRuntimePlugin*> Load(core::StringView path)
-        {
-            core::DynamicLibrary library;
-            if (core::Status status = library.Load(path); !status)
-            {
-                return core::Err(status.Code());
-            }
-
-            const auto create = library.GetSymbol<CreatePluginFn>(CreatePluginSymbol);
-            if (create == nullptr)
-            {
-                return core::Err(core::ErrorCode::NotFound);
-            }
-
-            IRuntimePlugin* plugin = create();
-            if (plugin == nullptr)
-            {
-                return core::Err(core::ErrorCode::Internal);
-            }
-
-            Entry entry{plugin, nullptr, nullptr, core::Move(library), {}, {}, {}};
-            RecordedOnLoad(entry);
-            m_entries.PushBack(core::Move(entry));
-            return plugin;
-        }
-
         [[nodiscard]] core::usize Count() const noexcept { return m_entries.Size(); }
 
-        // Unloads everything in reverse load order: OnUnload each plugin, reverse its
-        // recorded registrations (a registry entry or factory pointing into a closed
-        // library would be a dangling read), then close libraries (which may invalidate
-        // library-owned plugin objects).
+        // Unloads everything in reverse load order: each part's unload, then the reversal of what
+        // it registered (a registry entry or factory pointing into a closed library would be a
+        // dangling read), then the libraries close.
         // closeLibraries=false is the hot-reload mode: the old modules stay mapped for
         // the process lifetime (leaked on purpose, so no page is freed under a pointer the
         // teardown missed) and the rebuilt module loads from a fresh versioned copy.
@@ -147,11 +100,7 @@ export namespace foundation::runtime
         {
             for (core::usize i = m_entries.Size(); i-- > 0;)
             {
-                if (m_entries[i].plugin != nullptr)
-                {
-                    m_entries[i].plugin->OnUnload(*m_subsystems);
-                }
-                else if (m_entries[i].part != nullptr && m_entries[i].part->unload != nullptr)
+                if (m_entries[i].part->unload != nullptr)
                 {
                     m_entries[i].part->unload(*m_entries[i].context);
                 }
@@ -167,19 +116,18 @@ export namespace foundation::runtime
     private:
         struct Entry
         {
-            IRuntimePlugin* plugin;     // a game's native module, or
-            const PluginPart* part;     // a package's part,
-            PluginContext* context;     // with the context its load and unload are handed
+            const PluginPart* part;
+            PluginContext* context; // what its load and unload are handed
             core::DynamicLibrary library;
-            // Everything OnLoad registered, recorded by the ambient observers below and
-            // reversed on unload, so the plugin never hand-mirrors its registrations.
+            // Everything its load registered, recorded by the ambient observers below and
+            // reversed on unload, so the part never hand-mirrors its registrations.
             core::Array<core::TypeId> registeredTypes;
             core::Array<core::TypeId> registeredSerializables;
             core::Array<core::Array<core::TypeId>> recorded; // one list per extra recorder
         };
 
         // The RegistrationScope: arm ambient observers on the global registries for the
-        // duration of OnLoad. Observers fire only on real inserts, so a type another
+        // duration of the part's load. Observers fire only on real inserts, so a type another
         // party already owns is never recorded (and never torn down by this plugin).
         void RecordedOnLoad(Entry& entry)
         {
@@ -205,14 +153,7 @@ export namespace foundation::runtime
             {
                 m_recorders[i]->Arm(entry.recorded[i]);
             }
-            if (entry.plugin != nullptr)
-            {
-                entry.plugin->OnLoad(*m_subsystems);
-            }
-            else
-            {
-                entry.part->load(*entry.context);
-            }
+            entry.part->load(*entry.context);
             for (core::usize i = m_recorders.Size(); i-- > 0;)
             {
                 m_recorders[i]->Disarm();
@@ -248,7 +189,6 @@ export namespace foundation::runtime
             entry.registeredSerializables.Clear();
         }
 
-        SubsystemManager* m_subsystems;
         core::Array<Entry> m_entries;
         core::Array<IRegistrationRecorder*> m_recorders; // borrowed
     };

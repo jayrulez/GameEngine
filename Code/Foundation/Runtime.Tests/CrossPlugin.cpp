@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The cross-boundary identity plugin: built only in ENGINE_SHARED_LIBS lanes, where
+// The cross-boundary identity plugin part: built only in ENGINE_SHARED_LIBS lanes, where
 // it links the engine's .so set (the supported plugin model; a plugin against a
 // static engine would re-embed Core and duplicate every global, which is unsupported).
 // Loaded by the RuntimeTests cross-boundary case, it proves shared-library identity
@@ -29,42 +29,36 @@ using namespace foundation::runtime;
 
 namespace
 {
-    int g_resolvedHostValue = -1; // HostProbeSubsystem::hostValue seen at OnLoad, or -1
+    int g_resolvedHostValue = -1; // HostProbeSubsystem::hostValue seen at its load, or -1
 
-    class CrossPlugin final : public IRuntimePlugin
+    void Load(PluginContext& context)
     {
-    public:
-        [[nodiscard]] StringView Name() const noexcept override { return u8"CrossPlugin"; }
-
-        void OnLoad(SubsystemManager& context) override
+        // TypeId-keyed lookup of a subsystem the host registered: this binary's
+        // TypeOf<HostProbeSubsystem>() static is its own copy at its own address,
+        // so only the id makes this resolve (a pointer-keyed map would return null).
+        if (crossprobe::HostProbeSubsystem* probe =
+                context.Subsystems().GetSubsystem<crossprobe::HostProbeSubsystem>())
         {
-            // TypeId-keyed lookup of a subsystem the host registered: this binary's
-            // TypeOf<HostProbeSubsystem>() static is its own copy at its own address,
-            // so only the id makes this resolve (a pointer-keyed map would return null).
-            if (crossprobe::HostProbeSubsystem* probe =
-                    context.GetSubsystem<crossprobe::HostProbeSubsystem>())
-            {
-                g_resolvedHostValue = probe->hostValue;
-            }
-            // Register this binary's ProbeObject metadata; the host looks it up by name
-            // through the shared registry instance.
-            GlobalTypeRegistry().Register(crossprobe::ProbeObject::StaticType());
-            // Contribute the Fancy component manager to every scene, live ones included.
-            // The host's recorder reverses it on unload.
-            foundation::scene::SceneModuleContributions::Contribution fancy;
-            fancy.id = u8"crossprobe.fancy";
-            fancy.install = &crossprobe::InstallFancy;
-            fancy.systemType = TypeOf<crossprobe::FancyManager>().id;
-            foundation::scene::SceneModuleContributions::Global().Add(fancy);
+            g_resolvedHostValue = probe->hostValue;
         }
-        void OnUnload(SubsystemManager&) override {}
-    };
+        // Register this binary's ProbeObject metadata; the host looks it up by name
+        // through the shared registry instance.
+        context.Types().Register(crossprobe::ProbeObject::StaticType());
+        // Contribute the Fancy component manager to every scene, live ones included.
+        // The host's recorder reverses it on unload.
+        foundation::scene::SceneModuleContributions::Contribution fancy;
+        fancy.id = u8"crossprobe.fancy";
+        fancy.install = &crossprobe::InstallFancy;
+        fancy.systemType = TypeOf<crossprobe::FancyManager>().id;
+        foundation::scene::SceneModuleContributions::Global().Add(fancy);
+    }
 } // namespace
 
-extern "C" PLUGIN_EXPORT IRuntimePlugin* CreatePlugin()
+// The part's entry, named as a package's Engine part of id cross_probe would be.
+extern "C" PLUGIN_EXPORT const PluginPart* PluginPart_cross_probe_Engine()
 {
-    static CrossPlugin plugin;
-    return &plugin;
+    static constexpr PluginPart part{u8"cross_probe", PluginPartKind::Engine, &Load, nullptr};
+    return &part;
 }
 
 // The host-value the plugin observed while resolving the host's subsystem (-1 = miss).

@@ -60,7 +60,7 @@ export namespace editor::mcp
         if (!editor::ExportOne(*session.project, request.preset, templates, builders,
                                request.outRoot.AsView(), dataRoot, request.rebuild,
                                &outcome.result, {}, /*cook=*/true, &sceneStreams, &scanner, nullptr,
-                               session.exportHooks)
+                               editor::ExportPlugins{session.plugins, session.exportHooks})
                  .IsOk())
         {
             if (!outcome.result.refusal.IsEmpty())

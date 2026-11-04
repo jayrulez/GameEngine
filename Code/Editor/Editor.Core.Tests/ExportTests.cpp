@@ -2943,7 +2943,7 @@ TEST_CASE("export: ExportOne runs the plugins' export hooks over the staged dist
     CHECK_FALSE(hooks.AddHook(u8"empty", editor::ExportHook{}));
     editor::ExportResult result;
     REQUIRE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result, {}, true,
-                              nullptr, nullptr, nullptr, &hooks)
+                              nullptr, nullptr, nullptr, editor::ExportPlugins{nullptr, &hooks})
                 .IsOk());
     REQUIRE(ran.Size() == 2u);
     CHECK(ran[0] == u8"first");
@@ -2952,7 +2952,7 @@ TEST_CASE("export: ExportOne runs the plugins' export hooks over the staged dist
     REQUIRE(hooks.AddHook(u8"breaks", [](const editor::ExportHookContext&) -> String { return String(u8"no signing key"); }));
     editor::ExportResult failed;
     CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &failed, {}, true,
-                                  nullptr, nullptr, nullptr, &hooks)
+                                  nullptr, nullptr, nullptr, editor::ExportPlugins{nullptr, &hooks})
                     .IsOk());
     CHECK(failed.refusal == u8"export hook breaks: no signing key");
 
@@ -2961,3 +2961,151 @@ TEST_CASE("export: ExportOne runs the plugins' export hooks over the staged dist
     NukeTree(toolDir.AsView());
     NukeTree(outRoot.AsView());
 }
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+// A plugin whose Engine part gives scripts a type of its own (`Beacon`), as a platform service's
+// facade would: what the per-platform script check is about.
+namespace scriptprobe
+{
+    struct Beacon
+    {
+        f32 level = 0.0f;
+        Beacon() = default;
+        explicit Beacon(f32 value) : level(value) {}
+    };
+    REFLECT_VALUE(Beacon, "rtti::scriptprobe")
+    {
+        builder.Property<&Beacon::level>("level").Constructor<f32>();
+    }
+}
+
+namespace
+{
+    constexpr char8_t kBeaconPlugin[] = u8"beaconplugin";
+
+    void LoadBeacon(foundation::runtime::PluginContext& context)
+    {
+        scriptprobe::RttiRegisterValue_Beacon();
+        context.Types().Register(TypeOf<scriptprobe::Beacon>());
+    }
+    const foundation::runtime::PluginPart* BeaconEngine()
+    {
+        static constexpr foundation::runtime::PluginPart part{kBeaconPlugin, foundation::runtime::PluginPartKind::Engine,
+                                                              &LoadBeacon, nullptr};
+        return &part;
+    }
+
+    // The beacon plugin linked as a host links it: its manifest (Linux64 and Win64) and its part.
+    struct BeaconLinked
+    {
+        Array<byte> manifest;
+        foundation::runtime::PluginPartEntryFn parts[1] = {&BeaconEngine};
+        foundation::runtime::LinkedPlugin linked{};
+
+        BeaconLinked()
+        {
+            foundation::runtime::PluginManifest m;
+            m.id = String(kBeaconPlugin);
+            m.version = String(u8"1.0.0");
+            m.engineVersion = String(engine::project::kEngineVersionString);
+            m.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+            m.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Linux64")});
+            m.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Win64")});
+            MemoryStream xml;
+            REQUIRE(foundation::runtime::WritePluginManifest(m, xml).IsOk());
+            for (byte b : xml.Bytes())
+            {
+                manifest.PushBack(b);
+            }
+            manifest.PushBack(byte{0});
+            linked = foundation::runtime::LinkedPlugin{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 1};
+        }
+    };
+
+    // A script asset in the project's root group, its source in Sources.
+    void AddScript(editor::EditorProject& project, StringView name, StringView fileName, StringView language,
+                   StringView source)
+    {
+        REQUIRE(WriteFile(PathJoin(project.SourcesRoot().AsView(), fileName).AsView(),
+                          Span<const byte>(reinterpret_cast<const byte*>(source.Data()), source.Size()))
+                    .IsOk());
+        pipeline::ScriptClassAsset asset;
+        asset.fileName = foundation::vfs::SourcePath(fileName);
+        asset.language = String(language);
+        foundation::content::Instance* instance =
+            project.SourceDb().RootGroup()->CreateInstance(name, pipeline::ScriptClassAsset::StaticType());
+        REQUIRE(instance != nullptr);
+        REQUIRE(instance->WriteObject(asset).IsOk());
+    }
+}
+
+// A plugin the project enables on Win64 only takes its types away from Linux64: a script using one
+// passes the check for Win64 and is refused for Linux64, naming the script, the platform, the plugin
+// and the line, and an export for Linux64 is refused with that reason before anything is cooked.
+TEST_CASE("export: a script using a plugin's type is refused on a platform the plugin is not enabled on")
+{
+    RegisterScriptExportDeps();
+    const String projectDir = TempDir(u8"scratch_export_script_plugins_proj");
+    const String toolDir = TempDir(u8"scratch_export_script_plugins_tool");
+    const String outRoot = TempDir(u8"scratch_export_script_plugins_out");
+    const String package = TempDir(u8"scratch_export_script_plugins_pkg");
+    WritePackage(package.AsView(), kBeaconPlugin, u8"1.0.0", {u8"Linux64", u8"Win64"});
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Script Plugins").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(kBeaconPlugin);
+    entry.platforms.PushBack(String(u8"Win64"));
+    project->Settings().plugins.PushBack(Move(entry));
+    AddScript(*project, u8"Lamp", u8"Lamp.as", u8"angelscript",
+              u8"double shine()\n{\n    Beacon b(2.0f);\n    return b.level;\n}\n");
+
+    // The project's plugins as a Win64 host loads them: the beacon plugin is there.
+    const BeaconLinked linked;
+    foundation::runtime::SubsystemManager subsystems(DefaultAllocator());
+    foundation::runtime::PluginHost host(DefaultAllocator(), subsystems, foundation::runtime::HostRole::Export,
+                                         engine::project::kEngineVersionString, u8"Win64");
+    REQUIRE(host.AddLinked(Span<const foundation::runtime::LinkedPlugin>(&linked.linked, 1)).IsOk());
+    REQUIRE(host.Load(Span<const foundation::runtime::EnabledPlugin>(project->Settings().plugins.Data(),
+                                                                     project->Settings().plugins.Size()))
+                .loaded.Size() == 1u);
+
+    CHECK(editor::detail::CheckScriptsOn(*project, &host, u8"Win64").IsEmpty());
+    const String linux = editor::detail::CheckScriptsOn(*project, &host, u8"Linux64");
+    CHECK(linux.AsView().Contains(u8"script 'Lamp' cannot run on Linux64, where plugin(s) 'beaconplugin' are not enabled"));
+    CHECK(linux.AsView().Contains(u8"line 3"));
+    CHECK(editor::detail::CheckScriptsOn(*project, nullptr, u8"Linux64").IsEmpty()); // no host: nothing to check
+
+    // The export for this host's platform is refused with it.
+    REQUIRE(CreateDirectory(toolDir.AsView()));
+    foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    SaveText(toolFs, u8"Engine.Player.plugins", Format(u8"{}|{}\n", StringView(kBeaconPlugin), package).AsView());
+    editor::TemplateRegistry registry;
+    registry.Refresh(StringView{}, nullptr, toolDir.AsView(), &toolFs); // the host template, which carries the plugin
+    editor::ExportPreset preset;
+    preset.name = String(u8"Host Build");
+    preset.platform = String(GetHostPlatformName());
+    preset.outputSubdir = String(u8"host");
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    if (StringView(GetHostPlatformName()) == StringView(u8"Linux64"))
+    {
+        editor::ExportResult refused;
+        CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false,
+                                      &refused, {}, true, nullptr, nullptr, nullptr,
+                                      editor::ExportPlugins{&host, nullptr})
+                        .IsOk());
+        CHECK(refused.refusal.AsView().Contains(u8"cannot run on Linux64"));
+    }
+
+    host.Unload();
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    NukeTree(package.AsView());
+}
+#endif // OPTION_HAS_ANGELSCRIPT

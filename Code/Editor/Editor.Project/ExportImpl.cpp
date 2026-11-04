@@ -30,6 +30,7 @@ import engine.project;
 import foundation.scene.resource;
 import pipeline.core;
 import pipeline.cook;
+import script.pipeline; // ScriptClassAsset and the language cooks (the per-platform script check)
 import foundation.shaders;
 import foundation.shaders.system; // kShaderFolder / kShaderPackPath (the dist data layout)
 import foundation.shaders.resource; // ShaderSource: a project's custom shader, cooked into the pack
@@ -937,6 +938,86 @@ namespace editor
 
     }
 
+    void detail::AbsentPluginTypes(const EditorProject& project, const foundation::runtime::PluginHost& plugins,
+                                   StringView platform, Array<TypeId>& hidden, String& names)
+    {
+        for (const String& id : plugins.Loaded())
+        {
+            const foundation::runtime::EnabledPlugin* entry = nullptr;
+            for (const foundation::runtime::EnabledPlugin& enabled : project.Settings().plugins)
+            {
+                entry = enabled.id == id ? &enabled : entry;
+            }
+            const foundation::runtime::PluginManifest* manifest = plugins.Manifest(id.AsView());
+            if (entry == nullptr || manifest == nullptr ||
+                foundation::runtime::EnablementOn(*entry, *manifest, platform) ==
+                    foundation::runtime::PluginEnablement::Enabled)
+            {
+                continue;
+            }
+            plugins.TypesOf(id.AsView(), hidden);
+            names.Append(names.IsEmpty() ? StringView(u8"'") : StringView(u8", '"));
+            names.Append(id.AsView());
+            names.Append(u8"'");
+        }
+    }
+
+    String detail::CheckScriptsOn(EditorProject& project, const foundation::runtime::PluginHost* plugins,
+                                  StringView platform)
+    {
+        if (plugins == nullptr)
+        {
+            return {};
+        }
+        Array<TypeId> hidden;
+        String absent;
+        AbsentPluginTypes(project, *plugins, platform, hidden, absent);
+        if (hidden.IsEmpty())
+        {
+            return {};
+        }
+        Array<foundation::content::Instance*> instances;
+        CollectAllInstances(*project.SourceDb().RootGroup(), instances);
+        const StringView scriptType(reinterpret_cast<const utf8char*>(pipeline::ScriptClassAsset::StaticType().name));
+        for (foundation::content::Instance* instance : instances)
+        {
+            if (instance->TypeName() != scriptType)
+            {
+                continue;
+            }
+            const RefPtr<ISerializable> object = instance->ReadObject();
+            const auto* script = Cast<pipeline::ScriptClassAsset>(object.Get());
+            if (script == nullptr)
+            {
+                continue;
+            }
+            const StringView language =
+                script->language.IsEmpty() ? StringView(u8"angelscript") : script->language.AsView();
+            pipeline::IScriptLanguageCook* cook = pipeline::ScriptLanguageCookRegistry::Get().FindByLanguage(language);
+            Result<Array<byte>> bytes = ReadFile(PathJoin(project.SourcesRoot().AsView(), script->fileName.View()).AsView());
+            if (cook == nullptr || !bytes.HasValue())
+            {
+                continue; // the cook reports a script it cannot read or has no cook for
+            }
+            const StringView source(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+            pipeline::CookScriptErrorSink sink;
+            String className;
+            if (cook->Check(source, script->fileName.View(), sink, className,
+                            Span<const TypeId>(hidden.Data(), hidden.Size())))
+            {
+                continue;
+            }
+            String why = Format(u8"script '{}' cannot run on {}, where plugin(s) {} are not enabled", instance->Path(),
+                                platform, absent);
+            if (!sink.errors.IsEmpty())
+            {
+                why.Append(Format(u8": line {}: {}", sink.errors[0].line, sink.errors[0].message).AsView());
+            }
+            return why;
+        }
+        return {};
+    }
+
     detail::PlayerChoice detail::ChoosePlayer(const EditorProject& project, const ExportTemplate& tmpl, StringView platform)
     {
         PlayerChoice choice;
@@ -1305,7 +1386,7 @@ namespace editor
                      const ExportProgress& onProgress, bool cook,
                      const HashMap<Guid, Array<byte>>* sceneStreams,
                      const SceneReferenceScanner* scanner,
-                     const Array<Guid>* precomputedReachableRoots, const ExportPluginServices* hooks)
+                     const Array<Guid>* precomputedReachableRoots, ExportPlugins plugins)
     {
         const ExportTemplate* tmpl = templates.Resolve(preset);
         if (tmpl == nullptr)
@@ -1324,6 +1405,18 @@ namespace editor
         {
             LOG_ERROR(u8"Export", u8"preset '{}': {}", preset.name, choice.refusal);
             result.refusal = choice.refusal;
+            if (outResult != nullptr)
+            {
+                *outResult = result;
+            }
+            return Status{ErrorCode::InvalidArgument};
+        }
+        // The project's scripts against what the platform has of its plugins, before any cook.
+        if (const String scripts = detail::CheckScriptsOn(project, plugins.host, preset.platform.AsView());
+            !scripts.IsEmpty())
+        {
+            LOG_ERROR(u8"Export", u8"preset '{}': {}", preset.name, scripts);
+            result.refusal = scripts;
             if (outResult != nullptr)
             {
                 *outResult = result;
@@ -1654,7 +1747,7 @@ namespace editor
         }
 
         // The project's plugins' export hooks, over the staged dist.
-        if (hooks != nullptr && hooks->Count() > 0)
+        if (const ExportPluginServices* hooks = plugins.hooks; hooks != nullptr && hooks->Count() > 0)
         {
             if (onProgress)
             {
@@ -1690,7 +1783,7 @@ namespace editor
                      const ExportProgress& onProgress, bool cook,
                      const HashMap<Guid, Array<byte>>* sceneStreams,
                      const SceneReferenceScanner* scanner,
-                     const Array<Guid>* precomputedReachableRoots, const ExportPluginServices* hooks)
+                     const Array<Guid>* precomputedReachableRoots, ExportPlugins plugins)
     {
         // The reachable-root closure is project-level (not per-preset), so one precomputed set
         // seeds every pruning preset in the run.
@@ -1713,7 +1806,7 @@ namespace editor
             };
             ExportResult result;
             if (ExportOne(project, preset, templates, builders, outRoot, dataRoot, rebuild, &result,
-                          scoped, cook, sceneStreams, scanner, precomputedReachableRoots, hooks)
+                          scoped, cook, sceneStreams, scanner, precomputedReachableRoots, plugins)
                     .IsOk())
             {
                 ++ok;

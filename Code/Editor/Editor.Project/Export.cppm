@@ -25,6 +25,7 @@ import foundation.core;
 import foundation.vfs;
 import foundation.vfs.pak;
 import foundation.content;
+import foundation.runtime; // PluginHost: the project's plugins as the exporting host loaded them
 import engine.project;
 import foundation.scene.resource;
 import foundation.shaders.resource; // ShaderSource: a custom shader's product, stripped for a dist
@@ -132,6 +133,23 @@ export namespace editor
         };
         [[nodiscard]] PlayerChoice ChoosePlayer(const EditorProject& project, const ExportTemplate& tmpl,
                                                 foundation::core::StringView platform);
+
+        // The types of the plugins `plugins` loaded that the project does not enable on `platform`
+        // (appended to `hidden`) and their ids, quoted and comma separated (appended to `names`):
+        // what a script there cannot use. Defined in ExportImpl.cpp.
+        void AbsentPluginTypes(const EditorProject& project, const foundation::runtime::PluginHost& plugins,
+                               foundation::core::StringView platform,
+                               foundation::core::Array<foundation::core::TypeId>& hidden,
+                               foundation::core::String& names);
+
+        // Why a preset's platform cannot run the project's scripts, or empty when it can: the plugins
+        // `plugins` loaded that the project does not enable on `platform` are absent there, so every
+        // script asset is checked against the surface without their types, and the first that fails
+        // is named with the plugins, its line and the error. Nothing is checked when the platform
+        // has every plugin `plugins` loaded (or there is no host). Defined in ExportImpl.cpp.
+        [[nodiscard]] foundation::core::String CheckScriptsOn(EditorProject& project,
+                                                              const foundation::runtime::PluginHost* plugins,
+                                                              foundation::core::StringView platform);
 
         // The ship build's Bin suffix, "-Ship-<sanitized project name>". It is per project so two
         // games' ship outputs never collide in the checkout's Bin, as the -Shared and -ASAN
@@ -646,6 +664,13 @@ export namespace editor
     /// when the preset overrides none of them.
     [[nodiscard]] Status ApplyPresetDisplay(StringView outDir, const ExportPreset& preset);
 
+    /// The project's plugins as the exporting host loaded them (either may be null: none).
+    struct ExportPlugins
+    {
+        const foundation::runtime::PluginHost* host = nullptr; // what the scripts are checked against
+        const ExportPluginServices* hooks = nullptr;           // what runs over the staged dist
+    };
+
     /// Produces one preset's dist under `outRoot`: resolves its template, exports the content
     /// (ExportProject), then stages the template's player and sidecars and the preset's
     /// additionalFiles. The CLI and the editor both produce the whole dist through this one entry
@@ -656,8 +681,10 @@ export namespace editor
     // `dataRoot` is the engine data root (the caller's resolved one): the engine shaders are cooked
     // from <dataRoot>/Shaders into the dist's own Data/Engine/Shaders/shaders.dpak (and
     // Data/.dataroot), so the player finds them with the same discovery walk every executable uses.
-    // `hooks`, the export hooks the project's plugins added (null: none), run once the dist is
-    // staged; one that fails fails the export, its reason in ExportResult::refusal.
+    // `plugins` is the project's plugins as this host loaded them: before anything is cooked, the
+    // project's scripts are checked against what the preset's platform has of them (a script using a
+    // plugin absent there refuses the export, ExportResult::refusal); its export hooks (none when
+    // null) run once the dist is staged, and one that fails fails the export.
     [[nodiscard]] Status ExportOne(EditorProject& project, const ExportPreset& preset,
                                    const TemplateRegistry& templates, BuilderRegistry& builders,
                                    StringView outRoot, StringView dataRoot, bool rebuild,
@@ -666,7 +693,7 @@ export namespace editor
                                    const HashMap<Guid, Array<byte>>* sceneStreams = nullptr,
                                    const SceneReferenceScanner* scanner = nullptr,
                                    const Array<Guid>* precomputedReachableRoots = nullptr,
-                                   const ExportPluginServices* hooks = nullptr);
+                                   ExportPlugins plugins = {});
 
     /// Produces every preset's dist under `outRoot` (a failing preset is logged and skipped; the
     /// others continue). Returns Ok only when all presets succeeded.
@@ -677,5 +704,5 @@ export namespace editor
                                    const HashMap<Guid, Array<byte>>* sceneStreams = nullptr,
                                    const SceneReferenceScanner* scanner = nullptr,
                                    const Array<Guid>* precomputedReachableRoots = nullptr,
-                                   const ExportPluginServices* hooks = nullptr);
+                                   ExportPlugins plugins = {});
 }

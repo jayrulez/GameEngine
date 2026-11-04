@@ -860,7 +860,7 @@ export namespace editor::mcp
         }
         RegisterSceneReferenceResources(server, editor::EditorRootAllocator(), builders);
         RegisterProjectResources(server, session);
-        RegisterScriptValidateTool(server);
+        RegisterScriptValidateTool(server, session);
         RegisterShaderValidateTool(server, paths.shaderLibrary.AsView());
         RegisterGuiValidateTool(server);
         RegisterMaterialShaderTool(server, session, paths.shaderLibrary.AsView());

@@ -7,7 +7,7 @@ util_add_engine_library(Editor.Project ALIAS Editor::Project)
 target_link_libraries(Editor.Project
     PUBLIC Pipeline::Importer Foundation::Core Foundation::VFS Foundation::VFS.Pak Foundation::Content Foundation::Xml.Serialization Engine::Project
            Foundation::Settings Foundation::Scene.Resource
-           Pipeline::Cook Foundation::Resource Foundation::Policy
+           Pipeline::Cook Pipeline::Script Foundation::Resource Foundation::Policy
            Pipeline::Core Pipeline::Fonts Pipeline::Texture # the new project's starter font and sky
            Foundation::Shaders Foundation::Shaders.System # export cooks the dist's shader pack
            Foundation::Shaders.Resource # a custom shader's product (stripped of its HLSL in a dist)

@@ -424,13 +424,19 @@ why: the template's when it carries every plugin the project enables on the pres
 built for the project (its own packages, a plugin the template lacks or carries older), which needs
 the engine checkout and takes a while. Each enabled plugin's deploy files for the platform ship beside
 the player. The export is refused, with the reason, when an entry is enabled on a platform its plugin
-does not support or names a plugin no package holds.
+does not support or names a plugin no package holds, and when a script uses a plugin the project
+does not enable on the preset's platform: a plugin this host loaded but the platform lacks takes its
+script types with it, and the refusal names the script, the plugin and the line. Check first with
+`script_validate`'s `platform`.
 
 ## Per-tool gotchas
 
 - `script_validate` is a COMPILE check (`checkLevel: "compile"`): a call the language cannot
   see through, a misspelled member on a handle say, compiles and fails at runtime. Cross
-  check against `script_api`.
+  check against `script_api`. With `platform` (an open project needed), it also checks the source
+  against what the project's plugins leave on that platform, as an export for it does: `valid`
+  false with the errors, and `absentPlugins` naming the plugins the platform lacks. In Luau that
+  is any global naming one of their types, guarded or not.
 - `shader_validate` compiles every variant, the cook's check; an error under one flag says so
   (`(under ALPHA_TEST)`). An error in an engine include names that file, not yours.
 - `scene_validate` warnings mean component records of a type the engine does not know, or

@@ -386,7 +386,8 @@ int main(int argc, char** argv)
     {
         const Span<const editor::ExportPreset> span(presets.presets.Data(), presets.presets.Size());
         if (!editor::ExportAll(*project, span, registry, builders, outRoot.AsView(),
-                               dataRoot.AsView(), rebuild, {}, true, &sceneStreams, &scanner)
+                               dataRoot.AsView(), rebuild, {}, true, &sceneStreams, &scanner, nullptr,
+                               editor::ExportPlugins{&plugins.Host(), &exportHooks})
                  .IsOk())
         {
             std::fprintf(stderr, "Tools.Export: one or more presets failed (see log)\n");
@@ -410,7 +411,7 @@ int main(int argc, char** argv)
     editor::ExportResult result;
     if (!editor::ExportOne(*project, *preset, registry, builders, outRoot.AsView(),
                            dataRoot.AsView(), rebuild, &result, {}, true, &sceneStreams, &scanner, nullptr,
-                           &exportHooks)
+                           editor::ExportPlugins{&plugins.Host(), &exportHooks})
              .IsOk())
     {
         if (!result.refusal.IsEmpty())

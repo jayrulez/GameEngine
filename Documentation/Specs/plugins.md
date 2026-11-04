@@ -430,7 +430,8 @@ editor, the player and export still read `nativeModule`):
   stages an enabled plugin's deploy files and refuses what cannot ship; hooks run in order after
   staging and a failing one fails the export; NativeSample's export hook in Integration.Plugins.
 
-- **X7 - a script's facades on each platform** (PROPOSED 2026-11-04, for discussion). The gotcha
+- **X7 - a script's facades on each platform** (built 2026-11-04; ruling that day: a guarded Luau
+  use refuses too, the simple rule). The gotcha
   "Scripts and absent plugins" below, made real. Checked first:
   - A script cooks once, in the host cook (`ScriptClassAssetBuilder` is platform invariant), and
     its product is copied into every target's database; nothing about a script is checked per
@@ -458,14 +459,33 @@ editor, the player and export still read `nativeModule`):
      platform does: "script 'Scripts/Shop' uses Steam (plugin 'online_steam'), which is not
      enabled on Web", with the line. `script_validate` takes an optional `platform` and runs the
      same check, so an agent finds it before an export.
-  4. **What a script cannot use.** A facade of a plugin the host cook does not load (one built
+  4. **Bytecode** (the user's point, 2026-11-04). The AngelScript cook already saves the module's
+     bytecode into the product (`SaveByteCode`, source kept for hot reload), and the player loads
+     it when present (`LoadClassBytecode`), building from source only a class with none. That
+     bytecode is compiled against the host's surface, so the check must hold for it too: a use of an
+     absent facade fails `LoadByteCode` on that platform as it fails a source build. For a script
+     that passes, the host's bytecode has to load where the absent plugins' types are not
+     registered; that AngelScript binds a saved module by declaration, so unrelated registrations
+     do not matter, is an inference to prove with a test (bytecode cooked with a plugin's facade
+     registered, loaded by a manager without it). If it does not hold, the AngelScript product
+     becomes platform variant for a platform whose plugin set differs from the host's, cooked
+     against that platform's surface, which is then the check itself. Either way the product's
+     recipe must name the facade surface it was built against (a hash of the registered script
+     types), so enabling or updating a plugin recooks its scripts. Luau bytecode binds no globals
+     at compile, so it needs neither.
+  5. **What a script cannot use.** A facade of a plugin the host cook does not load (one built
      only for another platform) is not on the surface at all, so a script using it fails the
      host cook. That stays: a platform service reaches scripts through an engine facade with
      per-platform providers (Online's shape), and the spec says so.
 
-  Open: whether a Luau use under a guard (`if Steam then ... end`) should refuse (it never runs
-  where the plugin is absent) or only warn; refusing is the simple rule, warning needs the
-  guard recognised. Tests: a two-plugin fixture with a facade each, one enabled on Linux64 only;
+  As built: `PluginHost::OwnerOf`, `TypesOf` and `Loaded`; the language cook's `Check` takes the
+  hidden types (`RegisterReflectedTypes` leaves them out, and the Luau manager's check refuses a
+  global naming a reflected type it was not given); `editor::detail::CheckScriptsOn` runs before an
+  export's cook, over every script asset (with pruning, unshipped ones too); the exports take
+  `ExportPlugins{host, hooks}`, which also gave the CLI's `--all` the export hooks it lacked;
+  `script_validate` takes `platform`; the builder hook `EnvironmentHash` puts the script surface
+  (`ScriptSurfaceHash`, runtime-domain types only) in a script product's recipe. The bytecode
+  inference holds: host-cooked bytecode loads without a type it does not use. Tests: a two-plugin fixture with a facade each, one enabled on Linux64 only;
   an AngelScript and a Luau script using it pass the Linux64 check and are refused for Web with
   the script, facade, plugin and platform named; a project whose platforms enable the same
   plugins checks nothing.

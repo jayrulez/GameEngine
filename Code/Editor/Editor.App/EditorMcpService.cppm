@@ -130,6 +130,7 @@ export namespace editor::app
             paths.shaderLibrary = foundation::vfs::DataPath(m_services.dataRoot.AsView(), foundation::shaders::kShaderFolder);
             m_session.project = project;
             m_session.plugins = m_services.context->Plugins(); // the project's plugins, loaded with it
+            m_session.exportHooks = m_services.context->ExportHooks(); // what project_export runs after staging
             m_session.linkedPlugins = m_services.linkedPlugins;
 
             EditorProjectOperationsSeams operations;
@@ -223,6 +224,9 @@ export namespace editor::app
             return true;
         }
 
+        /// The session the host's tools work over: the project, its plugins, their hooks.
+        [[nodiscard]] const editor::mcp::ProjectSession& Session() const noexcept { return m_session; }
+
         /// The project's plugin host, which the session's plugin tools report and edit (null: none).
         void SetPlugins(foundation::runtime::PluginHost* plugins) noexcept { m_session.plugins = plugins; }
 
@@ -235,6 +239,7 @@ export namespace editor::app
             m_operations.Reset();
             m_session.project = nullptr;
             m_session.plugins = nullptr;
+            m_session.exportHooks = nullptr;
         }
 
         /// Called each frame: answers the calls that arrived, on the main thread.

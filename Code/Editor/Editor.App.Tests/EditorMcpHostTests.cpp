@@ -19,6 +19,8 @@ import editor.core;
 import pipeline.importer; // the import framework (a consumer imports it itself)
 import editor.mcp;
 import editor.app;
+import editor.project;     // ExportPluginServices (the hooks the session carries)
+import foundation.runtime; // LinkedPlugin (the plugins the session offers)
 
 using namespace foundation::core;
 using namespace editor;
@@ -332,5 +334,47 @@ TEST_CASE("editor-mcp-host: with no project the host serves the manager; the eng
 
     CHECK(FileExists(PathJoin(userData.AsView(), u8"mcp-token").AsView()));
     service.Stop();
+    (void)RemoveDirectoryRecursive(userData.AsView());
+}
+
+// Started over a project, the host's session carries what the editor loaded with it: the project's
+// plugin host, the export hooks its plugins added (so project_export runs them, as the editor's own
+// export does) and the plugins the editor links (what plugin_list offers); stopped, it drops them.
+TEST_CASE("editor-mcp-host: the session over a project carries the editor's plugins, export hooks and linked plugins")
+{
+    const String userData = PathJoin(GetCurrentDirectory().AsView(), u8"mcp_session_userdata");
+    (void)RemoveDirectoryRecursive(userData.AsView());
+    (void)RemoveDirectoryRecursive(u8"mcp_session_project");
+    REQUIRE(EditorProject::Create(DefaultAllocator(), u8"mcp_session_project", u8"Session").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), u8"mcp_session_project");
+    REQUIRE(project);
+    RegisterEditorSettingsTypes();
+    EditorLogBuffer logBuffer{DefaultAllocator()};
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    EditorContext context{DefaultAllocator()};
+    foundation::settings::Settings settings{DefaultAllocator()};
+    settings.Section<EditorMcpSettings>().token = String(u8"sekrit");
+    editor::ExportPluginServices hooks(DefaultAllocator());
+    context.SetExportHooks(&hooks);
+    const foundation::runtime::LinkedPlugin linked[1] = {{u8"<root/>", nullptr, 0}};
+
+    app::EditorMcpService::Services services;
+    services.context = &context;
+    services.builders = &builders;
+    services.userSettings = &settings;
+    services.log = &logBuffer;
+    services.forceEnabled = true;
+    services.userDataDirectory = userData;
+    services.linkedPlugins = Span<const foundation::runtime::LinkedPlugin>(linked, 1);
+    app::EditorMcpService service(DefaultAllocator(), Move(services));
+    REQUIRE(service.Start(*project));
+    CHECK(service.Session().project == project.Get());
+    CHECK(service.Session().exportHooks == &hooks);
+    CHECK(service.Session().linkedPlugins.Size() == 1u);
+    service.Stop();
+    CHECK(service.Session().exportHooks == nullptr);
+
+    project.Reset();
+    (void)RemoveDirectoryRecursive(u8"mcp_session_project");
     (void)RemoveDirectoryRecursive(userData.AsView());
 }

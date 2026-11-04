@@ -83,11 +83,13 @@ generators, sounds), each with a README:
 - **Lamplight**: a stealth heist in a manor at night.
 - **Shader Gallery** (`ShaderGallery`): the custom shaders sample, a hall of lesson shaders.
 - **Masquerade**: the networking and crowds sample, a masked ball for up to four players.
-- **NativeSample**: a game with native code beside its scripts.
+- **NativeSample**: a game's own native code, a plugin package of all four parts, and a scene its
+  Spin component turns.
 
 Their `Cooked/`, `.cache/`, `Editor/` and `Dist/` are generated and ignored. Integration.Mcp
 checks that PaperKid, Sky Hopper, Snowline, Shader Gallery and Masquerade read at the current data
-versions and cook. Each sample game's `CREDITS.md` and `Licenses/` must stay in step with its
+versions and cook; Integration.Plugins checks that NativeSample reads with its package loaded and
+cooks. Each sample game's `CREDITS.md` and `Licenses/` must stay in step with its
 assets.
 
 ## Steam Deck

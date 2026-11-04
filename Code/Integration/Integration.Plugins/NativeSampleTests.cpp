@@ -10,6 +10,8 @@
 //   - Pipeline: the note asset type, its builder and its creator, in the host's registries;
 //   - Tooling: the nativesample_notes MCP tool, in every MCP server the host serves;
 //   - Editor: the Project > Native Sample Notes action, in the editor.
+// The sample project itself is checked too: its content reads, its scene's spinning entities are the
+// Engine part's, and it cooks.
 
 #include <doctest/doctest.h>
 
@@ -22,11 +24,15 @@ import foundation.mcp;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.scene;
+import foundation.scene.resource;
 import foundation.shell;
+import foundation.vfs;
 import foundation.graphics;
 import foundation.settings;
 import pipeline.core;
 import pipeline.importer;
+import pipeline.registration;
+import engine.composition;
 import engine.project;
 import engine.defaultapp;
 import editor.project;
@@ -389,4 +395,100 @@ TEST_CASE("plugins: the exporter loads the package's Tooling part, whose export 
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
     (void)RemoveDirectoryRecursive(dist);
+}
+
+// The sample project in Data/SampleProjects reads and cooks with its package: its default scene's
+// spin records resolve to the Engine part's manager (none left unresolved), and the MCP host cooks
+// the primitives and the note with the Pipeline part's builder. A scratch copy of its project
+// settings and content keeps the tracked tree untouched.
+TEST_CASE("plugins: the NativeSample project reads with its package, its scene's entities spin, and it cooks")
+{
+    pipeline::RegisterPipelineTypes();
+    engine::RegisterAllSceneComponentReflection();
+    const String dataRoot = foundation::vfs::FindDataRoot();
+    REQUIRE_FALSE(dataRoot.IsEmpty());
+    const String source = PathJoin(dataRoot.AsView(), u8"SampleProjects/NativeSample");
+    const StringView dir = u8"scratch_plugins_sample";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(CreateDirectory(dir));
+    REQUIRE(CopyDirectoryRecursive(PathJoin(source.AsView(), u8"Content").AsView(), PathJoin(dir, u8"Content").AsView()));
+    Result<Array<byte>> settingsFile = ReadFile(PathJoin(source.AsView(), u8"Project.xml").AsView());
+    REQUIRE(settingsFile.HasValue());
+    REQUIRE(WriteFile(PathJoin(dir, u8"Project.xml").AsView(),
+                      Span<const byte>(settingsFile.Value().Data(), settingsFile.Value().Size()))
+                .IsOk());
+    {
+        // The package is linked into this suite, so the copy's entry names no package path.
+        UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(project);
+        REQUIRE(project->Settings().plugins.Size() == 1u);
+        project->Settings().plugins[0].path = String();
+        REQUIRE(project->SaveSettings().IsOk());
+    }
+
+    {
+        StubHost host;
+        engine::runtime::DefaultApplication embedded;
+        embedded.Configure(host);
+        UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(project);
+        runtime::PluginHost* plugins = embedded.CreatePluginHost(runtime::HostRole::Player);
+        REQUIRE(plugins != nullptr);
+        REQUIRE(engine::project::LoadProjectPlugins(*plugins, runtime::LinkedPluginList(), project->Settings())
+                    .loaded.Size() == 1u);
+        foundation::content::Instance* level = project->SourceDb().GetInstance(project->Settings().defaultSceneId);
+        REQUIRE(level != nullptr);
+        CHECK(level->Name() == StringView(u8"Spinners"));
+        {
+            foundation::scene::Scene world(DefaultAllocator(), u8"Spinners");
+            engine::AddAllSceneManagers(world);
+            REQUIRE(foundation::scene::LoadScene(*level, world).IsOk());
+            CHECK(world.UnresolvedComponents().IsEmpty());
+            nativesample::SpinManager* spins = world.GetSystem<nativesample::SpinManager>();
+            REQUIRE(spins != nullptr);
+            CHECK(spins->Count() == 10u); // the row of five, the carousel and its four riders
+        }
+        project.Reset();
+        embedded.DestroyPluginHost();
+        embedded.OnShutdown(host);
+    }
+
+    {
+        pipeline::BuilderRegistry builders{DefaultAllocator()};
+        pipeline::RegisterAllBuilders(builders, dataRoot.AsView());
+        pipeline::ImporterRegistry importers{DefaultAllocator()};
+        pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+        editor::EditorLogBuffer logBuffer{DefaultAllocator()};
+        editor::mcp::McpPluginServices pluginTools{DefaultAllocator()};
+        editor::mcp::ProjectSession session;
+        editor::mcp::ProjectOwner owner;
+        McpServer server;
+        editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
+        editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
+                                         editor::mcp::EngineToolPaths{}, operations);
+        pluginTools.AttachServer(server, session);
+        editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, StringView{},
+                                              editor::mcp::ProjectPlugins{runtime::LinkedPluginList(),
+                                                                          pipeline::PipelineRegistries{&builders, &importers, &creators},
+                                                                          &pluginTools});
+        JsonValue open = JsonValue::MakeObject();
+        open.Set(u8"directory", JsonValue::MakeString(String(dir)));
+        REQUIRE_FALSE(Call(server, u8"project_open", Move(open)).error);
+        JsonValue force = JsonValue::MakeObject();
+        force.Set(u8"force", JsonValue::MakeBool(true));
+        const Called cooked = Call(server, u8"asset_cook", Move(force));
+        REQUIRE_FALSE(cooked.error);
+        CHECK(cooked.value.Get(u8"cooked").AsNumber() >= 3.0); // the Cube, the Plane and the note
+        CHECK(cooked.value.Get(u8"failed").AsNumber() == doctest::Approx(0.0));
+        const Called notes = Call(server, u8"nativesample_notes", JsonValue::MakeObject());
+        REQUIRE_FALSE(notes.error);
+        CHECK(notes.value.Get(u8"count").AsNumber() == doctest::Approx(1.0));
+        CHECK(notes.value.Get(u8"notes").At(0).Get(u8"name").AsString() == String(u8"Welcome"));
+        session.plugins = nullptr;
+        owner.plugins.Reset();
+        session.project = nullptr;
+        owner.project.Reset();
+        pluginTools.DetachServer(server);
+    }
+    (void)RemoveDirectoryRecursive(dir);
 }

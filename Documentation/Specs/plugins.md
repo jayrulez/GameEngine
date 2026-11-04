@@ -258,8 +258,10 @@ become: register the engine's surface (`Pipeline.Registration`, unchanged), then
 
 ## Decision 5 - typed settings per plugin, and the project's list
 
-The project file gains a `plugins` list (the project data version bumps, with a migration
-that turns a non-empty `nativeModule` into the game's package entry):
+The project file gains a `plugins` list, appended (a manifest saved before it reads none). The
+data version bumps in X5, with the migration that turns a non-empty `nativeModule` into the
+game's package entry, when native code becomes a package (ruling 2026-11-04: until then the
+editor, the player and export still read `nativeModule`):
 
 ```xml
 <array name="plugins" count="2">
@@ -281,17 +283,19 @@ that turns a non-empty `nativeModule` into the game's package entry):
   project); engine packages need none.
 - **platforms**: the platforms it is enabled on; empty means every platform its manifest
   supports. A platform the manifest does not support is reported, not silently kept.
-- **settings**: the plugin's reflected settings type, serialized in place. The `Engine` part
-  registers the type. Project Settings shows each enabled plugin's block with the property
-  grid; the MCP project tools read and write it.
-- **A missing plugin keeps its entry.** When an id resolves to nothing (package absent, or
+- **settings**: a versioned payload of the plugin's reflected settings type, labelled as the
+  project's settings are. The entry always keeps them as the XML elements it read (ruling
+  2026-11-04), through the archive's `RawRemainder`, which captures a section's remaining
+  elements on read and re-injects them on write (and through the binary serializer, a copy,
+  carries the same bytes in a framed region). The project is read before any plugin loads, so
+  one form serves every host: the `Engine` part reads them into its type at load
+  (`PluginContext::Settings<T>()`, the type's defaults when the entry has none), the host holds
+  that object while the plugin is loaded, and Project Settings and `plugin_settings_set` edit it
+  and write it back into the entry (`WritePluginSettings`). Settings that do not read as the type
+  give the defaults, marked unread, and nothing writes over them.
+- **A missing plugin keeps its entry.** When an id resolves to nothing (not in the build, or
   refused), the entry and its settings are kept unread and written back unchanged, the project
-  opens, and the user is told which plugin is missing. The mechanism exists: the archive's
-  `RawRemainder` (`Code/Foundation/Xml.Serialization/XmlSerializer.cppm:244`) captures a
-  section's remaining elements on read and re-injects them on write, and the scene already keeps
-  an absent system's settings this way and replays them when its plugin arrives
-  (`Scene::UnresolvedSettings`, `Code/Foundation/Scene/Scene.cppm:397`). Plugin settings do the
-  same: held as a blob while unresolved, read into the settings type when the plugin loads.
+  opens, and the user is told which plugin did not load and why.
 
 ## Decision 6 - export
 
@@ -347,17 +351,26 @@ that turns a non-empty `nativeModule` into the game's package entry):
   the app's host and data mount) and `EnginePluginServices`, and the app's `OnShutdown` unloads it.
   Tests: a plugin's domain and scene manager arrive and leave
   with it; services resolve run first, then the application.
-- **X3 - project list and settings.** The `plugins` list, the version bump and the
-  `nativeModule` migration; typed settings; missing plugins kept; Project Settings rows; MCP
-  tools to list plugins and read and write their settings (`McpGuide.md` and the tool count in
-  the same commit). Tests: migration, round trip of an unknown entry, per-platform enablement.
+- **X3 - project list and settings.** The `plugins` list (appended); the entry type
+  (`EnabledPlugin`, in `foundation.runtime` since the host takes it) with its settings kept as
+  XML; `PluginHost::Load` takes the project's entries and loads those enabled on its platform
+  (absent elsewhere, refused on a platform the plugin does not support); typed settings through
+  the context; each entry's state in the host (`PluginStatusOf`); missing plugins kept and
+  reported at project open; Project Settings rows, a group per entry; `plugin_list`,
+  `plugin_enable`, `plugin_disable` and `plugin_settings_set` (`McpGuide.md` and the tool count
+  in the same commit). The editor loads no
+  plugins until X4, so for a real project every entry shows as not loaded; the dialog and the
+  tools are tested over a fixture host. A wasm build's platform tag becomes "Web", the tag
+  export and the manifests use. Tests: round trip of an unknown entry, typed settings read and
+  written, per-platform enablement.
 - **X4 - every host by role.** The player, editor, Cook, Export and Mcp load through
   `PluginHost` with their roles; the `Pipeline` and `Tooling` contributions; the shared tool
   builds load a project package's parts. Tests: a plugin's asset type cooks through
   `Tools.Cook` and is created through the standalone MCP host; its MCP tool is served by both MCP
   hosts.
 - **X5 - native code is a plugin.** NativeSample becomes a package (`Plugin.xml`,
-  `NativeSample.Engine`); the scaffold generates the manifest; Build and Reload Native Module act
+  `NativeSample.Engine`); the project data version bumps, migrating `nativeModule` into the
+  game's entry; the scaffold generates the manifest; Build and Reload Native Module act
   on the project's packages. `IRuntimePlugin` and `CreatePlugin` are deleted at every call site
   (the editor's native module, the player, the ship and web stubs, the scaffold, NativeSample).
   Tests: the scaffold's output, the migration of an old project.

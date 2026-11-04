@@ -56,6 +56,8 @@ export namespace editor::app
             pipeline::BuilderRegistry* builders = nullptr;
             foundation::settings::Settings* userSettings = nullptr; // EditorMcpSettings: enabled, port, token
             editor::EditorLogBuffer* log = nullptr;                 // what log_read serves
+            /// The tools the project's plugins add; the host's server serves them while it runs.
+            editor::mcp::McpPluginServices* pluginTools = nullptr;
             String dataRoot;
             /// Set from the command line: enabled whatever the preference says, with a port of its own (0: the preference's).
             bool forceEnabled = false;
@@ -194,6 +196,9 @@ export namespace editor::app
             RegisterProfilerTools(m_host->Server(), Move(profiler));
             if (m_services.addTools)
                 m_services.addTools(m_host->Server());
+            // The project's plugins' tools, last, so none takes a name the editor's own tools hold.
+            if (m_services.pluginTools != nullptr)
+                m_services.pluginTools->AttachServer(m_host->Server(), m_session);
 
             EditorMcpHostConfig config;
             config.port = static_cast<u16>(m_services.port != 0 ? m_services.port : settings.port);
@@ -217,6 +222,8 @@ export namespace editor::app
         /// Stops the host: a waiting agent sees its connection close.
         void Stop()
         {
+            if (m_host && m_services.pluginTools != nullptr)
+                m_services.pluginTools->DetachServer(m_host->Server()); // its plugins' tools leave before it goes
             m_host.Reset();
             m_operations.Reset();
             m_session.project = nullptr;

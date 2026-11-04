@@ -28,6 +28,7 @@ target_sources(Editor.Mcp
             AssetData.cppm
             ProjectSettingsTools.cppm
             PluginTools.cppm
+            PluginServices.cppm
             ReflectedFields.cppm
             ExportPresetTools.cppm
             AssetDelete.cppm

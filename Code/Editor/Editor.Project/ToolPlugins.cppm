@@ -27,12 +27,18 @@ export namespace editor
     class ToolPlugins
     {
     public:
+        /// `attach` hands the host what else this tool offers its plugins, before they load.
         ToolPlugins(IAllocator& allocator, foundation::runtime::HostRole role, const EditorProject& project,
-                    Span<const foundation::runtime::LinkedPlugin> linked, pipeline::PipelineRegistries registries = {})
+                    Span<const foundation::runtime::LinkedPlugin> linked, pipeline::PipelineRegistries registries = {},
+                    const Function<void(foundation::runtime::PluginHost&)>& attach = {})
             : m_subsystems(allocator), m_pipeline(allocator, registries),
               m_host(allocator, m_subsystems, role, engine::project::kEngineVersionString)
         {
             (void)m_pipeline.Attach(m_host);
+            if (attach)
+            {
+                attach(m_host);
+            }
             m_report = engine::project::LoadProjectPlugins(m_host, linked, project.Settings());
         }
 

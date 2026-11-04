@@ -60,6 +60,7 @@ import :export_service;
 import :asset_creation;
 import :session;
 import :mcp_service;
+import editor.mcp; // McpPluginServices (the project's plugins' MCP tools)
 
 using namespace foundation::core;
 
@@ -298,6 +299,9 @@ export namespace editor::app
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;
+        // The MCP tools the project's plugins add through their Tooling parts: attached to each
+        // project's plugin host by the session, and serving the MCP host's server while it runs.
+        editor::mcp::McpPluginServices m_mcpPluginTools{m_editorAllocator};
         UniquePtr<EditorMcpService> m_mcp;
         EditorSession m_session; // the open project; declared after the services it uses, so it is destroyed before them
 

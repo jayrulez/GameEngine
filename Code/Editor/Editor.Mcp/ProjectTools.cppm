@@ -21,6 +21,7 @@ export import :asset_create;
 export import :asset_data;
 export import :project_settings;
 export import :plugin_tools;
+export import :plugin_services;
 export import :reflected_fields;
 export import :export_presets;
 export import :asset_delete;
@@ -107,16 +108,13 @@ export namespace editor::mcp
     inline void RegisterProjectOpenTools(foundation::mcp::McpServer& server,
                                          ProjectSession& session, ProjectOwner& owner,
                                          const pipeline::AssetCreatorRegistry* creators = nullptr,
-                                         StringView dataRoot = {},
-                                         Span<const foundation::runtime::LinkedPlugin> linkedPlugins = {},
-                                         pipeline::PipelineRegistries pluginRegistries = {})
+                                         StringView dataRoot = {}, ProjectPlugins plugins = {})
     {
         using foundation::mcp::SchemaBuilder;
         using foundation::mcp::ToolResult;
         ProjectSession* s = &session;
         ProjectOwner* o = &owner;
         const String seedRoot(dataRoot);
-        const Span<const foundation::runtime::LinkedPlugin> linked = linkedPlugins; // the host's, static
 
         server.RegisterTool(
             u8"project_create",
@@ -166,7 +164,7 @@ export namespace editor::mcp
             u8"current project.",
             SchemaBuilder().Str(u8"directory", u8"the project directory", true).Build(),
             foundation::mcp::ToolAnnotations::Rebuilds(),
-            [s, o, linked, pluginRegistries](const JsonValue& args) -> ToolResult
+            [s, o, plugins](const JsonValue& args) -> ToolResult
             {
                 const String directory = args.Get(u8"directory").AsString();
                 UniquePtr<editor::EditorProject> opened =
@@ -187,9 +185,15 @@ export namespace editor::mcp
                 o->project = Move(opened);
                 s->project = o->project.Get();
                 // The plugins this project enables that this host links, with their parts for MCP.
-                o->plugins = MakeUnique<editor::ToolPlugins>(editor::EditorRootAllocator(), editor::EditorRootAllocator(),
-                                                             foundation::runtime::HostRole::Mcp, *o->project, linked,
-                                                             pluginRegistries);
+                McpPluginServices* tools = plugins.tools;
+                o->plugins = MakeUnique<editor::ToolPlugins>(
+                    editor::EditorRootAllocator(), editor::EditorRootAllocator(), foundation::runtime::HostRole::Mcp,
+                    *o->project, plugins.linked, plugins.registries,
+                    [tools](foundation::runtime::PluginHost& host)
+                    {
+                        if (tools != nullptr)
+                            (void)tools->Attach(host);
+                    });
                 s->plugins = &o->plugins->Host();
                 return out;
             });

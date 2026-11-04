@@ -524,9 +524,10 @@ TEST_CASE("integration.mcp: a plugin's asset type is created and cooked through 
     const Array<byte> manifest = GadgetManifest();
     const runtime::PluginPartEntryFn parts[] = {&GadgetPipeline};
     const runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 1}};
-    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, StringView{},
-                                          Span<const runtime::LinkedPlugin>(linked, 1),
-                                          pipeline::PipelineRegistries{&builders, &importers, &creators});
+    editor::mcp::RegisterProjectOpenTools(
+        server, session, owner, &creators, StringView{},
+        editor::mcp::ProjectPlugins{Span<const runtime::LinkedPlugin>(linked, 1),
+                                    pipeline::PipelineRegistries{&builders, &importers, &creators}});
     const usize buildersBefore = builders.Count();
 
     const auto open = [&server](StringView dir)
@@ -589,6 +590,147 @@ TEST_CASE("integration.mcp: a plugin's asset type is created and cooked through 
     owner.plugins.Reset();
     session.project = nullptr;
     owner.project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+    (void)RemoveDirectoryRecursive(plain);
+}
+
+namespace
+{
+    constexpr char8_t kGreeter[] = u8"greeter";
+    bool g_takenRefused = false;
+
+    // The greeter's Tooling part: one tool of its own, and one whose name the engine holds.
+    void LoadGreeterTooling(runtime::PluginContext& context)
+    {
+        editor::mcp::McpPluginServices* services = context.Find<editor::mcp::McpPluginServices>();
+        REQUIRE(services != nullptr);
+        CHECK(services->AddTools(
+            [](editor::mcp::PluginTools& tools)
+            {
+                editor::mcp::ProjectSession* session = &tools.Session();
+                CHECK(tools.RegisterTool(
+                    String(u8"greeter_hello"), String(u8"Greets the open project"), SchemaBuilder().Build(),
+                    ToolAnnotations::ReadOnly(),
+                    [session](const JsonValue&) -> ToolResult
+                    {
+                        JsonValue out = JsonValue::MakeObject();
+                        out.Set(u8"hello", JsonValue::MakeString(session->project != nullptr ? String(session->project->Name()) : String()));
+                        return out;
+                    }));
+                g_takenRefused = !tools.RegisterTool(String(u8"project_info"), String(u8"an impostor"), SchemaBuilder().Build(),
+                                                     ToolAnnotations::ReadOnly(),
+                                                     [](const JsonValue&) -> ToolResult { return JsonValue::MakeObject(); });
+            }));
+    }
+    const runtime::PluginPart* GreeterTooling()
+    {
+        static constexpr runtime::PluginPart part{kGreeter, runtime::PluginPartKind::Tooling, &LoadGreeterTooling, nullptr};
+        return &part;
+    }
+
+    [[nodiscard]] Array<byte> GreeterManifest()
+    {
+        runtime::PluginManifest manifest;
+        manifest.id = String(kGreeter);
+        manifest.version = String(u8"1.0");
+        manifest.engineVersion = String(engine::project::kEngineVersionString);
+        manifest.parts.PushBack(runtime::PluginManifestPart{String(u8"Tooling")});
+        manifest.platforms.PushBack(runtime::PluginPlatform{String(GetHostPlatformName())});
+        MemoryStream buffer;
+        REQUIRE(runtime::WritePluginManifest(manifest, buffer).IsOk());
+        Array<byte> bytes;
+        for (byte b : buffer.Bytes())
+        {
+            bytes.PushBack(b);
+        }
+        bytes.PushBack(byte{0});
+        return bytes;
+    }
+}
+
+// A plugin's Tooling part adds MCP tools, which every server the host serves offers: the standalone
+// host's, there before the project opened, and a server started after the plugin loaded (the editor
+// starts its own once the project is open). They leave every server with their plugin, and none may
+// take a name a server already holds.
+TEST_CASE("integration.mcp: a plugin's MCP tool is served by a server there before it loads and one started after, and leaves with it")
+{
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    pipeline::ImporterRegistry importers{DefaultAllocator()};
+    pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+    editor::EditorLogBuffer logBuffer{DefaultAllocator()};
+    editor::mcp::McpPluginServices pluginTools{DefaultAllocator()};
+    editor::mcp::ProjectSession session;
+    editor::mcp::ProjectOwner owner;
+    McpServer server;
+    editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
+    editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
+                                     editor::mcp::EngineToolPaths{}, operations);
+    const Array<byte> manifest = GreeterManifest();
+    const runtime::PluginPartEntryFn parts[] = {&GreeterTooling};
+    const runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 1}};
+    pluginTools.AttachServer(server, session);
+    editor::mcp::RegisterProjectOpenTools(
+        server, session, owner, &creators, StringView{},
+        editor::mcp::ProjectPlugins{Span<const runtime::LinkedPlugin>(linked, 1),
+                                    pipeline::PipelineRegistries{&builders, &importers, &creators}, &pluginTools});
+    const usize engineTools = server.ToolCount();
+
+    const StringView dir = u8"mcp_plugin_tooling";
+    const StringView plain = u8"mcp_plugin_tooling_plain";
+    (void)RemoveDirectoryRecursive(dir);
+    (void)RemoveDirectoryRecursive(plain);
+    for (StringView project : {dir, plain})
+    {
+        JsonValue create = JsonValue::MakeObject();
+        create.Set(u8"directory", JsonValue::MakeString(String(project)));
+        create.Set(u8"name", JsonValue::MakeString(String(u8"Greeted")));
+        REQUIRE_FALSE(Call(server, u8"project_create", Move(create)).error);
+    }
+    const auto open = [&server](StringView project)
+    {
+        JsonValue args = JsonValue::MakeObject();
+        args.Set(u8"directory", JsonValue::MakeString(String(project)));
+        REQUIRE_FALSE(Call(server, u8"project_open", Move(args)).error);
+    };
+    open(dir);
+    {
+        JsonValue args = JsonValue::MakeObject();
+        args.Set(u8"id", JsonValue::MakeString(String(kGreeter)));
+        REQUIRE_FALSE(Call(server, u8"plugin_enable", Move(args)).error);
+    }
+    g_takenRefused = false;
+    open(dir); // opened again: its plugins load with it
+
+    // The standalone host's server, there before the plugin loaded, serves its tool.
+    CHECK(server.ToolCount() == engineTools + 1u);
+    CHECK(g_takenRefused); // the engine's project_info keeps its name
+    const Called hello = Call(server, u8"greeter_hello", JsonValue::MakeObject());
+    REQUIRE_FALSE(hello.error);
+    CHECK(hello.value.Get(u8"hello").AsString() == String(u8"Greeted"));
+    CHECK(Call(server, u8"project_info", JsonValue::MakeObject()).value.Has(u8"settings")); // still the engine's
+
+    // A server started after the plugin loaded serves it too, and leaves it as it stops.
+    {
+        McpServer later;
+        later.RegisterTool(String(u8"project_info"), String(u8"the server's own"), SchemaBuilder().Build(),
+                           ToolAnnotations::ReadOnly(), [](const JsonValue&) -> ToolResult { return JsonValue::MakeObject(); });
+        pluginTools.AttachServer(later, session);
+        CHECK(later.HasTool(u8"greeter_hello"));
+        CHECK(pluginTools.ToolsServedBy(later).Size() == 1u);
+        pluginTools.DetachServer(later);
+        CHECK_FALSE(later.HasTool(u8"greeter_hello"));
+    }
+
+    // A project that does not enable it: the tool leaves the server with its plugin.
+    open(plain);
+    CHECK_FALSE(server.HasTool(u8"greeter_hello"));
+    CHECK(server.ToolCount() == engineTools);
+
+    session.plugins = nullptr;
+    owner.plugins.Reset();
+    session.project = nullptr;
+    owner.project.Reset();
+    pluginTools.DetachServer(server);
     (void)RemoveDirectoryRecursive(dir);
     (void)RemoveDirectoryRecursive(plain);
 }

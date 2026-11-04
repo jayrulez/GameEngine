@@ -60,6 +60,8 @@ export namespace editor::app
             EditorNativeModule* native = nullptr;
             /// The plugins this editor links; each project's enabled ones load with it.
             Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
+            /// What the project's plugins' Tooling parts add their MCP tools through (null: none).
+            editor::mcp::McpPluginServices* pluginTools = nullptr;
             /// Seeds a new project's starter content (the executable composes it); null: none.
             Function<void(editor::EditorContext&, editor::EditorProject&)> seedNewProject;
             /// Called when the project has opened and its services are up: the application brings
@@ -186,6 +188,8 @@ export namespace editor::app
                 m_pipelinePlugins = MakeUnique<pipeline::PipelinePluginServices>(
                     m_allocator, m_allocator, pipeline::PipelineRegistries{m_services.builders, &context.Importers(), &context.Creators()});
             (void)m_pipelinePlugins->Attach(*plugins);
+            if (m_services.pluginTools != nullptr)
+                (void)m_services.pluginTools->Attach(*plugins);
             (void)engine::project::LoadProjectPlugins(*plugins, m_services.linkedPlugins, project.Settings());
             context.SetPlugins(plugins);
         }

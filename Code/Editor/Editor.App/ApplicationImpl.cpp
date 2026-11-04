@@ -81,6 +81,7 @@ namespace editor::app
         services.runtime = &m_runtimeContext;
         services.native = &m_native;
         services.linkedPlugins = m_config.linkedPlugins;
+        services.pluginTools = &m_mcpPluginTools;
         EditorApplication* self = this;
         services.seedNewProject = [self](editor::EditorContext& context, editor::EditorProject& project)
         {
@@ -271,6 +272,7 @@ namespace editor::app
         mcp.builders = &m_builders;
         mcp.userSettings = &m_editorSettings;
         mcp.log = m_config.logBuffer;
+        mcp.pluginTools = &m_mcpPluginTools;
         mcp.dataRoot = m_config.dataRoot;
         mcp.forceEnabled = m_config.mcpEnabled;
         mcp.port = m_config.mcpPort;

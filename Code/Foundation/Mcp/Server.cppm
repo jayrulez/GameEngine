@@ -221,6 +221,7 @@ export namespace foundation::mcp
         {
             ToolCall call;
             String line; ///< the line, when the call has no id
+            String tool; ///< the tool it calls
         };
         /// The calls that answered NotFinished and have not answered since.
         Array<CallEntry> m_calls;
@@ -292,6 +293,40 @@ export namespace foundation::mcp
             m_resourceProviders.PushBack(Move(provider));
         }
         [[nodiscard]] usize ToolCount() const noexcept { return m_tools.Size(); }
+        /// The registered tools' names, in registration order.
+        [[nodiscard]] Array<String> ToolNames() const
+        {
+            Array<String> names;
+            for (const Tool& tool : m_tools)
+            {
+                names.PushBack(tool.name);
+            }
+            return names;
+        }
+        [[nodiscard]] bool HasTool(StringView name) const noexcept { return FindTool(name) != nullptr; }
+        /// Removes the tool `name` (a plugin's, as it unloads); false when there is none. A call to
+        /// it in flight ends with it, its state destroyed; when its transport hands it back, it is a
+        /// call to an unknown tool.
+        bool UnregisterTool(StringView name)
+        {
+            for (usize i = 0; i < m_tools.Size(); ++i)
+            {
+                if (m_tools[i].name.AsView() != name)
+                {
+                    continue;
+                }
+                m_tools.RemoveAt(i);
+                for (usize c = m_calls.Size(); c > 0; --c)
+                {
+                    if (m_calls[c - 1].tool.AsView() == name)
+                    {
+                        m_calls.RemoveAt(c - 1);
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
         [[nodiscard]] usize ResourceCount() const noexcept { return m_resources.Size(); }
 
         // Handles one JSON-RPC message: the response line to write, a notification (nothing to
@@ -469,6 +504,7 @@ export namespace foundation::mcp
                 // a tool failure is reported as isError content, not a protocol error.
                 // The call this is: the one in flight under this identity, or a new one.
                 const usize callIndex = FindOrStartCall();
+                m_calls[callIndex].tool = tool->name;
                 ToolOutcome outcome = tool->callHandler ? tool->callHandler(m_calls[callIndex].call, args)
                                                         : tool->handler(args);
                 if (!outcome.IsFinished())

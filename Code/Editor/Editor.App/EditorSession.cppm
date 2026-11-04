@@ -27,6 +27,7 @@ import foundation.runtime;
 import foundation.runtime.client; // IApplicationHost
 import foundation.settings;
 import pipeline.core;
+import pipeline.importer; // PipelinePluginServices (a plugin's builders, importers, creators)
 import engine.project;    // kProjectCacheDir
 import engine.defaultapp; // the embedded game application
 import engine.gui;        // GuiSubsystem (the engine GUI's fonts and sheets)
@@ -181,6 +182,10 @@ export namespace editor::app
             if (plugins == nullptr)
                 return;
             (void)plugins->Provide(context);
+            if (!m_pipelinePlugins)
+                m_pipelinePlugins = MakeUnique<pipeline::PipelinePluginServices>(
+                    m_allocator, m_allocator, pipeline::PipelineRegistries{m_services.builders, &context.Importers(), &context.Creators()});
+            (void)m_pipelinePlugins->Attach(*plugins);
             (void)engine::project::LoadProjectPlugins(*plugins, m_services.linkedPlugins, project.Settings());
             context.SetPlugins(plugins);
         }
@@ -420,5 +425,8 @@ export namespace editor::app
         bool m_closingViews = false; // Close is closing the views: a save writes the store without capturing them
         UniquePtr<foundation::resource::ResourceManager> m_resources;
         UniquePtr<editor::ThumbnailStage> m_thumbnailStage;
+        // What the projects' Pipeline parts add to the editor's registries, attached to each
+        // project's plugin host, which goes before it.
+        UniquePtr<pipeline::PipelinePluginServices> m_pipelinePlugins;
     };
 }

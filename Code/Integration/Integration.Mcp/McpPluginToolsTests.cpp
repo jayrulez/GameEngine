@@ -17,6 +17,7 @@
 import foundation.core;
 import foundation.json;
 import foundation.mcp;
+import foundation.content;
 import foundation.runtime;
 import pipeline.core;
 import pipeline.importer;
@@ -395,4 +396,199 @@ TEST_CASE("integration.mcp: an agent enables and disables plugins in the project
     CHECK(reopened->Settings().plugins[0].id == String(kMeter));
     reopened.Reset();
     (void)RemoveDirectoryRecursive(dir);
+}
+
+namespace plugintools
+{
+    // A plugin's asset type, its product and its builder.
+    class GadgetAsset final : public pipeline::Asset
+    {
+        RTTI_OBJECT(GadgetAsset, pipeline::Asset)
+    public:
+        i32 sprockets = 4;
+        void Serialize(ISerializer& ar) override
+        {
+            pipeline::Asset::Serialize(ar);
+            foundation::core::Serialize(ar, "sprockets", sprockets);
+        }
+    };
+    RTTI_DEFINE_OBJECT(GadgetAsset, "rtti::plugintools")
+
+    class GadgetProduct final : public ISerializable
+    {
+        RTTI_OBJECT(GadgetProduct, ISerializable)
+    public:
+        i32 cooked = 0;
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "cooked", cooked); }
+    };
+    RTTI_DEFINE_OBJECT(GadgetProduct, "rtti::plugintools")
+
+    class GadgetBuilder final : public pipeline::DefaultAssetBuilder
+    {
+    public:
+        [[nodiscard]] const TypeInfo* AssetType() const override { return &GadgetAsset::StaticType(); }
+        [[nodiscard]] const TypeInfo* ProductType() const override { return &GadgetProduct::StaticType(); }
+        [[nodiscard]] u32 Version() const override { return 1; }
+        [[nodiscard]] Status Build(const pipeline::Asset& asset, pipeline::AssetBuildContext& ctx) override
+        {
+            GadgetProduct product;
+            product.cooked = static_cast<const GadgetAsset&>(asset).sprockets * 10;
+            return ctx.output->WriteObject(product);
+        }
+    };
+}
+
+namespace
+{
+    constexpr char8_t kGadget[] = u8"gadget";
+
+    // The gadget's Pipeline part: its types, its builder and its creator, through the host's
+    // pipeline service.
+    void LoadGadgetPipeline(runtime::PluginContext& context)
+    {
+        context.Types().Register(plugintools::GadgetAsset::StaticType());
+        context.Types().Register(plugintools::GadgetProduct::StaticType());
+        RegisterSerializable<plugintools::GadgetAsset>(context.Serializables());
+        RegisterSerializable<plugintools::GadgetProduct>(context.Serializables());
+        pipeline::PipelinePluginServices* services = context.Find<pipeline::PipelinePluginServices>();
+        REQUIRE(services != nullptr);
+        CHECK(services->AddBuilder(MakeUnique<plugintools::GadgetBuilder>(context.Allocator())));
+        pipeline::AssetCreator creator;
+        creator.label = String(u8"Gadget");
+        creator.category = String(u8"Plugins");
+        creator.type = &plugintools::GadgetAsset::StaticType();
+        creator.run = [](const pipeline::AssetCreationContext& at)
+        {
+            plugintools::GadgetAsset gadget;
+            return pipeline::CreateWrittenInstance(at.picked != nullptr ? at.picked : at.root,
+                                                   at.name.IsEmpty() ? StringView(u8"Gadget") : at.name,
+                                                   plugintools::GadgetAsset::StaticType(), gadget);
+        };
+        CHECK(services->AddCreator(Move(creator)));
+    }
+    const runtime::PluginPart* GadgetPipeline()
+    {
+        static constexpr runtime::PluginPart part{kGadget, runtime::PluginPartKind::Pipeline, &LoadGadgetPipeline, nullptr};
+        return &part;
+    }
+
+    [[nodiscard]] Array<byte> GadgetManifest()
+    {
+        runtime::PluginManifest manifest;
+        manifest.id = String(kGadget);
+        manifest.name = String(u8"Gadget");
+        manifest.version = String(u8"1.0");
+        manifest.engineVersion = String(engine::project::kEngineVersionString);
+        manifest.parts.PushBack(runtime::PluginManifestPart{String(u8"Pipeline")});
+        manifest.platforms.PushBack(runtime::PluginPlatform{String(GetHostPlatformName())});
+        MemoryStream buffer;
+        REQUIRE(runtime::WritePluginManifest(manifest, buffer).IsOk());
+        Array<byte> bytes;
+        for (byte b : buffer.Bytes())
+        {
+            bytes.PushBack(b);
+        }
+        bytes.PushBack(byte{0});
+        return bytes;
+    }
+
+    [[nodiscard]] bool HasCreator(const JsonValue& listed, StringView label)
+    {
+        const JsonValue creators = listed.Get(u8"creators");
+        for (i64 i = 0; i < creators.Count(); ++i)
+        {
+            if (creators.At(static_cast<usize>(i)).Get(u8"label").AsString().AsView() == label)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+// A plugin's Pipeline part adds to the host it loads in: through the standalone MCP host, a project
+// that enables the plugin offers its creator, creates its asset and cooks it with its builder, and a
+// project that does not, or the same host after the plugin unloads, has none of it.
+TEST_CASE("integration.mcp: a plugin's asset type is created and cooked through the standalone host, and leaves with it")
+{
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    pipeline::ImporterRegistry importers{DefaultAllocator()};
+    pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+    editor::EditorLogBuffer logBuffer{DefaultAllocator()};
+    editor::mcp::ProjectSession session;
+    editor::mcp::ProjectOwner owner;
+    McpServer server;
+    editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
+    editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
+                                     editor::mcp::EngineToolPaths{}, operations);
+    const Array<byte> manifest = GadgetManifest();
+    const runtime::PluginPartEntryFn parts[] = {&GadgetPipeline};
+    const runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 1}};
+    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, StringView{},
+                                          Span<const runtime::LinkedPlugin>(linked, 1),
+                                          pipeline::PipelineRegistries{&builders, &importers, &creators});
+    const usize buildersBefore = builders.Count();
+
+    const auto open = [&server](StringView dir)
+    {
+        JsonValue args = JsonValue::MakeObject();
+        args.Set(u8"directory", JsonValue::MakeString(String(dir)));
+        REQUIRE_FALSE(Call(server, u8"project_open", Move(args)).error);
+    };
+    const StringView dir = u8"mcp_plugin_pipeline";
+    const StringView plain = u8"mcp_plugin_pipeline_plain";
+    (void)RemoveDirectoryRecursive(dir);
+    (void)RemoveDirectoryRecursive(plain);
+    for (StringView project : {dir, plain})
+    {
+        JsonValue create = JsonValue::MakeObject();
+        create.Set(u8"directory", JsonValue::MakeString(String(project)));
+        create.Set(u8"name", JsonValue::MakeString(String(u8"Pipeline")));
+        REQUIRE_FALSE(Call(server, u8"project_create", Move(create)).error);
+    }
+
+    // Enabled, then opened again: the plugin loads with the project.
+    open(dir);
+    CHECK_FALSE(HasCreator(Call(server, u8"asset_creators", JsonValue::MakeObject()).value, u8"Gadget"));
+    {
+        JsonValue args = JsonValue::MakeObject();
+        args.Set(u8"id", JsonValue::MakeString(String(kGadget)));
+        REQUIRE_FALSE(Call(server, u8"plugin_enable", Move(args)).error);
+    }
+    open(dir);
+    REQUIRE(session.plugins != nullptr);
+    CHECK(session.plugins->IsLoaded(kGadget));
+    CHECK(builders.Count() == buildersBefore + 1u);
+    CHECK(HasCreator(Call(server, u8"asset_creators", JsonValue::MakeObject()).value, u8"Gadget"));
+
+    JsonValue create = JsonValue::MakeObject();
+    create.Set(u8"creator", JsonValue::MakeString(String(u8"Gadget")));
+    create.Set(u8"name", JsonValue::MakeString(String(u8"Sprocket")));
+    const Called made = Call(server, u8"asset_create", Move(create));
+    REQUIRE_FALSE(made.error);
+    CHECK(made.value.Get(u8"type").AsString() == String(u8"GadgetAsset"));
+    const Called cooked = Call(server, u8"asset_cook", JsonValue::MakeObject());
+    REQUIRE_FALSE(cooked.error);
+    CHECK(cooked.value.Get(u8"failed").AsNumber() == doctest::Approx(0.0));
+    CHECK(cooked.value.Get(u8"cooked").AsNumber() >= 1.0); // the gadget, by the plugin's builder
+    Guid id;
+    REQUIRE(Guid::TryParse(made.value.Get(u8"guid").AsString().AsView(), id));
+    RefPtr<ISerializable> read = session.project->CookedDb().ReadObject(id);
+    auto* product = read ? Cast<plugintools::GadgetProduct>(read.Get()) : nullptr;
+    REQUIRE(product != nullptr);
+    CHECK(product->cooked == 40);
+
+    // Another project, which does not enable it: the plugin and everything it added are gone.
+    open(plain);
+    CHECK_FALSE(session.plugins->IsLoaded(kGadget));
+    CHECK(builders.Count() == buildersBefore);
+    CHECK(builders.Find(&plugintools::GadgetAsset::StaticType()) == nullptr);
+    CHECK_FALSE(HasCreator(Call(server, u8"asset_creators", JsonValue::MakeObject()).value, u8"Gadget"));
+
+    session.plugins = nullptr;
+    owner.plugins.Reset();
+    session.project = nullptr;
+    owner.project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+    (void)RemoveDirectoryRecursive(plain);
 }

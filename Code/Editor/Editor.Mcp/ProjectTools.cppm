@@ -108,7 +108,8 @@ export namespace editor::mcp
                                          ProjectSession& session, ProjectOwner& owner,
                                          const pipeline::AssetCreatorRegistry* creators = nullptr,
                                          StringView dataRoot = {},
-                                         Span<const foundation::runtime::LinkedPlugin> linkedPlugins = {})
+                                         Span<const foundation::runtime::LinkedPlugin> linkedPlugins = {},
+                                         pipeline::PipelineRegistries pluginRegistries = {})
     {
         using foundation::mcp::SchemaBuilder;
         using foundation::mcp::ToolResult;
@@ -165,7 +166,7 @@ export namespace editor::mcp
             u8"current project.",
             SchemaBuilder().Str(u8"directory", u8"the project directory", true).Build(),
             foundation::mcp::ToolAnnotations::Rebuilds(),
-            [s, o, linked](const JsonValue& args) -> ToolResult
+            [s, o, linked, pluginRegistries](const JsonValue& args) -> ToolResult
             {
                 const String directory = args.Get(u8"directory").AsString();
                 UniquePtr<editor::EditorProject> opened =
@@ -187,7 +188,8 @@ export namespace editor::mcp
                 s->project = o->project.Get();
                 // The plugins this project enables that this host links, with their parts for MCP.
                 o->plugins = MakeUnique<editor::ToolPlugins>(editor::EditorRootAllocator(), editor::EditorRootAllocator(),
-                                                             foundation::runtime::HostRole::Mcp, *o->project, linked);
+                                                             foundation::runtime::HostRole::Mcp, *o->project, linked,
+                                                             pluginRegistries);
                 s->plugins = &o->plugins->Host();
                 return out;
             });

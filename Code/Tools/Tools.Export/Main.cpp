@@ -35,6 +35,7 @@ import foundation.resource;
 import foundation.scene;
 import foundation.scene.resource;
 import pipeline.core;
+import pipeline.importer; // PipelineRegistries (what a plugin's Pipeline part adds to)
 import pipeline.registration;
 import editor.project;
 import texture.pipeline;
@@ -344,9 +345,10 @@ int main(int argc, char** argv)
     // game has. RegisterPipelineTypes registers only the foundation-level surface, without the
     // Engine-level facades. This registers metadata only (no device, GPU or world) and is idempotent.
     engine::RegisterAllScriptFacades();
-    // The plugins the project enables that this tool links, their Engine, Pipeline and Tooling parts.
+    // The plugins the project enables that this tool links, their Engine, Pipeline and Tooling parts
+    // (their builders join the export's cook).
     editor::ToolPlugins plugins(AppRoot(), foundation::runtime::HostRole::Export, *project,
-                                foundation::runtime::LinkedPluginList());
+                                foundation::runtime::LinkedPluginList(), pipeline::PipelineRegistries{&builders});
 
     // Component reflection (with its data-version gates) for every domain, through the scene
     // composition root, before any scene stream deserializes. One shared list keeps this host

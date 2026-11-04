@@ -129,8 +129,10 @@ int main(int argc, char** argv)
     editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
                                      paths, operations);
     // This host's additions: an agent opens (or scaffolds) the project it wants to work on.
+    // A project's plugins (those this host links) add to the registries above as it opens.
     editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, dataRoot.AsView(),
-                                          foundation::runtime::LinkedPluginList()); // what a project may enable
+                                          foundation::runtime::LinkedPluginList(),
+                                          pipeline::PipelineRegistries{&builders, &importers, &creators});
     // host_info: the process id, build stamp, versions and open-project state.
     RegisterHostInfoTool(
         server, String(reinterpret_cast<const char8_t*>(BuildStamp())),

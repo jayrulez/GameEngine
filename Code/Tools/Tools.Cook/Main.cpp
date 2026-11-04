@@ -24,6 +24,7 @@ import foundation.content;
 import foundation.vfs;
 import foundation.runtime; // the plugins this tool links (LinkedPluginList)
 import pipeline.core;
+import pipeline.importer; // PipelineRegistries (what a plugin's Pipeline part adds to)
 import pipeline.registration;
 import engine.composition; // RegisterAllScriptFacades: the complete engine facade surface
 import editor.project;
@@ -115,9 +116,10 @@ int main(int argc, char** argv)
     // RegisterPipelineTypes registers only the foundation-level surface, without the Engine-level
     // facades. This registers metadata only (no device, GPU or world) and is idempotent.
     engine::RegisterAllScriptFacades();
-    // The plugins the project enables that this tool links, their Engine and Pipeline parts.
+    // The plugins the project enables that this tool links, their Engine and Pipeline parts (their
+    // builders join this cook's).
     editor::ToolPlugins plugins(AppRoot(), foundation::runtime::HostRole::Cook, *project,
-                                foundation::runtime::LinkedPluginList());
+                                foundation::runtime::LinkedPluginList(), pipeline::PipelineRegistries{&registry});
 
     vfs::NativeFileSystem sourcesMount(project->SourcesRoot().AsView(), AppRoot());
     vfs::NativeFileSystem cacheMount(project->CacheRoot().AsView(), AppRoot());

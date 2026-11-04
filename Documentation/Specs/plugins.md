@@ -404,10 +404,29 @@ editor, the player and export still read `nativeModule`):
   game's package with an Engine part. `IRuntimePlugin`, `CreatePlugin` and `PluginLoader`'s
   `Add` and `Load` are deleted, and the cross-boundary shared-lane test loads a part. Tests:
   NativeSample's package, the scaffold's output, the migration of version 10 projects.
-- **X6 - export.** Template plugin lists; template or per-project player; deploy files;
-  platform refusals; the per-project build covering every enabled package; web left to a later
-  phase if the wasm per-project build is too large for this spec (decide when reached). Tests:
-  template chosen when it covers the set, a build when it does not, deploy staging, refusal.
+- **X6 - export** (built 2026-11-04; ruling that day: the editor ships as a shared build, with the
+  CLI tools beside it). In layers:
+  - **X6a**: a web build declares only a plugin's Engine part (no editor or tool runs there), which
+    lets a project package with Tooling or Editor parts configure for the web.
+  - **X6b**: `util_link_plugins` writes `<binary>.plugins` (each linked plugin's id and package
+    folder); a created template records each plugin's id and version in `template.xml` and carries
+    its Plugin.xml and deploy files for the platform under `plugins/<id>/`.
+  - **X6c**: per preset, the template's player when it carries every plugin the project enables on
+    the platform at a version at least the one known and no project package is enabled there; a
+    player built for the project otherwise (`ENGINE_GAME_PLAYER` for one without packages); a
+    refusal for an entry enabled on a platform its plugin does not support or a plugin in no
+    package; each enabled plugin's deploy files staged beside the player; the result says which
+    player and why. The web per-project build is the existing wasm ship build.
+  - **X6d**: export hooks, the other `Tooling` contribution (`ExportPluginServices`), run over the
+    staged dist by the exporter, the editor and both MCP hosts; one that fails fails the export.
+  - **X6e**: the editor distribution is a shared build (`clang-reldbg-shared`,
+    `msvc-reldbg-shared`) shipping the CLI tools beside the editor with the engine's libraries; the
+    templates stay static. A released editor loads a project's packages built against the same
+    engine, but builds them only with an engine checkout: shipping an engine SDK for that is beyond
+    this spec.
+  Tests: a template records and carries its plugins; every branch of the player choice; an export
+  stages an enabled plugin's deploy files and refuses what cannot ship; hooks run in order after
+  staging and a failing one fails the export; NativeSample's export hook in Integration.Plugins.
 
 ## Gotchas
 

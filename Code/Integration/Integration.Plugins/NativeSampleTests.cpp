@@ -5,7 +5,8 @@
 // in every host. Its four parts are built in this tree and linked here as a host links its
 // plugins; a project that enables it loads, in each host, the parts that host's role takes, and
 // each part's contribution arrives with it and leaves with it:
-//   - Engine: the spin manager, in every scene (where the host offers the engine's service);
+//   - Engine: the spin component's reflection, and the spin manager, in every scene (where the host
+//     offers the engine's service), turning its entities;
 //   - Pipeline: the note asset type, its builder and its creator, in the host's registries;
 //   - Tooling: the nativesample_notes MCP tool, in every MCP server the host serves;
 //   - Editor: the Project > Native Sample Notes action, in the editor.
@@ -207,6 +208,69 @@ TEST_CASE("plugins: in the editor, a project's package brings every part's contr
     context.Tasks().Finish();
     embedded.OnShutdown(host);
     (void)RemoveDirectoryRecursive(dir);
+}
+
+TEST_CASE("plugins: in the player, the Engine part reflects the spin component and its manager turns the scene's entities")
+{
+    StubHost host;
+    engine::runtime::DefaultApplication embedded;
+    embedded.Configure(host);
+    runtime::PluginHost* plugins = embedded.CreatePluginHost(runtime::HostRole::Player);
+    REQUIRE(plugins != nullptr);
+    engine::project::ProjectSettings settings;
+    runtime::EnabledPlugin entry;
+    entry.id = String(kNativeSample);
+    settings.plugins.PushBack(Move(entry));
+    const runtime::PluginLoadReport report =
+        engine::project::LoadProjectPlugins(*plugins, runtime::LinkedPluginList(), settings);
+    REQUIRE(report.loaded.Size() == 1u);
+
+    // The reflection the inspector and the component tools read.
+    const TypeInfo& type = TypeOf<nativesample::SpinComponent>();
+    CHECK(GlobalTypeRegistry().FindById(type.id) != nullptr);
+    CHECK(TypeAttrString(type, "displayName", {}) == StringView(u8"Spin"));
+    CHECK(FindProperty(type, "turnsPerSecond") != nullptr);
+    CHECK(FindProperty(type, "axis") != nullptr);
+
+    {
+        foundation::scene::Scene scene(DefaultAllocator());
+        foundation::scene::SceneModuleContributions::Global().InstallAll(scene);
+        nativesample::SpinManager* spins = scene.GetSystem<nativesample::SpinManager>();
+        REQUIRE(spins != nullptr);
+        const foundation::scene::EntityHandle upright = scene.CreateEntity(u8"Upright");
+        const foundation::scene::EntityHandle sideways = scene.CreateEntity(u8"Sideways");
+        const foundation::scene::EntityHandle still = scene.CreateEntity(u8"Still");
+        spins->Add(upright).turnsPerSecond = 0.25f; // a quarter turn a second about its up axis
+        nativesample::SpinComponent& side = spins->Add(sideways);
+        side.turnsPerSecond = 0.5f;
+        side.axis = Float3{1.0f, 0.0f, 0.0f};
+        spins->Add(still);
+        scene.SetActive(still, false);
+
+        // A second in ten steps: the upright entity turned a quarter about Y, its forward (-Z) now
+        // pointing along -X; the sideways one turned half about X, its up pointing down.
+        for (int i = 0; i < 10; ++i)
+        {
+            scene.Update(0.1f);
+        }
+        const Float3 forward = RotateVector(scene.GetLocalTransform(upright).rotation, Float3{0.0f, 0.0f, -1.0f});
+        CHECK(forward.x == doctest::Approx(-1.0f).epsilon(1e-3));
+        CHECK(forward.z == doctest::Approx(0.0f).epsilon(1e-3));
+        const Float3 up = RotateVector(scene.GetLocalTransform(sideways).rotation, Float3{0.0f, 1.0f, 0.0f});
+        CHECK(up.y == doctest::Approx(-1.0f).epsilon(1e-3));
+        const Quaternion rest = scene.GetLocalTransform(still).rotation;
+        CHECK(rest.w == doctest::Approx(1.0f)); // inactive: not turned
+
+        // A scene that does not simulate (the editor's edit mode) does not turn them.
+        scene.SetSimulationEnabled(false);
+        const Quaternion before = scene.GetLocalTransform(upright).rotation;
+        scene.Update(0.5f);
+        CHECK(scene.GetLocalTransform(upright).rotation.y == doctest::Approx(before.y));
+    }
+
+    embedded.DestroyPluginHost();
+    CHECK(GlobalTypeRegistry().FindById(type.id) == nullptr); // taken out with the plugin
+    embedded.OnShutdown(host);
 }
 
 TEST_CASE("plugins: the cook loads the package's Engine and Pipeline parts, its builder cooking and nothing else arriving")

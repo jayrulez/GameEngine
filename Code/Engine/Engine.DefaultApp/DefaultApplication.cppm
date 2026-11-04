@@ -168,11 +168,15 @@ export namespace engine::runtime
         /// The process's plugin host, for `role`: over this app's subsystem manager, checking
         /// plugins against this engine's version, and given what this app offers its plugins (the
         /// client services, its host and data mount, and the engine's service for Engine parts).
-        /// One per process, owned by the caller, which adds the plugins it links and loads the
-        /// enabled ones. The app unloads it in OnShutdown, so no plugin outlives the subsystems it
-        /// added to: it must stay alive until then, and an app overriding OnShutdown calls this one.
-        /// Null before Configure.
-        [[nodiscard]] core::UniquePtr<foundation::runtime::PluginHost> CreatePluginHost(foundation::runtime::HostRole role);
+        /// One per process, owned by the app: the caller adds the plugins it links and loads the
+        /// enabled ones. A host made before is unloaded and replaced (the editor makes one per open
+        /// project). The app destroys it in OnShutdown, so no plugin outlives the subsystems it
+        /// added to, and an app overriding OnShutdown calls this one. Null before Configure.
+        [[nodiscard]] foundation::runtime::PluginHost* CreatePluginHost(foundation::runtime::HostRole role);
+        /// Unloads the process's plugins and destroys their host (nothing when there is none).
+        void DestroyPluginHost();
+        /// The process's plugin host, or null when none is made.
+        [[nodiscard]] foundation::runtime::PluginHost* Plugins() const noexcept { return m_plugins.Get(); }
 
         // ---- infrastructure preset: shared pieces are handed in before Startup; anything not
         // preset the app creates for itself and owns. The editor presets its existing manager (a
@@ -314,10 +318,10 @@ export namespace engine::runtime
         core::String m_dataRootOverride; // preset (SetDataRoot); empty = discover
         core::String m_dataRoot;         // resolved in Configure
         core::UniquePtr<foundation::vfs::NativeFileSystem> m_dataFileSystem; // the data mount (owned)
-        // What AttachPluginHost hands the process's plugin host, which it unloads at shutdown.
+        // What CreatePluginHost hands the process's plugin host, which goes before them.
         foundation::runtime::ClientServices m_clientServices;
         core::UniquePtr<engine::EnginePluginServices> m_enginePluginServices;
-        foundation::runtime::PluginHost* m_plugins = nullptr; // borrowed
+        core::UniquePtr<foundation::runtime::PluginHost> m_plugins;
         engine::physics::PhysicsSubsystem* m_physics = nullptr;
         engine::audio::AudioSubsystem* m_audio = nullptr;
         engine::render::RenderSubsystem* m_render = nullptr; // for the `DebugDraw.of(scene)` service

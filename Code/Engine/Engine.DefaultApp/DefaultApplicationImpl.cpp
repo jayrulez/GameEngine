@@ -673,12 +673,13 @@ namespace engine::runtime
         }
     }
 
-    core::UniquePtr<foundation::runtime::PluginHost> DefaultApplication::CreatePluginHost(foundation::runtime::HostRole role)
+    foundation::runtime::PluginHost* DefaultApplication::CreatePluginHost(foundation::runtime::HostRole role)
     {
         if (m_host == nullptr)
         {
-            return {}; // not configured yet: there is no host or data mount to offer
+            return nullptr; // not configured yet: there is no host or data mount to offer
         }
+        DestroyPluginHost(); // one per process
         core::IAllocator& allocator = m_host->Subsystems().Allocator();
         core::UniquePtr<foundation::runtime::PluginHost> plugins = core::MakeUnique<foundation::runtime::PluginHost>(
             allocator, allocator, m_host->Subsystems(), role, engine::project::kEngineVersionString);
@@ -690,19 +691,24 @@ namespace engine::runtime
         }
         (void)plugins->Provide(m_clientServices); // a new host has loaded nothing: both are accepted
         (void)m_enginePluginServices->Attach(*plugins);
-        m_plugins = plugins.Get();
-        return plugins;
+        m_plugins = core::Move(plugins);
+        return m_plugins.Get();
+    }
+
+    void DefaultApplication::DestroyPluginHost()
+    {
+        if (m_plugins)
+        {
+            m_plugins->Unload();
+            m_plugins.Reset();
+        }
     }
 
     void DefaultApplication::OnShutdown(IApplicationHost& host)
     {
         // The plugins first, after the subsystems have stopped and before anything they added to
         // goes: the reverse of their load, which came between Configure and the start.
-        if (m_plugins != nullptr)
-        {
-            m_plugins->Unload();
-            m_plugins = nullptr;
-        }
+        DestroyPluginHost();
         // The subsystems have shut down (and stopped listening): nothing reaches the runs through
         // the subsystem manager after this. The runs themselves go with the app.
         host.Subsystems().SetRunManager(nullptr);

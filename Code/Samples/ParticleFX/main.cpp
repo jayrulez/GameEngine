@@ -84,13 +84,12 @@ namespace
             engine::runtime::DefaultApplication::Configure(host);
             // Dear ImGui is a plugin: this process's host loads it, and it adds its own subsystem
             // from what the app offers (its graphics device and data mount).
-            m_plugins = CreatePluginHost(foundation::runtime::HostRole::Player);
-            if (m_plugins)
+            if (foundation::runtime::PluginHost* plugins = CreatePluginHost(foundation::runtime::HostRole::Player))
             {
-                (void)m_plugins->AddLinked(foundation::runtime::LinkedPluginList());
+                (void)plugins->AddLinked(foundation::runtime::LinkedPluginList());
                 foundation::runtime::EnabledPlugin imgui;
                 imgui.id = u8"imgui";
-                (void)m_plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
+                (void)plugins->Load(foundation::core::Span<const foundation::runtime::EnabledPlugin>(&imgui, 1));
             }
         }
 
@@ -379,7 +378,6 @@ namespace
 
     private:
         // The process's plugins (Dear ImGui): loaded in Configure, unloaded when the app shuts down.
-        foundation::core::UniquePtr<foundation::runtime::PluginHost> m_plugins;
         // 4x4 showcase grid, centered on the origin. Cells are indexed row-major (0..15); each holds one
         // particle system. Returns the cell's floor-level center (callers add any per-system y offset).
         static constexpr core::f32 kCellSpacing = 15.0f;

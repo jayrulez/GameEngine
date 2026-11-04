@@ -197,16 +197,18 @@ namespace
 
 // The process's plugin host from the app: made only once the app is configured, it gives the
 // plugins this app's client services (its host and data mount) and the engine's service for Engine
-// parts, and the app's shutdown unloads them.
-TEST_CASE("defaultapp: CreatePluginHost offers the app's services, and the app's shutdown unloads the plugins")
+// parts. The app owns it: making another unloads the first one's plugins (the editor makes one per
+// open project), and the app's shutdown unloads them and destroys it.
+TEST_CASE("defaultapp: CreatePluginHost offers the app's services; another replaces it; the app's shutdown unloads the plugins")
 {
     g_pluginProbe = PluginProbe{};
     StubHost host;
     engine::runtime::DefaultApplication app;
     CHECK_FALSE(app.CreatePluginHost(runtime::HostRole::Player)); // not configured: nothing to offer
     app.Configure(host);
-    UniquePtr<runtime::PluginHost> plugins = app.CreatePluginHost(runtime::HostRole::Player);
-    REQUIRE(plugins);
+    runtime::PluginHost* plugins = app.CreatePluginHost(runtime::HostRole::Player);
+    REQUIRE(plugins != nullptr);
+    CHECK(app.Plugins() == plugins);
     CHECK(plugins->Role() == runtime::HostRole::Player);
 
     runtime::PluginManifest manifest;
@@ -225,9 +227,9 @@ TEST_CASE("defaultapp: CreatePluginHost offers the app's services, and the app's
     text.PushBack(byte{0});
     const runtime::PluginPartEntryFn parts[] = {&ProbePluginEngine};
     const runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(text.Data()), parts, 1}};
-    REQUIRE(plugins->AddLinked(Span<const runtime::LinkedPlugin>(linked, 1)).IsOk());
     runtime::EnabledPlugin probe;
     probe.id = String(kProbePluginId);
+    REQUIRE(plugins->AddLinked(Span<const runtime::LinkedPlugin>(linked, 1)).IsOk());
     REQUIRE(plugins->Load(Span<const runtime::EnabledPlugin>(&probe, 1)).loaded.Size() == 1u);
 
     REQUIRE(g_pluginProbe.client != nullptr);
@@ -236,7 +238,16 @@ TEST_CASE("defaultapp: CreatePluginHost offers the app's services, and the app's
     CHECK(g_pluginProbe.engine != nullptr);
     CHECK(g_pluginProbe.unloads == 0);
 
-    app.OnShutdown(host);
+    // Another host replaces it, its plugins unloaded first.
+    plugins = app.CreatePluginHost(runtime::HostRole::Editor);
+    REQUIRE(plugins != nullptr);
     CHECK(g_pluginProbe.unloads == 1);
+    CHECK(plugins->Role() == runtime::HostRole::Editor);
     CHECK_FALSE(plugins->IsLoaded(kProbePluginId));
+    REQUIRE(plugins->AddLinked(Span<const runtime::LinkedPlugin>(linked, 1)).IsOk());
+    REQUIRE(plugins->Load(Span<const runtime::EnabledPlugin>(&probe, 1)).loaded.Size() == 1u);
+
+    app.OnShutdown(host);
+    CHECK(g_pluginProbe.unloads == 2);
+    CHECK(app.Plugins() == nullptr);
 }

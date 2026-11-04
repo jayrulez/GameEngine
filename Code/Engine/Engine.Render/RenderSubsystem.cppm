@@ -95,11 +95,9 @@ export namespace engine::render
                    : 1u;
     }
 
-    // The per-script-context render hook: a service the app installs so the `DebugDraw` facade can
-    // reach RenderSubsystem::DebugScene from a script (as Audio's and Input's ExposeToScript do). A
-    // facade has no Manager(), but it has CurrentScriptContext()->GetService().
+    // The render service for scripts, so the `DebugDraw` facade reaches RenderSubsystem::DebugScene:
+    // a facade has no Manager(), but it finds the application's services by type (CurrentService).
     class RenderSubsystem; // forward for the binding
-    inline constexpr StringView kRenderScriptService = u8"render.runtime";
     struct RenderScriptBinding
     {
         RenderSubsystem* render = nullptr;
@@ -261,13 +259,21 @@ export namespace engine::render
         // Drop the requests of a viewport that is going away.
         void CancelPicks(const void* viewportKey);
 
-        // Publish this subsystem as the per-context render service, so the `DebugDraw` script facade
-        // resolves it through CurrentScriptContext()->GetService(kRenderScriptService). Called by the
-        // app for each run context (alongside Input's and Audio's ExposeToScript).
-        void ExposeToScript(foundation::script::IScriptContext& scriptContext)
+        // Publish this subsystem as the application's render service, so the `DebugDraw` script facade
+        // finds it by type. Registered while this subsystem is.
+        void OnRegister(foundation::runtime::SubsystemManager* manager) override
         {
+            Subsystem::OnRegister(manager);
             m_scriptBinding.render = this;
-            scriptContext.SetService(kRenderScriptService, &m_scriptBinding);
+            manager->RegisterService(m_scriptBinding);
+        }
+        void OnUnregister() override
+        {
+            if (foundation::runtime::SubsystemManager* manager = Manager())
+            {
+                manager->UnregisterService<RenderScriptBinding>();
+            }
+            Subsystem::OnUnregister();
         }
 
         // Temporal AA on or off (projection jitter and history resolve), and resolve tunables.
@@ -384,7 +390,7 @@ export namespace engine::render
         debug::DebugDraw m_debugScreen;                         // whole-window HUD (drawn once)
         HashMap<scene::Scene*, debug::DebugDraw> m_debugScenes; // per-scene gizmos (every view of a scene)
         HashMap<const void*, debug::DebugDraw> m_debugViews;    // per-view gizmos (one keyed viewport)
-        RenderScriptBinding m_scriptBinding;                   // published by ExposeToScript (DebugDraw facade)
+        RenderScriptBinding m_scriptBinding;                   // the application's render service (DebugDraw facade)
         bool m_globalPostActive = false; // a post setter was called, so the global override wins
         f32 m_exposure = 1.0f;
         f32 m_timeSeconds = 0.0f; // SetTime (the wind sway clock)

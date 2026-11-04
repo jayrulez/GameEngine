@@ -115,6 +115,32 @@ export namespace foundation::runtime
         void SetRunManager(foundation::run::IRunManager* runs) noexcept { m_runs = runs; }
         [[nodiscard]] foundation::run::IRunManager* RunManager() const noexcept { return m_runs; }
 
+        // The application's services, by type: what its subsystems offer beyond themselves (the
+        // script bindings their facades reach, through each script context's resolver). A
+        // subsystem registers its own when it is registered and removes them when it leaves; a
+        // run's services, which a run holds itself, come first for that run's scripts.
+        // Borrowed: the owner keeps each alive while registered. One per type; a second replaces.
+        template <typename T>
+        void RegisterService(T& service)
+        {
+            m_services.InsertOrAssign(core::TypeOf<T>().id, static_cast<void*>(&service));
+        }
+        template <typename T>
+        void UnregisterService()
+        {
+            m_services.Remove(core::TypeOf<T>().id);
+        }
+        template <typename T>
+        [[nodiscard]] T* GetService() const noexcept
+        {
+            return static_cast<T*>(FindService(core::TypeOf<T>().id));
+        }
+        [[nodiscard]] void* FindService(core::TypeId type) const noexcept
+        {
+            void* const* found = m_services.Find(type);
+            return found != nullptr ? *found : nullptr;
+        }
+
         // The app's configured fixed step: plain configuration (a float), not an execution
         // lane. The scene bridge reads it to seed per-scene fixed steppers; fixed-rate
         // interpolation is per scene (Scene::FixedAlpha). The manager runs no fixed phase of
@@ -258,6 +284,7 @@ export namespace foundation::runtime
         core::Array<core::UniquePtr<Subsystem>> m_owned; // ownership
         bool m_running = false;
         foundation::run::IRunManager* m_runs = nullptr; // SetRunManager; borrowed
+        core::HashMap<core::TypeId, void*> m_services;  // RegisterService; borrowed
         core::f32 m_fixedStep = 1.0f / 60.0f;
         core::f32 m_timeScale = 1.0f;
         bool m_disposed = false;

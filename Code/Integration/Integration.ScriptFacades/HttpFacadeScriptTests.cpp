@@ -113,7 +113,9 @@ namespace
         RegisterReflectedTypes(manager);
         RefPtr<IScriptContext> scriptContext = manager.CreateContext();
         Fixture fx;
-        http::InstallHttpScriptService(*scriptContext, fx.binding);
+        ScriptServices services; // the run's services, as a run would hold its HTTP binding
+        services.Add(fx.binding);
+        scriptContext->SetServiceResolver(services.Resolver());
         CHECK(fx.made == 0); // nothing until a script asks
         REQUIRE(scriptContext->Load(script, u8"http").IsOk());
         CHECK(fx.made == 1);

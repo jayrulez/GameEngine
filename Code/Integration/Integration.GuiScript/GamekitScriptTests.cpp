@@ -72,7 +72,9 @@ namespace
         core::RefPtr<script::IScriptContext> scriptContext = manager.CreateContext();
         Errors errors;
         scriptContext->SetErrorHandler(&errors);
-        gui::InstallGuiScriptService(*scriptContext, binding);
+        foundation::script::ScriptServices services;
+        services.Add(binding);
+        scriptContext->SetServiceResolver(services.Resolver());
         const core::Status loaded = scriptContext->Load(source, u8"main");
         INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
         REQUIRE(loaded.IsOk());
@@ -93,7 +95,7 @@ namespace
         CHECK(number(u8"paused") == doctest::Approx(0.0));
         CHECK(number(u8"left") == doctest::Approx(1.0));
         CHECK(errors.count == 0);
-        gui::ClearGuiScriptService(*scriptContext);
+        scriptContext->SetServiceResolver({});
         scriptContext->SetErrorHandler(nullptr);
     }
 }

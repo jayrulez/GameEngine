@@ -30,7 +30,7 @@ import foundation.run; // the runs whose groups it keeps, and their lifecycle
 import foundation.scene;
 import engine.scene;
 import foundation.audio;
-import foundation.script;   // ExposeToScript and the Audio facade's script service
+import foundation.script;   // CurrentService: the Audio facade's script service
 import foundation.script.facades; // script::Entity/Scene and CurrentRunResources (the SceneAudio handle)
 import foundation.settings; // AudioUserSettings section (persisted volumes)
 import foundation.resource; // ResourceManager (script content-path playback)
@@ -50,17 +50,12 @@ export namespace engine::audio
 
     class AudioSubsystem; // forward declaration (the script binding carries it)
 
-    /// The service key ExposeToScript binds and the scripting Audio facade resolves.
-    /// Its payload is an AudioScriptBinding, as physics does it: one service carries the engine
-    /// (bus and music control) and the subsystem and resource manager (content-path playback),
-    /// so audio does not need a second generic service.
-    inline constexpr StringView kAudioScriptService = u8"audio.runtime";
-
+    /// The application's audio service for scripts, which the Audio facade finds by type: the
+    /// subsystem (its engine for buses and music, its cue state and content-path helpers). Content
+    /// paths resolve through the calling script's resource manager (CurrentRunResources).
     struct AudioScriptBinding
     {
-        AudioEngine* engine = nullptr;
-        AudioSubsystem* subsystem = nullptr;                      // cue state and helpers
-        foundation::resource::ResourceManager* resources = nullptr; // path -> product
+        AudioSubsystem* subsystem = nullptr;
     };
 
     /// One listener's world pose this frame (multi-listener collection).
@@ -758,17 +753,20 @@ export namespace engine::audio
             return PlayCueResolved(cue, params);
         }
 
-        /// Binds this subsystem's script binding as `context`'s audio service, which the
-        /// scripting facade (class Audio below) resolves per context. Call once per context,
-        /// after init. `resources` (optional) enables content-path playback
-        /// (Audio.playOneShot("Sounds/laser") etc.); without it those calls no-op.
-        void ExposeToScript(foundation::script::IScriptContext& scriptContext,
-                            foundation::resource::ResourceManager* resources = nullptr)
+        // The script binding is the application's audio service while this is registered.
+        void OnRegister(foundation::runtime::SubsystemManager* manager) override
         {
-            m_scriptBinding.engine = m_engine.Get();
+            Subsystem::OnRegister(manager);
             m_scriptBinding.subsystem = this;
-            m_scriptBinding.resources = resources;
-            scriptContext.SetService(kAudioScriptService, &m_scriptBinding);
+            manager->RegisterService(m_scriptBinding);
+        }
+        void OnUnregister() override
+        {
+            if (foundation::runtime::SubsystemManager* manager = Manager())
+            {
+                manager->UnregisterService<AudioScriptBinding>();
+            }
+            Subsystem::OnUnregister();
         }
 
         // ---- content-path playback (the facade's resource addressing) ----
@@ -1237,7 +1235,7 @@ export namespace engine::audio
         HashMap<String, bool> m_warnedScriptPaths; // warn-once per content path
     };
     // The scripting facade (shaped like the Input facade): statics on a foreign class resolving
-    // the current script context's bound AudioScriptBinding. Clips and cues play by asset id
+    // the calling script's AudioScriptBinding (CurrentService). Clips and cues play by asset id
     // (playOneShot / playOneShot3D / playCue / playCue3D / playMusic), and the four buses are set
     // by AudioBus (setBusVolume / busVolume). Beside them, named apart since a same-arity overload
     // cannot share a name, the *Path forms play content by its source-DB path (the string shown
@@ -1250,16 +1248,13 @@ export namespace engine::audio
     public:
         [[nodiscard]] static AudioScriptBinding* ResolveBinding()
         {
-            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
-            return scriptContext != nullptr
-                       ? static_cast<AudioScriptBinding*>(scriptContext->GetService(kAudioScriptService))
-                       : nullptr;
+            return foundation::script::CurrentService<AudioScriptBinding>();
         }
 
         [[nodiscard]] static AudioEngine* Resolve()
         {
             AudioScriptBinding* binding = ResolveBinding();
-            return binding != nullptr ? binding->engine : nullptr;
+            return (binding != nullptr && binding->subsystem != nullptr) ? binding->subsystem->Engine() : nullptr;
         }
 
         // The calling script's run group (its run's, made on first use), or 0 outside a run: what
@@ -1273,20 +1268,20 @@ export namespace engine::audio
                        : 0;
         }
 
-        // Playback binding: the subsystem and resource manager are both required (the binding
-        // carries them when the host wired a manager into ExposeToScript).
+        // Playback binding: the subsystem and the calling script's resource manager are both
+        // required (a bare cook VM has no manager, and content paths then no-op).
         [[nodiscard]] static bool
         ResolvePlayback(AudioSubsystem*& outSubsystem,
                         foundation::resource::ResourceManager*& outResources)
         {
             AudioScriptBinding* binding = ResolveBinding();
-            if (binding == nullptr || binding->subsystem == nullptr ||
-                binding->resources == nullptr)
+            foundation::resource::ResourceManager* resources = foundation::script::CurrentRunResources();
+            if (binding == nullptr || binding->subsystem == nullptr || resources == nullptr)
             {
                 return false;
             }
             outSubsystem = binding->subsystem;
-            outResources = binding->resources;
+            outResources = resources;
             return true;
         }
 

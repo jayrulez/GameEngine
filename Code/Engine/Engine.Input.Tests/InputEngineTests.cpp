@@ -66,8 +66,13 @@ namespace
         RefPtr<foundation::script::IScriptContext> ctxB = manager->CreateContext();
         RefPtr<foundation::script::IScriptContext> ctxNone = manager->CreateContext();
         REQUIRE(ctxA.Get() != nullptr);
-        ctxA->SetService(foundation::input::kInputScriptService, &runtimeA);
-        ctxB->SetService(foundation::input::kInputScriptService, &runtimeB);
+        // Each context's host answers with its own runtime (two players: two runs).
+        foundation::script::ScriptServices servicesA;
+        foundation::script::ScriptServices servicesB;
+        servicesA.Add(runtimeA);
+        servicesB.Add(runtimeB);
+        ctxA->SetServiceResolver(servicesA.Resolver());
+        ctxB->SetServiceResolver(servicesB.Resolver());
 
         REQUIRE(ctxA->Load(readScript, u8"main").IsOk());
         CHECK(ctxA->GetGlobal(u8"Down").Get<bool>() == true);
@@ -126,7 +131,9 @@ TEST_CASE("input: a script rumbles its own context's pad, and stops it")
     devicesB.pads.PushBack(&padB);
     RefPtr<foundation::script::IScriptContext> ctxA = manager->CreateContext();
     RefPtr<foundation::script::IScriptContext> ctxNone = manager->CreateContext();
-    ctxA->SetService(foundation::input::kInputScriptService, &runtimeA);
+    foundation::script::ScriptServices servicesA;
+    servicesA.Add(runtimeA);
+    ctxA->SetServiceResolver(servicesA.Resolver());
 
     REQUIRE(ctxA->Load(u8"void main() { Input::rumble(0.6f, 0.3f, 0.2f); }\n", u8"main").IsOk());
     runtimeA.Update(devicesA, 1.0f / 60.0f);

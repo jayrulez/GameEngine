@@ -377,14 +377,18 @@ namespace foundation::script::conformance
             CHECK_FALSE(other->HasFunction(u8"add"));
         }
 
-        // --- per-context services: pointer round-trip, unknown is null ---
+        // --- host services: found by type through the context's resolver, unknown is null ---
         {
+            CHECK(scriptContext->FindService<int>() == nullptr); // no resolver yet
             int payload = 7;
-            scriptContext->SetService(u8"conformance.service", &payload);
-            CHECK(scriptContext->GetService(u8"conformance.service") == &payload);
-            CHECK(scriptContext->GetService(u8"conformance.unknown") == nullptr);
-            scriptContext->SetService(u8"conformance.service", nullptr);
-            CHECK(scriptContext->GetService(u8"conformance.service") == nullptr);
+            ScriptServices services;
+            services.Add(payload);
+            scriptContext->SetServiceResolver(services.Resolver());
+            CHECK(scriptContext->FindService<int>() == &payload);
+            CHECK(scriptContext->FindService<double>() == nullptr);
+            services.Remove<int>();
+            CHECK(scriptContext->FindService<int>() == nullptr);
+            scriptContext->SetServiceResolver({});
         }
 
         // --- GC hook: callable any time; live script objects and their state survive ---

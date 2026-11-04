@@ -37,9 +37,6 @@ export namespace foundation::script
 {
     namespace scene = foundation::scene;
 
-    /// The service key the gameplay facades (Time, Random) resolve per context.
-    inline constexpr StringView kScriptRuntimeService = u8"script.runtime";
-
     /// The reflected behavior-facade names a backend's behavior-module prelude must make
     /// visible (the classes RegisterScriptFacadeReflection installs). Exposed as data so
     /// the language framing stays in the backends: a backend builds its import line
@@ -323,11 +320,7 @@ export namespace foundation::script
             {
                 return;
             }
-            IScriptContext* scriptContext = CurrentScriptContext();
-            auto* binding =
-                scriptContext != nullptr
-                    ? static_cast<ScriptRuntimeBinding*>(scriptContext->GetService(kScriptRuntimeService))
-                    : nullptr;
+            auto* binding = CurrentService<ScriptRuntimeBinding>();
             if (binding != nullptr && binding->dispatchMessage)
             {
                 binding->dispatchMessage(scene, Handle(), message, args);
@@ -350,13 +343,7 @@ export namespace foundation::script
     {
         RTTI_OBJECT(Time, Object)
     public:
-        [[nodiscard]] static ScriptRuntimeBinding* Resolve()
-        {
-            IScriptContext* scriptContext = CurrentScriptContext();
-            return scriptContext != nullptr ? static_cast<ScriptRuntimeBinding*>(
-                                            scriptContext->GetService(kScriptRuntimeService))
-                                      : nullptr;
-        }
+        [[nodiscard]] static ScriptRuntimeBinding* Resolve() { return CurrentService<ScriptRuntimeBinding>(); }
         [[nodiscard]] static f64 now()
         {
             ScriptRuntimeBinding* binding = Resolve();
@@ -667,11 +654,7 @@ export namespace foundation::script
     /// onto a component's resource::Ref. No ambient scene state; the binding is per run.
     [[nodiscard]] inline foundation::resource::ResourceManager* CurrentRunResources()
     {
-        IScriptContext* scriptContext = CurrentScriptContext();
-        auto* binding =
-            scriptContext != nullptr
-                ? static_cast<ScriptRuntimeBinding*>(scriptContext->GetService(kScriptRuntimeService))
-                : nullptr;
+        auto* binding = CurrentService<ScriptRuntimeBinding>();
         return (binding != nullptr && binding->resolveResources) ? binding->resolveResources()
                                                                  : nullptr;
     }
@@ -679,11 +662,7 @@ export namespace foundation::script
     /// The run the current script context belongs to (ScriptRuntimeBinding::run), or null.
     [[nodiscard]] inline foundation::run::IRun* CurrentRun()
     {
-        IScriptContext* scriptContext = CurrentScriptContext();
-        auto* binding =
-            scriptContext != nullptr
-                ? static_cast<ScriptRuntimeBinding*>(scriptContext->GetService(kScriptRuntimeService))
-                : nullptr;
+        auto* binding = CurrentService<ScriptRuntimeBinding>();
         return binding != nullptr ? binding->run : nullptr;
     }
 

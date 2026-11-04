@@ -117,7 +117,10 @@ namespace
             RefPtr<script::IScriptContext> scripts = manager.CreateContext();
             Errors errors;
             scripts->SetErrorHandler(&errors);
-            gui->ExposeToScript(*scripts);
+            // The GUI subsystem offers its binding as one of the app's services; this bare context
+            // finds the app's services as a run host's would.
+            scripts->SetServiceResolver(script::IScriptContext::ServiceResolver{
+                [this](TypeId type) { return context.FindService(type); }});
             const String text = WithMenu(source);
             const Status loaded = scripts->Load(text.AsView(), u8"main");
             INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
@@ -137,7 +140,7 @@ namespace
             CHECK(gui->Screens()->IsPaused());
             CHECK(number(u8"hasStatus") == doctest::Approx(1.0));
             CHECK(errors.count == 0);
-            ClearGuiScriptService(*scripts);
+            scripts->SetServiceResolver({});
             scripts->SetErrorHandler(nullptr);
         }
     };
@@ -168,7 +171,8 @@ TEST_CASE("engine-gui-script: AngelScript reaches a canvas's, a billboard's and 
     RefPtr<script::IScriptContext> scripts = manager->CreateContext();
     Errors errors;
     scripts->SetErrorHandler(&errors);
-    bed.gui->ExposeToScript(*scripts);
+    scripts->SetServiceResolver(script::IScriptContext::ServiceResolver{
+        [&bed](TypeId type) { return bed.context.FindService(type); }});
     const Status loaded = scripts->Load(StringView(u8"Node@ canvas(Entity@ e) { return GuiCanvasComponent::of(e).root(); }\n"
                                                    u8"Node@ board(Entity@ e) { return GuiBillboardComponent::of(e).root(); }\n"
                                                    u8"Node@ panel(Entity@ e) { return GuiWorldPanelComponent::of(e).root(); }\n"),
@@ -176,7 +180,7 @@ TEST_CASE("engine-gui-script: AngelScript reaches a canvas's, a billboard's and 
     INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
     CHECK(loaded.IsOk());
     CHECK(errors.count == 0);
-    ClearGuiScriptService(*scripts);
+    scripts->SetServiceResolver({});
     scripts->SetErrorHandler(nullptr);
 }
 #endif

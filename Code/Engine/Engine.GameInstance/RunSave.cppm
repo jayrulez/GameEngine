@@ -27,8 +27,6 @@ export namespace engine::runtime
 {
     namespace script = foundation::script;
 
-    inline constexpr StringView kSaveScriptService = u8"run.save";
-
     class RunSave
     {
     public:
@@ -76,9 +74,7 @@ export namespace engine::runtime
     public:
         [[nodiscard]] static RunSave* Resolve()
         {
-            script::IScriptContext* scriptContext = script::CurrentScriptContext();
-            return scriptContext != nullptr ? static_cast<RunSave*>(scriptContext->GetService(kSaveScriptService))
-                                      : nullptr;
+            return script::CurrentService<RunSave>(); // the calling script's run's save
         }
 
         [[nodiscard]] static bool has(core::String key);
@@ -101,11 +97,6 @@ export namespace engine::runtime
         // Writes now if anything changed; false if the write failed or the run has no save file.
         static bool flush();
     };
-
-    inline void InstallSaveScriptService(script::IScriptContext& scriptContext, RunSave& save)
-    {
-        scriptContext.SetService(kSaveScriptService, &save);
-    }
 
     // Registers the `Save` facade (and the save section's type, which reading a save file needs).
     // Idempotent; the run domain calls it with the run facade.

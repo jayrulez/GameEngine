@@ -1614,12 +1614,9 @@ namespace
     public:
         void Poke() const
         {
-            if (IScriptContext* scriptContext = CurrentScriptContext())
+            if (int* flag = CurrentService<int>())
             {
-                if (int* flag = static_cast<int*>(scriptContext->GetService(u8"probe.flag")))
-                {
-                    *flag = 42;
-                }
+                *flag = 42;
             }
         }
     };
@@ -1640,13 +1637,15 @@ TEST_CASE("angelscript: a delegate callback scopes its owning context (facades r
     conformance::CapturedErrors errors;
     scriptContext->SetErrorHandler(&errors);
 
-    // The per-context service the handler's facade will resolve (engine singletons reach
-    // scripts through CurrentScriptContext()->GetService, never a process global).
+    // The host service the handler's facade will resolve (engine services reach scripts through
+    // CurrentService, never a process global).
     int flag = 0;
-    scriptContext->SetService(u8"probe.flag", &flag);
+    ScriptServices services;
+    services.Add(flag);
+    scriptContext->SetServiceResolver(services.Resolver());
 
     // A script function subscribed to a native signal; its body calls the reflected static that
-    // reads CurrentScriptContext()->GetService and writes through it.
+    // reads CurrentService and writes through it.
     REQUIRE(scriptContext->Load(u8"double onFire(double x) { ContextProbe p; p.Poke(); return x; }\n"
                       u8"DelegateSignal@ signal = DelegateSignal();\n"
                       u8"void main() { signal.Connect(ScriptDelegate(onFire)); }\n",

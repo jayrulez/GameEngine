@@ -947,7 +947,10 @@ RefPtr<script::IScriptContext> GUISandbox::RunScript(StringView relative, gui::G
         return {};
     RefPtr<script::IScriptContext> scriptContext = m_scripts->CreateContext();
     scriptContext->SetErrorHandler(&m_scriptErrors);
-    gui::InstallGuiScriptService(*scriptContext, binding);
+    // The script's one host service: this page's GUI binding.
+    gui::GuiScriptBinding* guiBinding = &binding;
+    scriptContext->SetServiceResolver(script::IScriptContext::ServiceResolver{
+        [guiBinding](TypeId type) -> void* { return type == TypeOf<gui::GuiScriptBinding>().id ? guiBinding : nullptr; }});
     if (!scriptContext->Load(source.AsView(), relative).IsOk())
         std::fprintf(stderr, "GUISandbox: %s did not load\n", reinterpret_cast<const char*>(String(relative).CStr()));
     return scriptContext;
@@ -3448,7 +3451,7 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     {
         if (!scriptContext)
             return;
-        gui::ClearGuiScriptService(*scriptContext);
+        scriptContext->SetServiceResolver({});
         scriptContext->SetErrorHandler(nullptr);
         scriptContext.Reset();
     };

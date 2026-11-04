@@ -80,6 +80,7 @@ namespace
         input::ActionRuntime actions;
         gui::InputPrompts prompts;
         gui::GuiScriptBinding binding;
+        foundation::script::ScriptServices services; // the script's host services: its GUI binding
         Errors errors;
         core::RefPtr<script::IScriptManager> manager;
         core::RefPtr<script::IScriptContext> scriptContext;
@@ -136,7 +137,8 @@ namespace
             binding.root = root.Get();
             scriptContext = manager->CreateContext();
             scriptContext->SetErrorHandler(&errors);
-            gui::InstallGuiScriptService(*scriptContext, binding);
+            services.Add(binding);
+            scriptContext->SetServiceResolver(services.Resolver());
             const core::Status loaded = scriptContext->Load(ReadData(SV(u8"Samples/UI/showcase/menu.as")).AsView(), SV(u8"menu.as"));
             INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
             REQUIRE(loaded.IsOk());
@@ -146,7 +148,7 @@ namespace
         {
             if (scriptContext)
             {
-                gui::ClearGuiScriptService(*scriptContext);
+                scriptContext->SetServiceResolver({});
                 scriptContext->SetErrorHandler(nullptr);
             }
             gui::InputPrompts::Uninstall(root->GetContext());

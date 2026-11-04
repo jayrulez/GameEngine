@@ -606,7 +606,9 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (Lu
     RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     RunFake fake;
-    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
+    foundation::script::ScriptServices services; // a bare context: the test answers its lookups
+    services.Add(fake.binding);
+    scriptContext->SetServiceResolver(services.Resolver());
 
     // Start the load, then poll to completion; record the observable results in module globals.
     const Status status = scriptContext->Load(u8"t = run.loadSceneAsync(Guid.new(0xABC, 0xDEF))\n"
@@ -634,7 +636,9 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (An
     RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     RunFake fake;
-    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
+    foundation::script::ScriptServices services; // a bare context: the test answers its lookups
+    services.Add(fake.binding);
+    scriptContext->SetServiceResolver(services.Resolver());
 
     const Status status = scriptContext->Load(u8"int t;\n"
                                     u8"bool Poll1; double Prog; bool Poll2;\n"
@@ -689,7 +693,9 @@ TEST_CASE("game-instance: run.requestExit routes the exit code to the binding (A
     RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     ExitFake fake;
-    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
+    foundation::script::ScriptServices services; // a bare context: the test answers its lookups
+    services.Add(fake.binding);
+    scriptContext->SetServiceResolver(services.Resolver());
 
     // The 1-arg overload routes the code; the 0-arg overload routes code 0.
     const Status status = scriptContext->Load(u8"void main() {\n"
@@ -712,7 +718,9 @@ TEST_CASE("game-instance: run.requestExit routes the exit code to the binding (L
     RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     ExitFake fake;
-    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
+    foundation::script::ScriptServices services; // a bare context: the test answers its lookups
+    services.Add(fake.binding);
+    scriptContext->SetServiceResolver(services.Resolver());
 
     const Status status = scriptContext->Load(u8"run.requestExit(2)\n"
                                     u8"Seen = 1\n",
@@ -1557,9 +1565,11 @@ TEST_CASE("game-instance: a context for behaviors gets the run's input, run and 
     CHECK_FALSE(gi.ScriptRunning());
     foundation::script::IScriptContext* scriptContext = gi.RunHost().EnsureContextForFile(u8"behaviors.as");
     REQUIRE(scriptContext != nullptr);
-    CHECK(scriptContext->GetService(foundation::input::kInputScriptService) == &gi.InputRuntime());
-    CHECK(scriptContext->GetService(engine::runtime::kRunScriptService) != nullptr);
-    CHECK(scriptContext->GetService(engine::runtime::kSaveScriptService) == &gi.Saves());
+    CHECK(scriptContext->FindService<foundation::input::ActionRuntime>() == &gi.InputRuntime());
+    CHECK(scriptContext->FindService<engine::runtime::RunScriptBinding>() != nullptr);
+    CHECK(scriptContext->FindService<engine::runtime::RunSave>() == &gi.Saves());
+    CHECK(scriptContext->FindService<foundation::http::HttpScriptBinding>() == &gi.Http());
+    CHECK(scriptContext->FindService<foundation::net::NetScriptBinding>() != nullptr);
 }
 
 // The run clock is the host's unscaled delta, so it keeps going while the game pauses its scene
@@ -1810,4 +1820,32 @@ TEST_CASE("game-instance: Save flushes on request and clears (Luau); a run with 
         CHECK(gi.Saves().Values().GetInt(u8"coins", 0) == 5);
         gi.StopScript();
     }
+}
+
+namespace
+{
+    struct AppOnlyService
+    {
+        int value = 0;
+    };
+}
+
+// A run's script finds a service through its run host: the host's runtime binding, then its run's
+// services, then the application's. A run's own copy of a type hides the application's for that
+// run's scripts (each run reads its own input), and what only the application offers is still found.
+TEST_CASE("game-instance: script services resolve the run first, then the application")
+{
+    engine::runtime::GameInstance gi;
+    foundation::input::ActionRuntime appInput;
+    AppOnlyService appOnly;
+    foundation::script::ScriptServices app;
+    app.Add(appInput);
+    app.Add(appOnly);
+    gi.RunHost().SetApplicationServices(Function<void*(TypeId)>{[&app](TypeId type) { return app.Find(type); }});
+
+    engine::script::ScriptRunHost& host = gi.RunHost();
+    CHECK(host.FindService(TypeOf<foundation::input::ActionRuntime>().id) == &gi.InputRuntime()); // the run's
+    CHECK(host.FindService(TypeOf<AppOnlyService>().id) == &appOnly);                           // the app's
+    CHECK(host.FindService(TypeOf<foundation::script::ScriptRuntimeBinding>().id) == &host.Binding());
+    CHECK(host.FindService(TypeOf<double>().id) == nullptr);
 }

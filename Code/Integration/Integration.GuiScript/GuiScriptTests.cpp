@@ -48,6 +48,7 @@ namespace
     {
         RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
         gui::GuiScriptBinding binding;
+        foundation::script::ScriptServices services; // the script's host services: its GUI binding
         Errors errors;
         RefPtr<IScriptContext> scriptContext;
 
@@ -57,7 +58,8 @@ namespace
             binding.root = root.Get();
             scriptContext = manager.CreateContext();
             scriptContext->SetErrorHandler(&errors);
-            gui::InstallGuiScriptService(*scriptContext, binding);
+            services.Add(binding);
+            scriptContext->SetServiceResolver(services.Resolver());
         }
         ~GuiBed()
         {
@@ -156,7 +158,7 @@ namespace
 
         // A handle outliving its GUI reads as gone, never as freed memory.
         CHECK(bed.Number(u8"goValid") == doctest::Approx(1.0));
-        gui::ClearGuiScriptService(*bed.scriptContext);
+        bed.services.Remove<gui::GuiScriptBinding>();
         bed.binding.root = nullptr;
         bed.root = RefPtr<gui::SceneRoot>{};
         CHECK(bed.Number(u8"goValid") == doctest::Approx(0.0));

@@ -889,7 +889,20 @@ namespace engine::gui
             m_overlay->RemoveChild(&overlay);
     }
 
-    void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& scriptContext) { InstallGuiScriptService(scriptContext, m_scriptBinding); }
+    void GuiSubsystem::OnRegister(foundation::runtime::SubsystemManager* manager)
+    {
+        Subsystem::OnRegister(manager);
+        manager->RegisterService(m_scriptBinding);
+    }
+
+    void GuiSubsystem::OnUnregister()
+    {
+        if (foundation::runtime::SubsystemManager* manager = Manager())
+        {
+            manager->UnregisterService<GuiScriptBinding>();
+        }
+        Subsystem::OnUnregister();
+    }
 
     void GuiSubsystem::OnReady()
     {

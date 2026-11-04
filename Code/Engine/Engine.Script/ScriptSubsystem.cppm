@@ -263,22 +263,27 @@ export namespace engine::script
         {
         }
 
-        /// Extra per-context wiring (the host app exposes Input, Audio and Physics services).
-        void SetContextConfigurator(Function<void(IScriptContext&)> configurator)
+        /// Where this host's context finds the application's services by type (the app's
+        /// subsystem manager, wired by ScriptSubsystem::ConfigureRunHost): what the context's
+        /// resolver asks after this host's own binding and its run's services.
+        void SetApplicationServices(Function<void*(TypeId)> services) { m_applicationServices = Move(services); }
+
+        /// The service of type `type` for this host's scripts: the runtime binding, then the run's
+        /// services (Binding().run), then the application's. What its context resolves through.
+        [[nodiscard]] void* FindService(TypeId type) const
         {
-            m_configurator = Move(configurator);
-        }
-        /// The host's owner's services (a game instance: its run.*, its input runtime, its save),
-        /// applied after the app's configurator to every context this host makes, so its behaviors
-        /// read the run's services whether or not a game script ever starts. A context that
-        /// already exists takes them at once.
-        void SetOwnerServices(Function<void(IScriptContext&)> services)
-        {
-            m_ownerServices = Move(services);
-            if (m_scriptContext.Get() != nullptr && m_ownerServices)
+            if (type == TypeOf<ScriptRuntimeBinding>().id)
             {
-                m_ownerServices(*m_scriptContext);
+                return const_cast<ScriptRuntimeBinding*>(&m_binding);
             }
+            if (m_binding.run != nullptr)
+            {
+                if (void* service = m_binding.run->FindService(type))
+                {
+                    return service;
+                }
+            }
+            return m_applicationServices ? m_applicationServices(type) : nullptr;
         }
         void SetExternalErrorSink(IScriptErrorHandler* sink) noexcept
         {
@@ -361,15 +366,9 @@ export namespace engine::script
             m_binding.deltaSeconds = 0.0f;
             m_binding.random = core::Random{}; // fresh per-run RNG
             m_scriptContext->SetErrorHandler(&m_errorSink);
-            m_scriptContext->SetService(kScriptRuntimeService, &m_binding);
-            if (m_configurator)
-            {
-                m_configurator(*m_scriptContext);
-            }
-            if (m_ownerServices)
-            {
-                m_ownerServices(*m_scriptContext); // the owner's own, over the app's shared ones
-            }
+            const ScriptRunHost* self = this;
+            m_scriptContext->SetServiceResolver(
+                IScriptContext::ServiceResolver{[self](TypeId type) { return self->FindService(type); }});
             m_moduleCurrent = false;
             EnsureDebugger(); // a debugger requested before the context existed attaches now
             LOG_DEBUG(u8"Script", u8"run script context created ({})", languageId);
@@ -581,8 +580,7 @@ export namespace engine::script
         RunScriptErrorSink m_errorSink;
         ScriptRuntimeBinding m_binding;
         foundation::core::IAllocator* m_allocator;
-        Function<void(IScriptContext&)> m_configurator;
-        Function<void(IScriptContext&)> m_ownerServices; // SetOwnerServices
+        Function<void*(TypeId)> m_applicationServices; // SetApplicationServices
         Array<RefPtr<ScriptClass>> m_loadedClasses; // the behaviors module's content
         Array<BehaviorModuleClass>
             m_classSourceScratch;              // reused per-rebuild {sourceName, source} list
@@ -1689,20 +1687,17 @@ export namespace engine::script
 
         /// Wire a run host (this default or a GameInstance's) with the app services and routing so
         /// its context, once created, has the facades, the Scene.spawn spawner, and entity.send
-        /// routing. The wrappers read the stored configurator, spawner and m_systems live, so one
+        /// routing. The wrappers read the subsystem manager, spawner and m_systems live, so one
         /// call per host suffices and the same message route serves every host. Call once per run
         /// host before its first context is created.
         void ConfigureRunHost(ScriptRunHost& host)
         {
             ScriptSubsystem* self = this;
-            host.SetContextConfigurator(
-                Function<void(IScriptContext&)>{[self](IScriptContext& scriptContext)
-                                                {
-                                                    if (self->m_configurator)
-                                                    {
-                                                        self->m_configurator(scriptContext);
-                                                    }
-                                                }});
+            // The application's services are its subsystem manager's, read at each call, so a
+            // subsystem registered after this host was configured is still found.
+            host.SetApplicationServices(Function<void*(TypeId)>{
+                [self](TypeId type) -> void*
+                { return self->Manager() != nullptr ? self->Manager()->FindService(type) : nullptr; }});
             // Resource swaps: forward to the app's getter at call time, so a manager
             // created after this host was configured is still seen.
             host.Binding().resolveResources = Function<resource::ResourceManager*()>{
@@ -1795,12 +1790,6 @@ export namespace engine::script
             DeliverContactSide(*system, scene, b, a, handler, point, normal, speed, trigger);
         }
 
-        /// Host-app wiring: exposes engine services (Input, Audio and Physics facades) on every run
-        /// context (through ConfigureRunHost's live wrapper: the default host and every instance host).
-        void SetContextConfigurator(Function<void(IScriptContext&)> configurator)
-        {
-            m_configurator = Move(configurator);
-        }
         /// Host-app wiring: a getter for the run's resource manager, behind the resource-swap
         /// operations (SceneRender.setMesh, ...). A getter, not a pointer, because the app's manager
         /// is created after Configure runs: resolveResources reads it per call, so it sees the
@@ -1957,8 +1946,6 @@ export namespace engine::script
             foundation::core::DefaultAllocator()}; // the default run host (editor and editing
                                                    // scenes), on the process root allocator
         Array<SceneEntry> m_systems;
-        Function<void(IScriptContext&)>
-            m_configurator; // app services, applied to every host via ConfigureRunHost
         Function<resource::ResourceManager*()>
             m_resourcesGetter; // resource swaps (late-bound; the app owns the manager)
     };

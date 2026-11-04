@@ -16,8 +16,10 @@ served that purpose - historical mentions in older specs refer to it.
 
 - `IScriptManager` / `IScriptContext` - VM-agnostic; everything crosses as `Variant` +
   `TypeInfo`. `ScriptObject::Invoke(method, Span<Variant>)` calls a script method;
-  `IScriptErrorHandler` carries kind/module/line/message; per-context host services
-  (`SetService(type, ptr)`) resolve subsystem pointers per VM (no process globals).
+  `IScriptErrorHandler` carries kind/module/line/message; a context's host services are found
+  by type (`CurrentService<T>`): its run host answers with its runtime binding, then its run's
+  services, then the application's (subsystems register theirs with their manager), so there are
+  no process globals and no lists of what to install.
 - `RegisterReflectedTypes(manager)` emits the whole reflection registry into a backend in
   one call. Facades are ordinary reflected classes, so a new backend inherits the full
   engine API from reflection.

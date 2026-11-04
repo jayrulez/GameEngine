@@ -20,9 +20,9 @@ import foundation.script;
 import engine.script;
 import foundation.script.facades; // RegisterExtraFacadeName (run behavior-prelude hook)
 import foundation.net.manager; // NetworkManager factories + InstallNetScriptService
-import foundation.input;       // kInputScriptService (install the per-instance runtime)
+import foundation.input;       // ActionRuntime (the per-instance runtime)
 import foundation.net.tls;
-import foundation.http.script; // InstallHttpScriptService, RegisterHttpScriptFacade
+import foundation.http.script; // HttpScriptBinding, RegisterHttpScriptFacade
 #if !PLATFORM_WEB
 import foundation.net.tls.mbedtls; // the native TLS backend (a browser does its own)
 #endif
@@ -101,18 +101,6 @@ namespace engine::runtime
         (void)once;
     }
 
-    void GameInstance::InstallRunServices(script::IScriptContext& scriptContext)
-    {
-        m_runBinding.runEvents = &Events();            // run.events() -> this run's bus
-        InstallRunScriptService(scriptContext, m_runBinding);   // run.* -> this instance's registry
-        // This instance's input runtime as the context's Input service (overriding the shared
-        // editor runtime the run-host configurator installed), so the run reads only its own
-        // source.
-        scriptContext.SetService(input::kInputScriptService, &m_inputRuntime);
-        InstallSaveScriptService(scriptContext, m_save); // Save.* -> this run's save
-        foundation::http::InstallHttpScriptService(scriptContext, m_http); // Http.* -> this run's client
-    }
-
     foundation::net::ITlsBackend* GameInstance::TlsBackend()
     {
 #if !PLATFORM_WEB
@@ -141,9 +129,6 @@ namespace engine::runtime
         }
         m_scriptContext = core::RefPtr<script::IScriptContext>(scriptContext);
         m_runHost.SetGameScriptHold(true);
-        // The game script (its menu) can now call Net.startServer()/connect(); they resolve the controller.
-        m_network.InstallScriptBinding(m_scriptContext.Get());
-        InstallRunServices(*scriptContext); // the host's owner services did this at creation; idempotent
 
         const bool loaded = m_scriptContext->Load(source, name).IsOk();
         m_runHost

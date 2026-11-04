@@ -72,10 +72,8 @@ export namespace engine::runtime
     // sharing the name of the mandatory `Game` orchestrator class is a hard AngelScript name
     // conflict.
 
-    inline constexpr StringView kRunScriptService = u8"run.runtime";
-
-    // Installed as a per-context script service; the run facade resolves it. The app fills the
-    // pointers (backed by the owning GameInstance and content DB). Null pointers are safe no-ops.
+    // One of the run's services, which the run facade finds by type. The app fills the pointers
+    // (backed by the owning GameInstance and content DB). Null pointers are safe no-ops.
     struct RunScriptBinding
     {
         core::Function<i32(const core::Guid&)> loadSceneAsync; // -> ticket (0 = failed to start)
@@ -107,14 +105,6 @@ export namespace engine::runtime
         messaging::EventBus* runEvents = nullptr;
     };
 
-    inline void InstallRunScriptService(script::IScriptContext& scriptContext, RunScriptBinding& binding)
-    {
-        scriptContext.SetService(kRunScriptService, &binding);
-    }
-    inline void ClearRunScriptService(script::IScriptContext& scriptContext)
-    {
-        scriptContext.SetService(kRunScriptService, nullptr);
-    }
 
     // ---- run.* script facade: the run and app tier surfaced to scripts. A static facade bound to
     // scripts in lowercase as `run` (the ScriptName alias). run.events() returns the run-bus handle
@@ -145,10 +135,7 @@ export namespace engine::runtime
     public:
         [[nodiscard]] static RunScriptBinding* Resolve()
         {
-            script::IScriptContext* scriptContext = script::CurrentScriptContext();
-            return scriptContext != nullptr
-                       ? static_cast<RunScriptBinding*>(scriptContext->GetService(kRunScriptService))
-                       : nullptr;
+            return script::CurrentService<RunScriptBinding>();
         }
         [[nodiscard]] static RunEvents events()
         {
@@ -334,12 +321,11 @@ export namespace engine::runtime
             // This instance is the run: its scenes and its scripts carry it, so run-scoped systems
             // (audio) group them by it.
             m_sceneManager.SetSceneRun(this);
+            // Every context of this run finds this run's services through the run (run.*, its input,
+            // its save, its HTTP, its networking), a behavior context as much as a game script's: a
+            // project with no game script still has input.
             m_runHost.Binding().run = this;
-            // Every context of this run reads this run's services (run.*, its input, its save), a
-            // behavior context as much as a game script's: a project with no game script still has
-            // input.
-            m_runHost.SetOwnerServices(core::Function<void(script::IScriptContext&)>{
-                [this](script::IScriptContext& scriptContext) { InstallRunServices(scriptContext); }});
+            m_runBinding.runEvents = &Events(); // run.events() -> this run's bus
             // The run's HTTP client is made on its scripts' first request, and https and a wss
             // join use the run's TLS backend, made when first needed.
             m_http.SetFactory([this]() { return foundation::http::CreateHttpClient(*m_allocator, TlsBackend()); });
@@ -352,6 +338,8 @@ export namespace engine::runtime
             Register<RunSave>(m_save);
             Register<engine::script::ScriptRunHost>(m_runHost);
             Register<foundation::http::HttpScriptBinding>(m_http);
+            Register<RunScriptBinding>(m_runBinding);
+            Register<foundation::net::NetScriptBinding>(m_network.ScriptBinding());
         }
 
         // Disposed here, while the members registered on it still exist (their stop hooks run,
@@ -363,10 +351,6 @@ export namespace engine::runtime
         [[nodiscard]] foundation::net::ITlsBackend* TlsBackend();
         /// This run's HTTP for its scripts (pumped by TickScript, reset by StopScript).
         [[nodiscard]] foundation::http::HttpScriptBinding& Http() noexcept { return m_http; }
-
-        /// This run's services on a script context: run.* (and its event bus), the run's own
-        /// input runtime (over the shared one the app's configurator installs) and its save.
-        void InstallRunServices(script::IScriptContext& scriptContext);
 
         void SetScene(scene::Scene* scene) noexcept
         {
@@ -716,7 +700,7 @@ export namespace engine::runtime
         core::UniquePtr<foundation::net::ITlsBackend> m_tls; // made on first use (TlsBackend)
         NetworkController m_network; // this run's networking (endpoint and INetworkController)
         RunScriptBinding
-            m_runBinding; // stable; app fills its pointers, installed per context (StartScript)
+            m_runBinding; // stable; app fills its pointers; one of the run's services
 
         input::ActionRuntime m_inputRuntime; // this run's action state (per-instance)
         RunSave m_save{DefaultAllocator()};  // this run's save, installed per context (StartScript)

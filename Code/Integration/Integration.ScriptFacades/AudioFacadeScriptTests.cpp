@@ -141,10 +141,28 @@ namespace
         subsystems.Startup();
         REQUIRE(subsystem.Engine() != nullptr);
 
+        // What a run host answers for its contexts, here for bare ones: the runtime binding (the
+        // resource manager content paths resolve through, and the run when there is one), then
+        // the application's services, where the subsystem offers its audio binding.
+        const auto resolverFor = [&subsystems](foundation::script::ScriptRuntimeBinding& runtime)
+        {
+            return foundation::script::IScriptContext::ServiceResolver{
+                [&subsystems, &runtime](TypeId type) -> void*
+                {
+                    if (type == TypeOf<foundation::script::ScriptRuntimeBinding>().id)
+                    {
+                        return &runtime;
+                    }
+                    return subsystems.FindService(type);
+                }};
+        };
+        foundation::script::ScriptRuntimeBinding appRuntime;
+        appRuntime.resolveResources = [&manager]() { return &manager; };
+
         foundation::script::RegisterReflectedTypes(*scripts);
         RefPtr<foundation::script::IScriptContext> scriptContext = scripts->CreateContext();
         REQUIRE(scriptContext.Get() != nullptr);
-        subsystem.ExposeToScript(*scriptContext, &manager);
+        scriptContext->SetServiceResolver(resolverFor(appRuntime));
 
         REQUIRE(scriptContext->Load(script, u8"main").IsOk());
         CHECK(scriptContext->GetGlobal(u8"Played").Get<bool>());
@@ -170,7 +188,7 @@ namespace
             RefPtr<foundation::script::IScriptContext> ids = scripts->CreateContext();
             ErrorLog errors;
             ids->SetErrorHandler(&errors);
-            subsystem.ExposeToScript(*ids, &manager);
+            ids->SetServiceResolver(resolverFor(appRuntime));
             const Status loaded = ids->Load(byId.AsView(), u8"main");
             if (!loaded.IsOk())
             {
@@ -219,10 +237,10 @@ namespace
             runKey.Start();
             foundation::script::ScriptRuntimeBinding runtime;
             runtime.run = &runKey;
+            runtime.resolveResources = [&manager]() { return &manager; };
             subsystem.Engine()->SetBusVolume(AudioBus::Music, 1.0f);
             RefPtr<foundation::script::IScriptContext> inRun = scripts->CreateContext();
-            inRun->SetService(foundation::script::kScriptRuntimeService, &runtime);
-            subsystem.ExposeToScript(*inRun, &manager);
+            inRun->SetServiceResolver(resolverFor(runtime));
             const String byId = idScript(StringView(beepText), StringView(stepsText));
             REQUIRE(inRun->Load(byId.AsView(), u8"main").IsOk());
             const u64 run = subsystem.FindRunGroup(&runKey);

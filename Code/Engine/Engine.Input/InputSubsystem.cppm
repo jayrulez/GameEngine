@@ -30,10 +30,6 @@ using namespace foundation::input;
 
 export namespace engine::input
 {
-    /// The service key ExposeToScript binds and the scripting facade resolves.
-    // kInputScriptService lives in foundation.input (:runtime) so per-instance owners
-    // (GameInstance) can install their own runtime under it without importing this subsystem.
-
     /// How game-UI input routing treats the active source when it carries no scene binding (see
     /// SetSourceProvider). The player's shell source owns the whole window, so unbound input
     /// reaches every scene's UI (AllScenes, the default). An editor-embedded runtime sets
@@ -83,6 +79,22 @@ export namespace engine::input
 
         /// Installs (copies) a map: from the cooked resource, a test, or hand-authored.
         void SetMap(const InputMap& map) { m_runtime.SetMap(map); }
+
+        // The runtime is the application's input service for scripts (the Input facade finds it
+        // by type); a run with its own runtime offers that one first to the run's scripts.
+        void OnRegister(foundation::runtime::SubsystemManager* manager) override
+        {
+            Subsystem::OnRegister(manager);
+            manager->RegisterService(m_runtime);
+        }
+        void OnUnregister() override
+        {
+            if (foundation::runtime::SubsystemManager* manager = Manager())
+            {
+                manager->UnregisterService<ActionRuntime>();
+            }
+            Subsystem::OnUnregister();
+        }
 
         /// Overrides the device source (play in editor: the Game viewport's gated facades). Null
         /// restores the shell devices.
@@ -139,14 +151,6 @@ export namespace engine::input
                                            : static_cast<IInputSourceProvider&>(m_shellSource);
         }
 
-        /// Binds this subsystem's runtime as `context`'s input service. The scripting facade (class
-        /// Input below) resolves it per context, so two contexts can read two different runtimes
-        /// (several players; the editor and the game). Call once per created context.
-        void ExposeToScript(foundation::script::IScriptContext& scriptContext)
-        {
-            scriptContext.SetService(kInputScriptService, &m_runtime);
-        }
-
         void Update(f32 deltaTime) override
         {
             if (foundation::runtime::SubsystemManager* context = Manager())
@@ -167,23 +171,18 @@ export namespace engine::input
         ActionRuntime m_runtime;
     };
 
-    // The scripting facade: a foreign class named `Input` whose static methods resolve the current
-    // script context's bound runtime (foundation.script's CurrentScriptContext, pushed by the
-    // backend around every reflected dispatch). There are no process globals: a context without the
-    // service, or a call from outside any script, reads released. Some backends cannot inject host
+    // The scripting facade: a foreign class named `Input` whose static methods resolve the calling
+    // script's runtime (foundation.script's CurrentService, through the context the backend pushes
+    // around every reflected dispatch). There are no process globals: a script with no runtime, or
+    // a call from outside any script, reads released. Some backends cannot inject host
     // objects as module globals, which is why the API is static methods on a foreign class rather
     // than a passed object.
     class Input final : public Object
     {
         RTTI_OBJECT(Input, Object)
     public:
-        [[nodiscard]] static ActionRuntime* Resolve()
-        {
-            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
-            return scriptContext != nullptr
-                       ? static_cast<ActionRuntime*>(scriptContext->GetService(kInputScriptService))
-                       : nullptr;
-        }
+        /// The calling script's runtime: its run's, else the application's.
+        [[nodiscard]] static ActionRuntime* Resolve() { return foundation::script::CurrentService<ActionRuntime>(); }
 
         [[nodiscard]] static bool isDown(String name)
         {

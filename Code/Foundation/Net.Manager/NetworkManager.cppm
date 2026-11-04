@@ -36,8 +36,6 @@ export namespace foundation::net
 {
 
     // The service key the Net facade resolves per script context (distinct from script.runtime).
-    inline constexpr StringView kNetScriptService = u8"net.runtime";
-
     // Reserved channel for StateReplication deltas (alongside kControlChannel=255, kRpcChannel=254).
     inline constexpr u8 kReplicationChannel = 253;
 
@@ -58,9 +56,9 @@ export namespace foundation::net
         [[nodiscard]] virtual NetworkManager* NetEndpoint() const = 0;
     };
 
-    // Installed as a per-context script service that the Net facade resolves. It holds the controller
-    // (the GameInstance), which is stable for the instance's life: the endpoint may come and go, but
-    // the binding itself cannot dangle. Install and clear it with the free helpers below.
+    // A run's script service for the Net facade (the run holds it; the facade finds it by type). It
+    // holds the controller (the GameInstance's), which is stable for the run's life: the endpoint may
+    // come and go, but the binding itself cannot dangle.
     struct NetScriptBinding
     {
         INetworkController* controller = nullptr;
@@ -393,19 +391,8 @@ export namespace foundation::net
         f64 m_interpDelayMs = 100.0;
     };
 
-    // Point or clear a script context's Net facade at a binding. The binding (a GameInstance member)
-    // must outlive the context; the owner clears it before teardown. The facade reads binding.controller.
-    inline void InstallNetScriptService(IScriptContext& scriptContext, NetScriptBinding& binding)
-    {
-        scriptContext.SetService(kNetScriptService, &binding);
-    }
-    inline void ClearNetScriptService(IScriptContext& scriptContext)
-    {
-        scriptContext.SetService(kNetScriptService, nullptr);
-    }
-
     // Script facade: read the live session, drive roles (server/connect/disconnect), and fire RPCs.
-    // Static methods resolve the per-context NetScriptBinding, then its controller, then the live
+    // Static methods resolve the calling script's run's NetScriptBinding, then its controller, then the live
     // endpoint (null-safe when offline). Ports are i32 in script. Both script backends bind it
     // through reflection. Defined after NetworkManager so the read paths see the full type.
     class Net final : public Object
@@ -414,10 +401,7 @@ export namespace foundation::net
     public:
         [[nodiscard]] static NetScriptBinding* Resolve()
         {
-            IScriptContext* scriptContext = CurrentScriptContext();
-            return scriptContext != nullptr
-                       ? static_cast<NetScriptBinding*>(scriptContext->GetService(kNetScriptService))
-                       : nullptr;
+            return CurrentService<NetScriptBinding>();
         }
         // The live endpoint for the current script context, or null when offline.
         [[nodiscard]] static NetworkManager* Endpoint()

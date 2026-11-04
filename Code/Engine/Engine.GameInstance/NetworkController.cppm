@@ -75,15 +75,12 @@ export namespace engine::runtime
         /// Where a wss join's TLS backend comes from (the run's, made on first use).
         void SetTlsBackendSource(Function<net::ITlsBackend*()> source) { m_tlsSource = static_cast<Function<net::ITlsBackend*()>&&>(source); }
 
-        /// Point `context` at this controller's net binding (controller=this), so the Net facade
-        /// resolves this run's controller. Idempotent; a no-op when the context is null.
-        void InstallScriptBinding(script::IScriptContext* scriptContext)
+        /// The net binding the Net facade resolves this run's controller through (controller=this;
+        /// the run holds it as a service). Stable: the endpoint m_net points at may come and go.
+        [[nodiscard]] net::NetScriptBinding& ScriptBinding() noexcept
         {
-            m_binding.controller = this; // stable; the endpoint m_net points at may come and go
-            if (scriptContext != nullptr)
-            {
-                net::InstallNetScriptService(*scriptContext, m_binding);
-            }
+            m_binding.controller = this;
+            return m_binding;
         }
 
         // The per-frame transport pump lives in engine::net::NetworkSubsystem::PostUpdate, which

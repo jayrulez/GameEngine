@@ -93,7 +93,8 @@ export namespace foundation::run
             return FindService(TypeOf<T>().id) != nullptr;
         }
 
-    protected:
+        /// The service the run holds under `type` (a TypeOf<T>().id), or null: Get without the
+        /// type, for a lookup that has only the id (a script context's service resolver).
         [[nodiscard]] virtual void* FindService(TypeId type) const noexcept = 0;
     };
 
@@ -169,7 +170,6 @@ export namespace foundation::run
         /// Who hears this run's transitions (its manager); null for none.
         void SetLifecycleListener(IRunListener* listener) noexcept { m_listener = listener; }
 
-    protected:
         [[nodiscard]] void* FindService(TypeId type) const noexcept override;
 
     private:

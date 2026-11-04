@@ -30,12 +30,6 @@ export namespace foundation::input
 {
     namespace shell = foundation::shell;
 
-    // The per-context script service key: the Input facade resolves an ActionRuntime under this key
-    // (each context can read a different runtime: the shared editor runtime, or a per-GameInstance
-    // one). Lives here (not the subsystem) so a GameInstance can install its own runtime without
-    // pulling the whole InputSubsystem in.
-    inline constexpr core::StringView kInputScriptService = u8"input.runtime";
-
     // The device interface. All accessors may return null or zero: devices come and go (hotplug,
     // unfocused editor viewport) and evaluation treats absence as "released".
     class IInputSourceProvider

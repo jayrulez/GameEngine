@@ -510,9 +510,7 @@ namespace foundation::gui
     {
         DataModel* ScriptDataModel()
         {
-            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
-            const auto* binding =
-                scriptContext != nullptr ? static_cast<const GuiScriptBinding*>(scriptContext->GetService(kGuiScriptService)) : nullptr;
+            const auto* binding = foundation::script::CurrentService<GuiScriptBinding>();
             SceneRoot* root = binding != nullptr ? binding->Root() : nullptr;
             return root != nullptr ? &root->GetContext().GetData() : nullptr;
         }
@@ -542,9 +540,7 @@ namespace foundation::gui
     {
         SceneRoot* ScriptRoot()
         {
-            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
-            const auto* binding =
-                scriptContext != nullptr ? static_cast<const GuiScriptBinding*>(scriptContext->GetService(kGuiScriptService)) : nullptr;
+            const auto* binding = foundation::script::CurrentService<GuiScriptBinding>();
             return binding != nullptr ? binding->Root() : nullptr;
         }
     }
@@ -709,9 +705,7 @@ namespace foundation::gui
 
     core::Variant Gui::Root()
     {
-        foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
-        const auto* binding =
-            scriptContext != nullptr ? static_cast<const GuiScriptBinding*>(scriptContext->GetService(kGuiScriptService)) : nullptr;
+        const auto* binding = foundation::script::CurrentService<GuiScriptBinding>();
         SceneRoot* root = binding != nullptr ? binding->Root() : nullptr;
         return root != nullptr ? root->HandleAs(Node::StaticType()) : core::Variant{};
     }

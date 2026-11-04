@@ -3372,8 +3372,8 @@ TEST_CASE("script.scene: DebugDraw.of(scene) is script-callable + null-safe with
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"drew"));
 }
 
-// DebugDraw.of(scene) with the render service installed (as RenderSubsystem::ExposeToScript wires
-// a real run): the draw lands in that scene's per-scene debug list on the subsystem, and in no
+// DebugDraw.of(scene) with the render service offered (the subsystem registered with the app's
+// manager, as in a real run): the draw lands in that scene's per-scene debug list on the subsystem, and in no
 // other scene's. A headless RenderSubsystem over the NullDevice (DebugScene is pure accumulator
 // state, no GPU) is the real service, the same object the render pass reads at frame end.
 TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the real render service")
@@ -3384,11 +3384,13 @@ TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the
     foundation::vfs::NativeFileSystem dataFs(foundation::vfs::FindDataRoot(), DefaultAllocator());
     engine::render::RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
 
+    // The app-side wiring: the subsystem registered with the app's manager offers its render
+    // service there, and the host's scripts find it through the manager, as Input and Audio are
+    // found in a real run.
+    foundation::runtime::SubsystemManager app(DefaultAllocator());
+    app.RegisterSubsystem(&sub);
     ScriptedScene bed;
-    // The app-side wiring: ExposeToScript installs the per-context render service at context
-    // creation through the host's configurator, as Input and Audio are in a real run.
-    bed.host.SetContextConfigurator(Function<void(IScriptContext&)>{
-        [&sub](IScriptContext& scriptContext) { sub.ExposeToScript(scriptContext); }});
+    bed.host.SetApplicationServices(Function<void*(TypeId)>{[&app](TypeId type) { return app.FindService(type); }});
 
     RefPtr<ScriptClass> gizmo =
         MakeClass(u8"Gizmo",
@@ -5471,9 +5473,10 @@ TEST_CASE("script.scene: DebugDraw draws by Float3 and Color, over the scene wit
     foundation::rhi::null::NullDevice device{DefaultAllocator()};
     foundation::vfs::NativeFileSystem dataFs(foundation::vfs::FindDataRoot(), DefaultAllocator());
     engine::render::RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
+    foundation::runtime::SubsystemManager app(DefaultAllocator());
+    app.RegisterSubsystem(&sub);
     ScriptedScene bed;
-    bed.host.SetContextConfigurator(Function<void(IScriptContext&)>{
-        [&sub](IScriptContext& scriptContext) { sub.ExposeToScript(scriptContext); }});
+    bed.host.SetApplicationServices(Function<void*(TypeId)>{[&app](TypeId type) { return app.FindService(type); }});
 
     RefPtr<ScriptClass> gizmo =
         MakeClass(u8"Gizmo",

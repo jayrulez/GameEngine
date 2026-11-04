@@ -281,27 +281,8 @@ namespace engine::runtime
 
         DefaultApplication* self = this;
 
-        m_scripts->SetContextConfigurator(core::Function<void(foundation::script::IScriptContext&)>{
-            [self](foundation::script::IScriptContext& scriptContext)
-            {
-                if (self->m_input != nullptr)
-                {
-                    self->m_input->ExposeToScript(scriptContext);
-                }
-                if (self->m_audio != nullptr)
-                {
-                    self->m_audio->ExposeToScript(scriptContext, self->Resources());
-                }
-                if (self->m_render != nullptr)
-                {
-                    self->m_render->ExposeToScript(scriptContext); // `DebugDraw.of(scene)` reaches the DebugScene
-                }
-                // `gui` is the engine GUI's screen tier.
-                if (self->m_gui != nullptr)
-                {
-                    self->m_gui->ExposeToScript(scriptContext);
-                }
-            }});
+        // The subsystems offer their own script services (Input, Audio, Render, GUI) to every
+        // context through the subsystem manager; nothing here lists them.
 
         // Resource swaps (SceneRender.setMesh, ...): give the run a getter for the app's resource
         // manager (created later, in OnStartup), so a behavior can bind a resource id onto a

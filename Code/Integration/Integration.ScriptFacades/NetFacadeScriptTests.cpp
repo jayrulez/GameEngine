@@ -34,6 +34,15 @@ namespace net = foundation::net;
 
 namespace
 {
+    // The net binding as a run holds it, offered as the one service this bare context's host
+    // answers (a run host would find it among its run's services).
+    void OfferNet(IScriptContext& scriptContext, net::NetScriptBinding& binding)
+    {
+        net::NetScriptBinding* offered = &binding;
+        scriptContext.SetServiceResolver(IScriptContext::ServiceResolver{
+            [offered](TypeId type) -> void* { return type == TypeOf<net::NetScriptBinding>().id ? offered : nullptr; }});
+    }
+
     // A server endpoint over the simulated network, and a controller the Net facade resolves
     // through. The endpoint is already live here, so the runtime role hooks are no-ops (the
     // runtime tests exercise them per instance); NetEndpoint() hands the facade the live server.
@@ -174,8 +183,8 @@ namespace
 
         RefPtr<IScriptContext> hostCtx = manager->CreateContext();
         RefPtr<IScriptContext> clientCtx = manager->CreateContext();
-        net::InstallNetScriptService(*hostCtx, fx.hostController.binding);
-        net::InstallNetScriptService(*clientCtx, fx.clientController.binding);
+        OfferNet(*hostCtx, fx.hostController.binding);
+        OfferNet(*clientCtx, fx.clientController.binding);
         REQUIRE(hostCtx->Load(hostScript(StringView(prefab.text)).AsView(), name).IsOk());
         REQUIRE(clientCtx->Load(clientScript(StringView(prefab.text)).AsView(), name).IsOk());
         CHECK(hostCtx->GetGlobal(u8"Spawned").Get<bool>());
@@ -229,9 +238,9 @@ namespace
             hostCtx = manager.CreateContext();
             aCtx = manager.CreateContext();
             bCtx = manager.CreateContext();
-            net::InstallNetScriptService(*hostCtx, hostController.binding);
-            net::InstallNetScriptService(*aCtx, aController.binding);
-            net::InstallNetScriptService(*bCtx, bController.binding);
+            OfferNet(*hostCtx, hostController.binding);
+            OfferNet(*aCtx, aController.binding);
+            OfferNet(*bCtx, bController.binding);
         }
 
         void Open()
@@ -423,8 +432,8 @@ TEST_CASE("net-facade: AngelScript Net.on receives a number, a text and a bare R
     RefPtr<IScriptContext> hostCtx = manager->CreateContext();
     RefPtr<IScriptContext> clientCtx = manager->CreateContext();
     HostAndClient fx;
-    net::InstallNetScriptService(*hostCtx, fx.hostController.binding);
-    net::InstallNetScriptService(*clientCtx, fx.clientController.binding);
+    OfferNet(*hostCtx, fx.hostController.binding);
+    OfferNet(*clientCtx, fx.clientController.binding);
 
     // The host registers before it hosts; its number handler answers the sender at once.
     REQUIRE(hostCtx
@@ -473,8 +482,8 @@ TEST_CASE("net-facade: Luau Net.on receives a number, a text and a bare RPC, and
     RefPtr<IScriptContext> hostCtx = manager->CreateContext();
     RefPtr<IScriptContext> clientCtx = manager->CreateContext();
     HostAndClient fx;
-    net::InstallNetScriptService(*hostCtx, fx.hostController.binding);
-    net::InstallNetScriptService(*clientCtx, fx.clientController.binding);
+    OfferNet(*hostCtx, fx.hostController.binding);
+    OfferNet(*clientCtx, fx.clientController.binding);
 
     REQUIRE(hostCtx
                 ->Load(u8"Score = 0; ScoreFrom = -1; Greeting = ''; Pings = 0\n"
@@ -540,7 +549,7 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     ServerFixture fx;
-    net::InstallNetScriptService(*scriptContext, fx.binding);
+    OfferNet(*scriptContext, fx.binding);
 
     // AngelScript: statics live in the type's namespace (Net::isServer()), and the logic runs in
     // main().
@@ -576,7 +585,7 @@ TEST_CASE("net-facade: Luau reads the live session through the Net facade")
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     ServerFixture fx;
-    net::InstallNetScriptService(*scriptContext, fx.binding);
+    OfferNet(*scriptContext, fx.binding);
 
     // Luau calls statics with `.`; the chunk runs at top level, so the globals it assigns are
     // readable.

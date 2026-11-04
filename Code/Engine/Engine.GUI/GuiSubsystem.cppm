@@ -43,8 +43,8 @@
 // scene draws.
 //
 // The script surface is the GUI's own: the `gui` facade, every widget reflected, and the
-// gamekit's screen stack. ExposeToScript installs it per script context with the screen tier's
-// root. `gui::root()` is the screen root, and `ScreenStack::of(gui::root().find("screens"))` is
+// gamekit's screen stack. The subsystem offers its binding as the application's GUI service for
+// scripts, resolving to the calling script's run's screen tier. `gui::root()` is the screen root, and `ScreenStack::of(gui::root().find("screens"))` is
 // its stack, which pushes a document by its guid ("{guid}") through the provider. Each
 // component's `.of(entity)` reaches the component's tree as a node (`root()`).
 //
@@ -575,8 +575,10 @@ export namespace engine::gui
         void EndFrame() override;
 
         // ---- scripts ----
-        /// Gives the scripts of `scriptContext` the screen tier's root (`gui::root()`).
-        void ExposeToScript(foundation::script::IScriptContext& scriptContext);
+        /// The script binding (`gui::root()`, the calling script's screen tier) is the
+        /// application's GUI service while this is registered.
+        void OnRegister(foundation::runtime::SubsystemManager* manager) override;
+        void OnUnregister() override;
 
         // ---- input ----
         /// Sets the window whose platform text input (IME) follows the GUI's focus (the player's
@@ -739,7 +741,7 @@ export namespace engine::gui
         RefPtr<UIWidget> m_overlay;
         RefPtr<GuiTouchGuide> m_touchGuide; // beneath the shared tier's screens
         bool m_touchSeen = false;           // set once a finger has touched the screen; the guide then shows
-        GuiScriptBinding m_scriptBinding; // what each script context is given
+        GuiScriptBinding m_scriptBinding; // the application's GUI service for scripts
         Array<SceneTier> m_sceneTiers;
         Array<UniquePtr<TextureRoot>> m_textureRoots;
         u64 m_frameSerial = 0;

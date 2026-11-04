@@ -5,7 +5,8 @@
 ///
 /// The `Http` facade: a game's scripts send requests and hear the answers by callback on the
 /// game's thread, through the run's IHttpClient (native, or the browser's in a web build). The
-/// run owns an HttpScriptBinding and installs it on its script contexts; the client is made on the
+/// run owns an HttpScriptBinding and holds it as one of its services, where the facade finds it
+/// for the script calling (script::CurrentService); the client is made on the
 /// first request, so a game that never asks opens nothing, and requests leave only when the game
 /// asks. A game in the editor's play mode is a game like any other.
 ///
@@ -30,8 +31,6 @@ using namespace foundation::core;
 export namespace foundation::http
 {
     namespace script = foundation::script;
-
-    inline constexpr StringView kHttpScriptService = u8"http.runtime";
 
     /// A run's HTTP for its scripts: the client, made on the first request by the owner's
     /// factory, pumped by the owner each frame.
@@ -64,21 +63,12 @@ export namespace foundation::http
         UniquePtr<IHttpClient> m_client;
     };
 
-    inline void InstallHttpScriptService(script::IScriptContext& scriptContext, HttpScriptBinding& binding)
-    {
-        scriptContext.SetService(kHttpScriptService, &binding);
-    }
-    inline void ClearHttpScriptService(script::IScriptContext& scriptContext) { scriptContext.SetService(kHttpScriptService, nullptr); }
-
     class Http final : public Object
     {
         RTTI_OBJECT(Http, Object)
     public:
-        [[nodiscard]] static HttpScriptBinding* Resolve()
-        {
-            script::IScriptContext* scriptContext = script::CurrentScriptContext();
-            return scriptContext != nullptr ? static_cast<HttpScriptBinding*>(scriptContext->GetService(kHttpScriptService)) : nullptr;
-        }
+        /// The current script's run's binding (the run holds it), or null outside every run.
+        [[nodiscard]] static HttpScriptBinding* Resolve() { return script::CurrentService<HttpScriptBinding>(); }
 
         /// Each returns the request's id (for cancel), or 0 when this run has no HTTP (its handler
         /// is then never called).

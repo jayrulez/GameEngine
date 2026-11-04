@@ -144,23 +144,56 @@ export namespace foundation::script
         [[nodiscard]] virtual core::RefPtr<ScriptObject>
         CreateInstance(core::StringView className, core::Span<core::Variant> args) = 0;
 
-        // ---- host services (per-context) ----
-        // Name-keyed host objects that native facades resolve during a scripted call (via
-        // CurrentScriptContext below). This is how engine singletons reach scripts
-        // without process globals: each context binds its own service set, so two
-        // contexts can see two different input runtimes (two players, or editor and game).
-        void SetService(core::StringView name, void* service)
+        // ---- host services ----
+        // The host objects native facades reach during a scripted call (through CurrentService
+        // below), found by type. The context's owner (its run host) answers: its own runtime
+        // binding, then the services of the run the context belongs to, then the application's.
+        // This is how engine services reach scripts without process globals: two runs' contexts
+        // see two runs' services (two players' input), and a context outside every run sees the
+        // application's alone.
+        using ServiceResolver = core::Function<void*(core::TypeId)>;
+        void SetServiceResolver(ServiceResolver resolver) { m_resolver = core::Move(resolver); }
+
+        /// The host's service of type `T` for this context, or null.
+        template <typename T>
+        [[nodiscard]] T* FindService() const
         {
-            m_services.InsertOrAssign(core::String(name), service);
-        }
-        [[nodiscard]] void* GetService(core::StringView name) const
-        {
-            void* const* found = m_services.Find(core::String(name));
-            return found != nullptr ? *found : nullptr;
+            return m_resolver ? static_cast<T*>(m_resolver(core::TypeOf<T>().id)) : nullptr;
         }
 
     private:
-        core::HashMap<core::String, void*> m_services;
+        ServiceResolver m_resolver;
+    };
+
+    /// A set of services by type, for a host that answers a context's lookups itself rather than
+    /// through a run host (a sample over a bare context, a test): its Resolver is what the context
+    /// is handed. Borrowed entries; the set outlives every context resolving through it.
+    class ScriptServices
+    {
+    public:
+        template <typename T>
+        void Add(T& service)
+        {
+            m_services.InsertOrAssign(core::TypeOf<T>().id, static_cast<void*>(&service));
+        }
+        template <typename T>
+        void Remove()
+        {
+            m_services.Remove(core::TypeOf<T>().id);
+        }
+        [[nodiscard]] void* Find(core::TypeId type) const noexcept
+        {
+            void* const* found = m_services.Find(type);
+            return found != nullptr ? *found : nullptr;
+        }
+        [[nodiscard]] IScriptContext::ServiceResolver Resolver() const
+        {
+            const ScriptServices* self = this;
+            return IScriptContext::ServiceResolver{[self](core::TypeId type) { return self->Find(type); }};
+        }
+
+    private:
+        core::HashMap<core::TypeId, void*> m_services;
     };
 
     // The context whose script code is executing right now on this thread (null outside
@@ -179,6 +212,15 @@ export namespace foundation::script
     [[nodiscard]] inline IScriptContext* CurrentScriptContext() noexcept
     {
         return detail::CurrentScriptContextSlot();
+    }
+
+    /// The host's service of type `T` for the context whose script is executing, or null outside
+    /// every scripted call or where the host has none (a facade then does nothing).
+    template <typename T>
+    [[nodiscard]] T* CurrentService()
+    {
+        IScriptContext* scriptContext = CurrentScriptContext();
+        return scriptContext != nullptr ? scriptContext->FindService<T>() : nullptr;
     }
     class ScriptCallScope
     {

@@ -11,64 +11,69 @@ There are **two homes** for a facade. Pick by what the facade is *about*.
 The neutral curated surface every behavior gets: **Entity, Log, Time, Random, Scene**.
 These are engine-agnostic language primitives. Adding one here is unusual - only do it if
 it is a genuinely core, subsystem-free primitive. They live on the shared
-`ScriptRuntimeBinding` (service key `script.runtime`) and are registered by
+`ScriptRuntimeBinding` (the run host's own service) and are registered by
 `RegisterScriptFacadeReflection()`.
 
 ## 2. Out-of-tree facades (the default) - owned by the subsystem's project
 
 Anything tied to a subsystem (networking, UI, level loading, audio, input, physics) is
 owned by **that subsystem's module**, NOT Foundation. Foundation must not gain a dependency
-on, or knowledge of, an engine subsystem. All six current facades share ONE architecture
-(reflected `Object` + static methods + a per-context service key resolved through
-`CurrentScriptContext()->GetService(key)` + no-op-when-unwired guards + dual registration).
-They differ only in two orthogonal, motivated axes: the **binding payload** and the **wiring
-shape**. Reference implementations:
+on, or knowledge of, an engine subsystem. Every facade shares ONE architecture: a reflected
+`Object` with static methods, each resolving its **binding** by type with
+`script::CurrentService<Binding>()`, guarded to do nothing when there is none, and registered
+twice (the type and the prelude name).
 
-| Facade        | Home module                    | Service key            | Binding payload            | Wiring shape |
-|---------------|--------------------------------|------------------------|----------------------------|--------------|
-| `Net`         | `draconic.net.manager`         | `net.runtime`          | controller interface ptr   | Install/Clear helpers |
-| `SceneLoader` | `draconic.engine.gameinstance` | `sceneloader.runtime`  | host-filled function ptrs  | Install/Clear helpers |
-| `Physics`     | `draconic.engine.physics`      | `physics.runtime`      | binding struct (subsystem) | subsystem `ExposeToScript` |
-| `Audio`       | `draconic.engine.audio`        | `audio.runtime`        | binding struct (+resources)| subsystem `ExposeToScript` |
-| `Input`       | `draconic.engine.input`        | `input.runtime`        | bare `ActionRuntime*`      | subsystem `ExposeToScript` |
+### Where a binding comes from: the run, or the application
 
-**Binding payload** = what the per-context service holds. Function pointers when the host owns
-the state (Ui/SceneLoader), a controller interface when a stable object implements it (Net), a
-subsystem-owned binding struct (Physics/Audio), or the runtime object directly (Input). Pick
-whatever the facade actually needs to reach.
+A script context asks its run host for a service by type, and the host answers in this order:
 
-**Wiring shape** = how the binding gets onto a context. Two blessed shapes:
-- **Install/Clear free functions** (`Install<X>ScriptService(ctx, binding)` / `Clear...`): use
-  when the binding is host-owned and re-bound per instance/context (the app fills it, then
-  installs). This is the recipe template below.
-- **Subsystem `ExposeToScript(ctx)` method**: use when the SUBSYSTEM owns the binding as a
-  member and simply hands itself to the context; it inlines `SetService`. No `Clear` is needed
-  because a per-context service dies with the context. Physics/Input/Audio use this.
+1. its own `ScriptRuntimeBinding` (time, the RNG, `entity.send`, the resource manager, the run);
+2. the services of the **run** the context belongs to (`IRun::Get<T>`), for per-run state;
+3. the **application's** services (`SubsystemManager::GetService<T>`), for app-wide state.
 
-Conventions that hold across BOTH shapes (keep them uniform): service-key string is
-`<name>.runtime`; the key constant is `k<Name>ScriptService`; the boot-time registrar is
-`Register<Name>ScriptFacade()` and registers BOTH the type and the prelude name (see below).
+So a binding is offered in one of two places, and nothing lists them:
 
-Copy the closest match. The recipe (using `Ui` as the Install/Clear template):
-
-### a. Binding struct + service key (interface unit, `.cppm`)
+- **Per-run** (the run's save, HTTP, networking, its own input runtime): the run holds it.
+  `GameInstance` registers its members on itself (`Register<RunSave>(m_save)`); a plugin adds
+  one to each run from a run listener (`run.Add<T>(...)` in `OnRunCreated`).
+- **App-wide** (audio, render, GUI, the shared input runtime): the subsystem registers it with
+  its manager while it is registered:
 
 ```cpp
-inline constexpr StringView kUiScriptService = u8"ui.runtime"; // distinct per facade
+void OnRegister(foundation::runtime::SubsystemManager* manager) override
+{
+    Subsystem::OnRegister(manager);
+    manager->RegisterService(m_scriptBinding);
+}
+void OnUnregister() override
+{
+    if (foundation::runtime::SubsystemManager* manager = Manager())
+        manager->UnregisterService<UiScriptBinding>();
+    Subsystem::OnUnregister();
+}
+```
 
-// Installed as a per-context service; the facade resolves it. Holds either host-installed
-// Function pointers (Ui/SceneLoader) OR a controller interface pointer (Net). The app fills
-// it; null pointers = safe no-ops.
+The run comes first, so a run can hold its own copy of an app-wide type: each `GameInstance`
+holds an `ActionRuntime`, and its scripts read that one rather than the shared runtime. A
+context outside every run (the editor's scenes) sees the application's services alone.
+
+**Binding payload** = what the service holds: function pointers when the host owns the state,
+a controller interface when a stable object implements it (`NetScriptBinding`), a pointer to the
+subsystem (`AudioScriptBinding`, `RenderScriptBinding`), or the runtime object itself
+(`ActionRuntime`). Pick whatever the facade actually needs to reach.
+
+The boot-time registrar is `Register<Name>ScriptFacade()` and registers BOTH the type and the
+prelude name (see below).
+
+### a. Binding struct (interface unit, `.cppm`)
+
+```cpp
+// The facade's service, found by type. The owner fills it; null pointers are safe no-ops.
 struct UiScriptBinding
 {
     core::Function<i32(const core::Guid&)> pushOverlay;
     // ... one field per method ...
 };
-
-inline void InstallUiScriptService(script::IScriptContext& ctx, UiScriptBinding& b)
-{ ctx.SetService(kUiScriptService, &b); }
-inline void ClearUiScriptService(script::IScriptContext& ctx)
-{ ctx.SetService(kUiScriptService, nullptr); }
 
 void RegisterUiScriptFacade(); // decl; body in the impl unit
 ```
@@ -78,13 +83,9 @@ void RegisterUiScriptFacade(); // decl; body in the impl unit
 ```cpp
 class Ui final : public Object
 {
-    DRACONIC_OBJECT(Ui, Object)                    // needs Reflect.h in the module fragment
+    RTTI_OBJECT(Ui, Object)                        // needs Reflect.h in the module fragment
 public:
-    [[nodiscard]] static UiScriptBinding* Resolve()
-    {
-        script::IScriptContext* ctx = script::CurrentScriptContext();
-        return ctx ? static_cast<UiScriptBinding*>(ctx->GetService(kUiScriptService)) : nullptr;
-    }
+    [[nodiscard]] static UiScriptBinding* Resolve() { return script::CurrentService<UiScriptBinding>(); }
     [[nodiscard]] static i32 pushOverlay(core::Guid doc)
     {
         UiScriptBinding* b = Resolve();
@@ -126,14 +127,11 @@ Add `Draconic::Script Draconic::Script.Facades` to the module's `target_link_lib
 
 ### e. Wire it into the run (app + instance)
 
-- **Register the type** at app startup: call `RegisterUiScriptFacade()` in
-  `DefaultApplication::Configure` beside `RegisterNetScriptFacade()` et al.
-- **Fill the binding**: the app fills the binding's pointers (capturing whatever host state
-  they need - content DB, subsystem, instance). Store the binding as a *stable member* of the
-  owner (e.g. a `GameInstance` member) so it never dangles.
-- **Install per context**: call `InstallUiScriptService(context, binding)` when the run
-  context exists (for per-instance facades, alongside the instance's other service installs
-  in `StartScript`).
+- **Register the type** at app startup: call `RegisterUiScriptFacade()` where the domain
+  registers its facades (its `DomainModule`'s `registerScriptFacade`).
+- **Offer the binding**: per-run state on the run, app-wide state on the subsystem manager (see
+  "Where a binding comes from" above). Store the binding as a *stable member* of its owner so it
+  never dangles. Nothing is installed per script context.
 
 ## How the backends see it
 
@@ -197,7 +195,8 @@ Wren `"main"` module and registers it with the AngelScript engine. Then:
   ("declare it `Guid@ mesh`"); a runtime warning backs it up for non-cooked paths. Scalars
   (`float`/`int`/`bool`), `string`, and enums are real value types and stay plain members. (Wren has
   no such split - its `name=(v)` setter runs in-VM. See game-ready-scripting.md Section 16.)
-- **Distinct service key** per facade (`<name>.runtime`), separate from `script.runtime`.
+- **One binding type per facade.** Services are found by type, so two facades never share a
+  binding type, and a run holding a type hides the application's copy for its scripts.
 - **Editor-only facades** register from the editor `TypeDomain` (see the reflection track), so
   they surface only in the editor's script context.
 
@@ -211,11 +210,14 @@ are the templates):
 ```cpp
 RegisterCoreTypes();
 ui::RegisterUiScriptFacade();
-RefPtr<IScriptManager> mgr = wren::CreateScriptManager();   // or angelscript::
+RefPtr<IScriptManager> mgr = angelscript::CreateScriptManager(DefaultAllocator());
 RegisterReflectedTypes(*mgr);
 RefPtr<IScriptContext> ctx = mgr->CreateContext();
-UiFake fake; ui::InstallUiScriptService(*ctx, fake.binding); // fake records host calls
-REQUIRE(ctx->Load(u8"...Ui.pushOverlay(...)...", u8"main").IsOk());
+UiFake fake;                                // fake records host calls
+ScriptServices services;                    // a bare context: the test answers its lookups
+services.Add(fake.binding);
+ctx->SetServiceResolver(services.Resolver());
+REQUIRE(ctx->Load(u8"...Ui::pushOverlay(...)...", u8"main").IsOk());
 // assert fake recorded the calls; for callbacks, fire fake.clickFn->Invoke(...) and check.
 ```
 

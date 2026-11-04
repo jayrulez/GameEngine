@@ -7,9 +7,9 @@
 // properties are reflected through our RTTI (GUIReflectionImpl.cpp), so the engine's
 // reflection-driven binding reaches the node tree from AngelScript and Luau alike, and markup
 // creates the same reflected element types by tag (ElementTypes). This partition holds the entry
-// points: the `gui` facade (`gui.root()` returns the root the host installed for the calling
-// script) and the binding a host installs per script context. ElementTypes decides which element
-// types can be created by name.
+// points: the `gui` facade (`gui.root()` returns the root the host gives the calling script) and
+// the binding a host offers as a script service (script::CurrentService). ElementTypes decides
+// which element types can be created by name.
 
 module;
 #include "Core/Prelude.h"
@@ -27,9 +27,7 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    inline constexpr core::StringView kGuiScriptService = u8"gui.runtime";
-
-    /// What a host gives a script context: the root its scripts build under, or a function that
+    /// What a host offers its scripts as a service: the root they build under, or a function that
     /// finds the root at each call. The function takes precedence when set; a host uses it when
     /// the root depends on what is running the script (an editor runs a game per tab).
     struct GuiScriptBinding
@@ -39,15 +37,6 @@ export namespace foundation::gui
 
         [[nodiscard]] SceneRoot* Root() const { return resolve ? resolve() : root; }
     };
-
-    inline void InstallGuiScriptService(foundation::script::IScriptContext& scriptContext, GuiScriptBinding& binding)
-    {
-        scriptContext.SetService(kGuiScriptService, &binding);
-    }
-    inline void ClearGuiScriptService(foundation::script::IScriptContext& scriptContext)
-    {
-        scriptContext.SetService(kGuiScriptService, nullptr);
-    }
 
     /// The `gui` facade, with static members only (script name `gui`).
     class Gui : public Object

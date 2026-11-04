@@ -28,6 +28,7 @@ import engine.physics;
 import engine.script;
 import editor.core;
 import :edit;
+import :shown_state;
 
 using namespace foundation::core;
 
@@ -38,7 +39,8 @@ export namespace editor
     public:
         explicit CollisionGroupsSource(SceneEditContext& edit);
 
-        /// Tells the grid when the groups changed outside it (an undo).
+        /// Tells the grid when the groups changed outside it (an undo): their rows when a group came,
+        /// went or was renamed, their values when only a mask did.
         void Refresh();
 
         // === IPropertySource ===
@@ -78,6 +80,7 @@ export namespace editor
 
         SceneEditContext* m_edit;
         u64 m_signature = 0;
+        ShownState m_shown{EditorRootAllocator()}; // the physics block's values at the last look
     };
 
     class LevelScriptSource final : public foundation::gui::IPropertySource
@@ -85,7 +88,8 @@ export namespace editor
     public:
         LevelScriptSource(SceneEditContext& edit, EditorContext* context);
 
-        /// Tells the grid when the level's class or values changed outside it (an undo, a cook).
+        /// Tells the grid when the level's class or values changed outside it (an undo, a cook): its
+        /// rows when the class did, its values when only a value did.
         void Refresh();
 
         // === IPropertySource ===
@@ -116,5 +120,6 @@ export namespace editor
         SceneEditContext* m_edit;
         EditorContext* m_context;
         u64 m_signature = 0;
+        ShownState m_shown{EditorRootAllocator()}; // the scene script block's values at the last look
     };
 }

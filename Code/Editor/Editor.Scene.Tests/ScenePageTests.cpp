@@ -771,8 +771,24 @@ TEST_CASE("inspector: a transform edit and a component edit are each one undo st
     page->OnClose();
 }
 
+namespace
+{
+    // The editor's built-in inspector extras (a block's or a component's rows reflection does not
+    // show), registered once as the editor registers them.
+    void RegisterBuiltinExtras()
+    {
+        static const bool once = []()
+        {
+            BuiltinInspectorExtras::Register(InspectorExtrasRegistry::Get());
+            return true;
+        }();
+        (void)once;
+    }
+}
+
 TEST_CASE("inspector: a frame where nothing moved costs the grid no layout; a value moved from outside reaches it")
 {
+    RegisterBuiltinExtras(); // the extras look every frame too
     Bed bed;
     UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
     Shown shown(*page);
@@ -808,9 +824,16 @@ TEST_CASE("inspector: a frame where nothing moved costs the grid no layout; a va
     gui::Variant shownX = gui::ReadPropertyValue(page->Inspector()->Sections(), page->Inspector()->PathOf(u8"Transform", u8"position.x").AsView(), gui::PropertyKind::Float).Value;
     CHECK(shownX.AsFloat() == doctest::Approx(12.5));
 
-    // The scene selected: its settings are looked at every frame the same way.
+    // The scene selected: its settings, and their extras (the physics block's collision groups),
+    // are looked at every frame the same way.
     shown.Click(*page->Hierarchy()->Tree(), 0);
     settle();
+    Array<gui::PropertyInfo> rows;
+    page->Inspector()->Sections().GetProperties(StringView{}, rows);
+    bool groups = false;
+    for (const gui::PropertyInfo& row : rows)
+        groups = groups || row.DisplayName == String(u8"Collision Groups");
+    CHECK(groups);
     frame();
     CHECK_FALSE(waiting());
     page->OnClose();
@@ -1098,14 +1121,7 @@ TEST_CASE("inspector: Paste Component puts the copied component on the selection
 TEST_CASE("inspector: a component's extras under its header: a rigid body's notice while it has no collider, a zone's Bake")
 {
     Bed bed;
-    {
-        static const bool once = []()
-        {
-            BuiltinInspectorExtras::Register(InspectorExtrasRegistry::Get());
-            return true;
-        }();
-        (void)once;
-    }
+    RegisterBuiltinExtras();
     String said;
     bed.context.OnNotice = [&said](NoticeKind, StringView message) { said = String(message); };
     UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);

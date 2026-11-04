@@ -173,13 +173,22 @@ namespace editor
 
     void ScriptBehaviorsSource::Refresh()
     {
+        // Called every frame while the entities are selected: the grid hears of it only when the
+        // components' values moved.
+        const bool moved = m_shown.Take(
+            [this](ISerializer& ar)
+            {
+                for (usize o = 0; o < m_entities.Size(); ++o)
+                    if (engine::script::ScriptComponent* component = Component(o))
+                        engine::script::Serialize(ar, *component);
+            });
         const u64 signature = Signature();
         if (signature != m_signature)
         {
             m_signature = signature;
             NotifyPropertiesChanged();
         }
-        else
+        else if (moved)
             NotifyValuesChanged();
     }
 

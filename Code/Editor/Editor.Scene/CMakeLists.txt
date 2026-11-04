@@ -83,6 +83,7 @@ target_sources(Editor.Scene
             BoneNameEditor.cppm
             CollisionMatrixEditor.cppm
             InspectorExtras.cppm
+            ShownState.cppm
             ScriptBehaviorsSource.cppm
             SceneSettingsSource.cppm
             SettingsExtraSources.cppm

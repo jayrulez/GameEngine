@@ -79,15 +79,27 @@ namespace editor
         return hash;
     }
 
+    namespace
+    {
+        // The settings block of `type`, as the scene serializes it (nothing when the scene has none).
+        void WriteBlock(SceneEditContext& edit, const TypeInfo& type, ISerializer& ar)
+        {
+            if (foundation::scene::SceneSystem* system = edit.FindSystemBySettingsType(&type))
+                system->SerializeSettings(ar);
+        }
+    }
+
     void CollisionGroupsSource::Refresh()
     {
+        // Called every frame while the scene is selected: the grid hears of it only when a value moved.
+        const bool moved = m_shown.Take([this](ISerializer& ar) { WriteBlock(*m_edit, TypeOf<PhysicsSceneSettings>(), ar); });
         const u64 signature = Signature();
         if (signature != m_signature)
         {
             m_signature = signature;
             NotifyPropertiesChanged(); // the flags are named by the groups
         }
-        else
+        else if (moved)
             NotifyValuesChanged();
     }
 
@@ -309,13 +321,15 @@ namespace editor
 
     void LevelScriptSource::Refresh()
     {
+        // Called every frame while the scene is selected: the grid hears of it only when a value moved.
+        const bool moved = m_shown.Take([this](ISerializer& ar) { WriteBlock(*m_edit, TypeOf<SceneScriptSettings>(), ar); });
         const u64 signature = Signature();
         if (signature != m_signature)
         {
             m_signature = signature;
             NotifyPropertiesChanged();
         }
-        else
+        else if (moved)
             NotifyValuesChanged();
     }
 

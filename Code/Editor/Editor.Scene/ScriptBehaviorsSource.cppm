@@ -27,6 +27,7 @@ import foundation.gui;
 import foundation.gui.toolkit;
 import editor.core;
 import :edit;
+import :shown_state;
 
 using namespace foundation::core;
 
@@ -58,7 +59,8 @@ export namespace editor
     public:
         ScriptBehaviorsSource(SceneEditContext& edit, EditorContext* context, Span<const Guid> entities);
 
-        /// Tells the grid when the behaviours changed outside it (an undo, a pick elsewhere).
+        /// Tells the grid when the behaviours changed outside it (an undo, a pick elsewhere): their
+        /// rows when the behaviours or their classes did, their values when only a value did.
         void Refresh();
 
         // === IPropertySource ===
@@ -102,6 +104,7 @@ export namespace editor
         EditorContext* m_context;
         Array<Guid> m_entities;
         u64 m_signature = 0;
+        ShownState m_shown{EditorRootAllocator()}; // the components' values at the last look
         u64 m_groups = 0;
     };
 }

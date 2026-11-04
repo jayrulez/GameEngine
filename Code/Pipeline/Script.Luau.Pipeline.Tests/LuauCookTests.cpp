@@ -263,3 +263,46 @@ TEST_CASE("luau.cook: the fingerprint carries the vendored Luau bytecode version
     CHECK(cook->CookVersion() == LuauBytecodeVersion());
     CHECK(ScriptLanguageCookRegistry::Get().CombinedCookVersion() >= LuauBytecodeVersion());
 }
+
+namespace luauprobe
+{
+    // A reflected type scripts reach as a global, standing in for a plugin's facade.
+    struct ProbeFacade
+    {
+        foundation::core::i32 unused = 0;
+    };
+    REFLECT_VALUE(ProbeFacade, "rtti::luauprobe")
+    {
+        builder.Property<&ProbeFacade::unused>("unused");
+    }
+}
+
+// A Luau compile resolves no globals, so the check walks the source for globals that name a
+// registered type the surface leaves out (a type of a plugin the platform lacks): such a script
+// fails the check there, naming the global and its line, and passes against the full surface.
+TEST_CASE("luau.cook: a check without a type fails a script naming it as a global, and only that one")
+{
+    IScriptLanguageCook* cook = LuauCook();
+    REQUIRE(cook != nullptr);
+    luauprobe::RttiRegisterValue_ProbeFacade();
+    const TypeInfo& probe = TypeOf<luauprobe::ProbeFacade>();
+    GlobalTypeRegistry().Register(probe);
+    const TypeId hidden[] = {probe.id};
+    constexpr const char8_t* kUses = u8"local Probe = {}\n"
+                                     u8"function Probe.launch()\n"
+                                     u8"    print(ProbeFacade)\n"
+                                     u8"end\n"
+                                     u8"return Probe\n";
+    String className;
+    CookScriptErrorSink full;
+    CHECK(cook->Check(kUses, u8"Probe.luau", full, className, Span<const TypeId>{}));
+    CookScriptErrorSink without;
+    CHECK_FALSE(cook->Check(kUses, u8"Probe.luau", without, className, Span<const TypeId>(hidden, 1)));
+    REQUIRE(without.errors.Size() == 1u);
+    CHECK(without.errors[0].line == 3);
+    CHECK(without.errors[0].message.AsView().Contains(u8"'ProbeFacade' is not available here"));
+    CookScriptErrorSink unrelated;
+    CHECK(cook->Check(u8"local function twice(v) return v * 2 end\nreturn twice\n", u8"Twice.luau", unrelated,
+                      className, Span<const TypeId>(hidden, 1)));
+    GlobalTypeRegistry().Unregister(probe.id);
+}

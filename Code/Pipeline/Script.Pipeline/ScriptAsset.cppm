@@ -573,9 +573,12 @@ export namespace pipeline{
 
         /// Compile-check `source` as Cook would, without running any of it and without the
         /// harvest: errors to `sink`, the class name (empty when none is found) to `className`.
-        /// For checking a script as it is typed. Returns whether it compiled.
+        /// The surface is every registered type less `hidden` (a platform without some plugins:
+        /// their types), and a use of a hidden type is an error. For checking a script as it is
+        /// typed, and for each platform it ships to. Returns whether it compiled.
         [[nodiscard]] virtual bool Check(StringView source, StringView assetName,
-                                         CookScriptErrorSink& sink, String& className) = 0;
+                                         CookScriptErrorSink& sink, String& className,
+                                         Span<const TypeId> hidden) = 0;
     };
 
     /// The cook registry (shaped like ScriptBackendRegistry): a language library registers its
@@ -878,7 +881,7 @@ export namespace pipeline{
             }
             CookScriptErrorSink sink;
             String className;
-            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), sink, className);
+            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), sink, className, Span<const TypeId>{});
             for (const CookScriptErrorSink::Entry& entry : sink.errors)
             {
                 CompileError e;

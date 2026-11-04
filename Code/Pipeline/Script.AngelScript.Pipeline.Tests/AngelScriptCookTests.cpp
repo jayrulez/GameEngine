@@ -7,6 +7,8 @@
 
 #include <doctest/doctest.h>
 
+#include <cstring>
+
 #include "Core/Prelude.h"
 
 import foundation.core;
@@ -499,4 +501,94 @@ TEST_CASE("as.cook: the fingerprint carries the AngelScript library version")
     CHECK(cook->CookVersion() == foundation::script::angelscript::AngelScriptBytecodeVersion());
     CHECK(ScriptLanguageCookRegistry::Get().CombinedCookVersion() >=
           foundation::script::angelscript::AngelScriptBytecodeVersion());
+}
+
+namespace
+{
+    // The id of the registered type scripts call by `scriptName` (the run facade: `run`).
+    [[nodiscard]] TypeId ScriptTypeIdNamed(const char* scriptName)
+    {
+        for (const TypeInfo* type : GlobalTypeRegistry().All())
+        {
+            if (std::strcmp(ScriptTypeName(*type), scriptName) == 0)
+            {
+                return type->id;
+            }
+        }
+        return 0;
+    }
+
+    // Cooked bytecode into a manager registered with every type but `hidden`, as a player on a
+    // platform without a plugin registers its surface.
+    [[nodiscard]] Status LoadCookedWithout(const ScriptClassSource& cooked, Span<const TypeId> hidden)
+    {
+        RefPtr<IScriptManager> manager = foundation::script::angelscript::CreateScriptManager(DefaultAllocator());
+        RegisterCoreTypes();
+        RegisterScriptFacadeReflection();
+        RegisterReflectedTypes(*manager, GlobalTypeRegistry(), hidden);
+        RefPtr<IScriptBlob> blob = manager->CreateBlob();
+        if (blob.Get() == nullptr)
+        {
+            return Status{ErrorCode::Internal};
+        }
+        MemoryStream stream;
+        (void)stream.Write(cooked.bytecode.Data(), cooked.bytecode.Size());
+        (void)stream.Seek(0, SeekOrigin::Begin);
+        BinarySerializer reader(stream, SerializeMode::Read);
+        blob->Serialize(reader);
+        RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+        return scriptContext->LoadBlob(*blob);
+    }
+
+    constexpr const char8_t* kUsesRun = u8"class Game\n"
+                                        u8"{\n"
+                                        u8"    void launch() { run::loadScene(Guid(1, 2)); }\n"
+                                        u8"    void update(float dt) {}\n"
+                                        u8"    void exit() {}\n"
+                                        u8"}\n";
+}
+
+// A check against a surface without some types (a platform without the plugin that registers
+// them) fails a script that uses one and passes one that does not; the full surface passes both.
+TEST_CASE("as.cook: a check without a type fails the script that uses it, and only that one")
+{
+    engine::RegisterAllScriptFacades();
+    IScriptLanguageCook* cook = AngelScriptCook();
+    REQUIRE(cook != nullptr);
+    const TypeId run = ScriptTypeIdNamed("run");
+    REQUIRE(run != 0);
+    const TypeId hidden[] = {run};
+
+    String className;
+    CookScriptErrorSink full;
+    CHECK(cook->Check(kUsesRun, u8"Game.as", full, className, Span<const TypeId>{}));
+    CookScriptErrorSink without;
+    CHECK_FALSE(cook->Check(kUsesRun, u8"Game.as", without, className, Span<const TypeId>(hidden, 1)));
+    CHECK_FALSE(without.errors.IsEmpty());
+    CookScriptErrorSink unrelated;
+    CHECK(cook->Check(u8"double twice(double v) { return v * 2.0; }\n", u8"Twice.as", unrelated, className,
+                      Span<const TypeId>(hidden, 1)));
+}
+
+// Bytecode cooked against the full surface loads where a type it does not use is absent, so the
+// host's cook serves a platform without a plugin the script does not call; one that calls it does
+// not load there.
+TEST_CASE("as.cook: host-cooked bytecode loads without a type it does not use, and not without one it does")
+{
+    engine::RegisterAllScriptFacades();
+    IScriptLanguageCook* cook = AngelScriptCook();
+    REQUIRE(cook != nullptr);
+    const TypeId run = ScriptTypeIdNamed("run");
+    REQUIRE(run != 0);
+    const TypeId hidden[] = {run};
+
+    CookScriptErrorSink sink;
+    ScriptClassSource unrelated;
+    REQUIRE(cook->Cook(u8"double twice(double v) { return v * 2.0; }\n", u8"Twice.as", sink, unrelated));
+    CHECK(LoadCookedWithout(unrelated, Span<const TypeId>(hidden, 1)).IsOk());
+
+    ScriptClassSource usesRun;
+    REQUIRE(cook->Cook(kUsesRun, u8"Game.as", sink, usesRun));
+    CHECK(LoadCookedWithout(usesRun, Span<const TypeId>{}).IsOk());
+    CHECK_FALSE(LoadCookedWithout(usesRun, Span<const TypeId>(hidden, 1)).IsOk());
 }

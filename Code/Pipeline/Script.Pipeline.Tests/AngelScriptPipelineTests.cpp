@@ -180,7 +180,7 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
             out.source = String(source);
             return true;
         }
-        [[nodiscard]] bool Check(StringView, StringView, CookScriptErrorSink&, String&) override
+        [[nodiscard]] bool Check(StringView, StringView, CookScriptErrorSink&, String&, Span<const TypeId>) override
         {
             return true;
         }

@@ -388,13 +388,22 @@ editor, the player and export still read `nativeModule`):
     leaves both.
   Tests run each host's load step against a linked four-part fixture; the real tools link no
     fixture.
-- **X5 - native code is a plugin.** NativeSample becomes a package (`Plugin.xml`,
-  `NativeSample.Engine`); the project data version bumps, migrating `nativeModule` into the
-  game's entry; the editor and the shared tool builds load a project package's parts from shared
-  libraries; the scaffold generates the manifest; Build and Reload Native Module act
-  on the project's packages. `IRuntimePlugin` and `CreatePlugin` are deleted at every call site
-  (the editor's native module, the player, the ship and web stubs, the scaffold, NativeSample).
-  Tests: the scaffold's output, the migration of an old project.
+- **X5 - native code is a plugin** (built 2026-11-04; rulings that day: a project's packages live
+  in `Plugins/<Name>/`, the migration converts the setting only, Build and Reload act on all the
+  project's packages, the shared CLI tools ship with X6). NativeSample is the package
+  `Plugins/NativeSample` (`Plugin.xml`, `NativeSample.Engine`); the project data version is 11,
+  reading a 9 or 10 `nativeModule` as the game's entry (`Plugins/<Game>`, its id in lower case), so
+  an old game's code is ported by hand to a part entry; `ENGINE_PROJECT_PLUGINS` replaces the
+  game-native variables, adding the packages after every engine target, building them as one
+  target (`ProjectPlugins`), listing each part's library (`plugin-libraries.txt`) and linking them
+  into `Engine.GamePlayer` through the generated registry (the ship stubs are gone); the editor, a
+  player in a project directory and the tools add a project's packages from that list
+  (`AddProjectPackages`), the editor from fresh copies, and only a shared build loads them; Build
+  Project Plugins builds them in `.cache/plugins-dev`, and Reload Project Plugins remakes the
+  plugin host inside the scene bracket, the old libraries kept mapped; the scaffold generates the
+  game's package with an Engine part. `IRuntimePlugin`, `CreatePlugin` and `PluginLoader`'s
+  `Add` and `Load` are deleted, and the cross-boundary shared-lane test loads a part. Tests:
+  NativeSample's package, the scaffold's output, the migration of version 10 projects.
 - **X6 - export.** Template plugin lists; template or per-project player; deploy files;
   platform refusals; the per-project build covering every enabled package; web left to a later
   phase if the wasm per-project build is too large for this spec (decide when reached). Tests:

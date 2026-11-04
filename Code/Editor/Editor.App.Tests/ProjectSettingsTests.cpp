@@ -69,7 +69,8 @@ namespace
             project->Settings().renderMsaaSamples = 4;
             context.SetProject(project.Get());
             root->SetSize(Float2{900.0f, 700.0f});
-            dialog = MakeUnique<ProjectSettingsDialog>(DefaultAllocator(), DefaultAllocator(), context, refs, LoadSettings());
+            dialog = MakeUnique<ProjectSettingsDialog>(DefaultAllocator(), DefaultAllocator(), context, refs,
+                                                       Span<const foundation::runtime::LinkedPlugin>{}, LoadSettings());
             REQUIRE(dialog->Open(*root));
             (void)root->UpdateLayout();
         }
@@ -249,6 +250,8 @@ TEST_CASE("project settings: a group per plugin entry, its state, and a loaded p
     CHECK(group->DisplayName == String(u8"Meter"));
     CHECK(group->Category == String(editor::app::kProjectSettingsDialogPluginsCategory));
     CHECK(bag.GetValue(u8"plugins.meter.state", 0).AsString() == StringView(u8"loaded"));
+    (void)bed.root->UpdateLayout();
+    CHECK(bed.dialog->Grid()->FindRow(u8"plugins.meter.state") >= 0); // the grid reaches it, open
     REQUIRE(bag.FindInfo(u8"plugins.meter.volume") != nullptr);
     CHECK(bag.FindInfo(u8"plugins.meter.volume")->DisplayName == String(u8"Volume"));
     CHECK(bag.GetValue(u8"plugins.meter.volume", 0).AsInt() == 3);
@@ -274,4 +277,71 @@ TEST_CASE("project settings: a group per plugin entry, its state, and a loaded p
 
     bed.context.SetPlugins(nullptr);
     host.Unload();
+}
+
+namespace
+{
+    // A package folder in the project's Plugins/ with a manifest of `id`.
+    void WriteDialogPackage(StringView projectDir, StringView folder, StringView id)
+    {
+        foundation::runtime::PluginManifest manifest;
+        manifest.id = String(id);
+        manifest.name = String(u8"Lantern");
+        manifest.version = String(u8"0.3.0");
+        manifest.engineVersion = String(engine::project::kEngineVersionString);
+        manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+        manifest.platforms.PushBack(foundation::runtime::PluginPlatform{String(u8"Linux64")});
+        const String dir = PathJoin(PathJoin(projectDir, u8"Plugins").AsView(), folder);
+        REQUIRE(CreateDirectories(dir.AsView()));
+        MemoryStream xml;
+        REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+        REQUIRE(WriteFile(PathJoin(dir.AsView(), u8"Plugin.xml").AsView(), xml.Bytes()).IsOk());
+    }
+}
+
+// A package extracted into the project's Plugins folder shows unchecked under Plugins, and one that
+// cannot be enabled says why with no check box; checking it and saving adds its entry, and
+// unchecking that entry and saving removes it, leaving the folder, so it is offered again.
+TEST_CASE("project settings: a package in Plugins/ is offered unchecked; Save adds what is checked and removes what is not")
+{
+    Bed bed;
+    bed.dialog->Close();
+    WriteDialogPackage(u8"project_settings_project", u8"Lantern", u8"lantern");
+    WriteDialogPackage(u8"project_settings_project", u8"LanternCopy", u8"lantern");
+    REQUIRE(bed.dialog->Open(*bed.root));
+
+    gui::PropertyBag& bag = bed.Bag();
+    REQUIRE(bag.FindInfo(u8"available.0") != nullptr);
+    CHECK(bag.FindInfo(u8"available.0")->DisplayName == String(u8"Lantern 0.3.0 (Plugins/Lantern)"));
+    CHECK(bag.FindInfo(u8"available.0")->Category == String(editor::app::kProjectSettingsDialogPluginsCategory));
+    REQUIRE(bag.FindInfo(u8"available.0.enabled") != nullptr);
+    CHECK_FALSE(bag.GetValue(u8"available.0.enabled", 0).AsBool());
+    CHECK(bag.GetValue(u8"available.0.state", 0).AsString() == StringView(u8"available: Engine part on Linux64"));
+    CHECK(bag.FindInfo(u8"available.1.enabled") == nullptr); // the copy is not offered
+    CHECK(bag.GetValue(u8"available.1.state", 0).AsString().StartsWith(u8"not offered: plugin 'lantern' is also in"));
+
+    // The grid shows them, open: a row the grid cannot reach through its parent never shows.
+    (void)bed.root->UpdateLayout();
+    CHECK(bed.dialog->Grid()->FindRow(u8"available.0.enabled") >= 0);
+    CHECK(bed.dialog->Grid()->FindRow(u8"available.1.state") >= 0);
+
+    bed.Edit(u8"available.0.enabled", gui::Variant(true));
+    REQUIRE(bed.dialog->Save());
+    const foundation::runtime::EnabledPlugin* entry = bed.project->Settings().FindPlugin(u8"lantern");
+    REQUIRE(entry != nullptr);
+    CHECK(entry->path == String(u8"Plugins/Lantern"));
+    CHECK(entry->platforms.IsEmpty());
+
+    REQUIRE(bed.dialog->Open(*bed.root));
+    gui::PropertyBag& again = bed.Bag();
+    REQUIRE(again.FindInfo(u8"plugins.lantern.enabled") != nullptr);
+    CHECK(bed.dialog->Grid()->FindRow(u8"plugins.lantern.enabled") >= 0);
+    CHECK(again.GetValue(u8"plugins.lantern.enabled", 0).AsBool());
+    bed.Edit(u8"plugins.lantern.enabled", gui::Variant(false));
+    REQUIRE(bed.dialog->Save());
+    CHECK(bed.project->Settings().FindPlugin(u8"lantern") == nullptr);
+    CHECK(FileExists(u8"project_settings_project/Plugins/Lantern/Plugin.xml"));
+
+    REQUIRE(bed.dialog->Open(*bed.root));
+    REQUIRE(bed.Bag().FindInfo(u8"available.0.enabled") != nullptr); // offered again
 }

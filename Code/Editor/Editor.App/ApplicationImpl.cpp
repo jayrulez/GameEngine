@@ -573,6 +573,7 @@ namespace editor::app
             return;
         if (!m_projectSettings)
             m_projectSettings = MakeUnique<ProjectSettingsDialog>(m_editorAllocator, m_editorAllocator, m_context, RefServices(),
+                                                                  m_config.linkedPlugins,
                                                                   m_window.LoadMarkup(ProjectSettingsDialog::kPath));
         (void)m_projectSettings->Open(*root);
     }

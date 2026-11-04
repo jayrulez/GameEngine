@@ -490,9 +490,10 @@ editor, the player and export still read `nativeModule`):
   the script, facade, plugin and platform named; a project whose platforms enable the same
   plugins checks nothing.
 
-- **X8 - discovering and enabling a project's packages** (PROPOSED 2026-11-04; ruling that day:
-  a package found is listed as available and enabled only by the user, never by being in the
-  folder). Checked first: a project's packages are the entries of its `plugins` list that name a
+- **X8 - discovering and enabling a project's packages** (built 2026-11-04; rulings that day: a
+  package found is listed as available and enabled only by the user, never by being in the folder;
+  Project Settings adds and removes by an Enabled check box per plugin, since its grid has no button
+  rows; no Rescan action, since every list reads the folder when it is shown). Checked first: a project's packages are the entries of its `plugins` list that name a
   path (`ProjectPackageDirs`), and the build and every host read that list; nothing reads
   `<project>/Plugins/` itself, so a package extracted there does nothing until an entry is added,
   which only `plugin_enable` (or an edit of Project.xml) does. Project Settings shows each entry's
@@ -501,18 +502,20 @@ editor, the player and export still read `nativeModule`):
   the user's to choose; an entry changes the project for everyone who shares it and what every
   export ships (and may refuse); and the entries stay the one list every host loads, where a
   folder scan would be a second one that can disagree with it (a package kept but turned off).
-  1. **Discovery.** At project open and on Project > Rescan Plugins, the editor and both MCP
-     hosts read `<project>/Plugins/*/Plugin.xml`. A package no entry names is available, with
+  1. **Discovery.** Whenever the list is shown (`plugin_list`, Project Settings opening), the
+     editor and both MCP hosts read `<project>/Plugins/*/Plugin.xml` (`DiscoverPlugins`). A package no entry names is available, with
      its name, version, parts, platforms and whether its engine version is one this engine takes;
      one whose id an entry or another package already holds, or whose manifest does not read, is
      reported with why and not offered. `plugin_list` adds them under `available`, beside the
      engine's linked plugins no entry enables.
-  2. **Add Plugin** in Project Settings > Plugins: the available packages and linked plugins;
-     choosing one writes its entry (id, path, platforms) as `plugin_enable` does, then the state
-     says what is next (a package's parts not built: Build Project Plugins, then Reload). The
-     dialog says the package's code runs in the editor once built.
-  3. **Remove** on each entry: the entry and its settings go (as `plugin_disable`), the folder
-     stays, and the package is available again. The game's own package is removed the same way.
+  2. **Enabling** in Project Settings > Plugins: after the entries, a group per available package
+     and linked plugin with an unchecked Enabled box (or, not offered, why); checked, Save writes
+     its entry (id, path, every platform its manifest supports) as `plugin_enable` does, and the
+     status says what is next (Build Project Plugins, then Reload). The box's description says the
+     package's code runs in the editor once built.
+  3. **Removing**: each entry's Enabled box, unchecked, has Save drop the entry and its settings (as
+     `plugin_disable`); the folder stays, and the package is available again. The game's own
+     package is removed the same way.
   4. **Unchanged:** Add Native Code makes the game's package and enables it, as asked; a package
      with no entry is never built or loaded by any host.
   Not here: a per-user plugin folder shared across projects, and prebuilt packages for a released

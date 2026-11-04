@@ -430,6 +430,46 @@ editor, the player and export still read `nativeModule`):
   stages an enabled plugin's deploy files and refuses what cannot ship; hooks run in order after
   staging and a failing one fails the export; NativeSample's export hook in Integration.Plugins.
 
+- **X7 - a script's facades on each platform** (PROPOSED 2026-11-04, for discussion). The gotcha
+  "Scripts and absent plugins" below, made real. Checked first:
+  - A script cooks once, in the host cook (`ScriptClassAssetBuilder` is platform invariant), and
+    its product is copied into every target's database; nothing about a script is checked per
+    platform.
+  - Both language cooks compile against every script-facing type in the global registry
+    (`RegisterReflectedTypes`), which holds the facades of every plugin the cooking host loaded
+    (a plugin domain's reflection and facade register during its load, so the loader records
+    them as that plugin's).
+  - An AngelScript check is a full build: a facade that is not registered is a compile error,
+    and AngelScript compiles at load, so on a platform without the plugin the script does not
+    load at all. A Luau check parses and compiles, and a Luau compile does not resolve globals:
+    a missing facade is a nil global, an error only when that line runs.
+
+  Design:
+  1. **Who owns a type.** `PluginHost::OwnerOf(TypeId)` answers the plugin whose load registered
+     it, from the loader's records (the engine's types have none).
+  2. **The check, per export preset.** Before staging, for each preset whose platform enables
+     fewer of the project's plugins than the host loaded, every script the dist ships is checked
+     against the surface without the absent plugins' types: a new `IScriptLanguageCook::CheckOn
+     (source, assetName, sink, hidden)`, `hidden` the types to leave out. AngelScript builds
+     against a cook engine registered without them; Luau compiles as now and walks the parsed
+     tree for globals that name a hidden facade. A preset whose platform has every plugin the
+     host has costs nothing.
+  3. **The report.** A use found refuses the export, as an entry enabled on an unsupported
+     platform does: "script 'Scripts/Shop' uses Steam (plugin 'online_steam'), which is not
+     enabled on Web", with the line. `script_validate` takes an optional `platform` and runs the
+     same check, so an agent finds it before an export.
+  4. **What a script cannot use.** A facade of a plugin the host cook does not load (one built
+     only for another platform) is not on the surface at all, so a script using it fails the
+     host cook. That stays: a platform service reaches scripts through an engine facade with
+     per-platform providers (Online's shape), and the spec says so.
+
+  Open: whether a Luau use under a guard (`if Steam then ... end`) should refuse (it never runs
+  where the plugin is absent) or only warn; refusing is the simple rule, warning needs the
+  guard recognised. Tests: a two-plugin fixture with a facade each, one enabled on Linux64 only;
+  an AngelScript and a Luau script using it pass the Linux64 check and are refused for Web with
+  the script, facade, plugin and platform named; a project whose platforms enable the same
+  plugins checks nothing.
+
 ## Gotchas
 
 - **Reading the manifest from CMake** (settled in X0). CMake has no XML reader, and a host tool

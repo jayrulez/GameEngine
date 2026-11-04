@@ -15,6 +15,7 @@ export module editor.mcp:session;
 import foundation.core;
 import foundation.json;
 import foundation.content;
+import foundation.runtime; // the process's plugin host
 import editor.project;
 
 using namespace foundation::core;
@@ -38,6 +39,10 @@ export namespace editor::mcp
         /// project_settings_set saved new settings: the editor host re-applies what depends on
         /// them, as its Project Settings dialog's Save does; the stdio host leaves it unset.
         Function<void()> onSettingsChanged;
+        /// The process's plugin host, which loaded the project's plugins: plugin_list reports each
+        /// entry against it and plugin_settings_set edits the settings it holds. Null where the
+        /// host loads no plugins.
+        foundation::runtime::PluginHost* plugins = nullptr;
     };
 
     // The stdio host's project ownership: project_open stores what it opened here and points

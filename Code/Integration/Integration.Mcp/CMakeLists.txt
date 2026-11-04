@@ -1,7 +1,7 @@
 # Integration.Mcp - golden MCP tool-call flows as an agent makes them (create, open and inspect a
 # project, and more), crossing foundation.mcp, editor.mcp, editor.core and VFS/content.
 
-add_executable(Integration.Mcp TestsMain.cpp McpProjectFlowTests.cpp McpSceneFlowTests.cpp McpAssetUsesTests.cpp McpLogToolsTests.cpp McpScriptValidateTests.cpp McpShaderValidateTests.cpp McpGuiValidateTests.cpp McpExportTests.cpp McpFullFlowTests.cpp McpSceneReferenceTests.cpp SampleProjectTests.cpp)
+add_executable(Integration.Mcp TestsMain.cpp McpProjectFlowTests.cpp McpSceneFlowTests.cpp McpAssetUsesTests.cpp McpLogToolsTests.cpp McpScriptValidateTests.cpp McpShaderValidateTests.cpp McpGuiValidateTests.cpp McpExportTests.cpp McpFullFlowTests.cpp McpPluginToolsTests.cpp McpSceneReferenceTests.cpp SampleProjectTests.cpp)
 target_link_libraries(Integration.Mcp PRIVATE Foundation::VFS
     Editor::Mcp Foundation::Mcp.Reflection Foundation::Mcp Foundation::Json Foundation::Content
     Foundation::Scene Foundation::Scene.Resource Foundation::Net.Replication Engine::Composition

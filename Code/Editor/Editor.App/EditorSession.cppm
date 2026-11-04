@@ -132,6 +132,7 @@ export namespace editor::app
                 m_thumbnailStage = MakeUnique<editor::ThumbnailStage>(m_allocator, *m_services.embeddedHost, *m_services.thumbnails, m_resources.Get());
             if (m_services.native != nullptr)
                 m_services.native->Load(project, context, *m_services.runtime);
+            ReportPluginsNotLoaded(project, context);
             if (m_services.embeddedApp != nullptr)
                 m_services.embeddedApp->SetContentDatabase(&project.SourceDb()); // scripted scene loads read the sources
             ApplyGameUiDefaults();
@@ -163,6 +164,25 @@ export namespace editor::app
             else
                 context.SetStatus(Format(u8"Project: {}  ({})", project.Name(), project.Directory()).AsView());
             return true;
+        }
+
+        /// Tells the user which of the project's plugins did not load here (missing or refused), each
+        /// with why in the log; their entries and settings are kept as written.
+        static void ReportPluginsNotLoaded(editor::EditorProject& project, editor::EditorContext& context)
+        {
+            String names;
+            for (const foundation::runtime::EnabledPlugin& entry : project.Settings().plugins)
+            {
+                const engine::project::PluginStatus status = engine::project::PluginStatusOf(entry, context.Plugins(), project.Allocator());
+                if (status.state != engine::project::PluginState::Missing && status.state != engine::project::PluginState::Refused)
+                    continue;
+                LOG_WARNING(u8"Editor", u8"{}; its entry and settings are kept as written", status.reason);
+                names += names.IsEmpty() ? u8"" : u8", ";
+                names += entry.id.AsView();
+            }
+            if (!names.IsEmpty())
+                context.Notify(editor::NoticeKind::Warning,
+                               Format(u8"Plugins not loaded: {} (the Console says why; their settings are kept).", names).AsView());
         }
 
         /// Closes the project: the views first (the hook), then the cook, the thumbnails, the

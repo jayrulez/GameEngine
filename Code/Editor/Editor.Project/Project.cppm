@@ -146,6 +146,8 @@ export namespace editor
 
         [[nodiscard]] StringView Name() const noexcept { return m_settings.name.AsView(); }
         [[nodiscard]] StringView Directory() const noexcept { return m_directory.AsView(); }
+        /// The allocator the project was opened with, for what its tools build from it.
+        [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
         [[nodiscard]] ProjectSettings& Settings() noexcept { return m_settings; }
         [[nodiscard]] const ProjectSettings& Settings() const noexcept { return m_settings; }
 

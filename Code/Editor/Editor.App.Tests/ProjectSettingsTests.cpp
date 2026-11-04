@@ -6,15 +6,18 @@
 // source type it names and a list setting is a list of them; an enum shows its choices by name; MSAA
 // offers the render subsystem's levels; and the project's engine version is read only. Save writes
 // the rows back (dropping a list's empty and repeated entries) and persists them; Cancel leaves the
-// manifest as it was.
+// manifest as it was. The project's plugins follow, a group each: its state in the plugin host, and
+// a loaded plugin's settings, which Save writes into its entry.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
 
 import foundation.core;
 import foundation.gui;
 import foundation.gui.toolkit;
 import foundation.scene.resource;
+import foundation.runtime; // the project's plugins
 import engine.project;
 import editor.core;
 import editor.app;
@@ -162,4 +165,113 @@ TEST_CASE("project settings: Save writes the rows back, a list's empty and repea
     UniquePtr<editor::EditorProject> again = editor::EditorProject::Open(DefaultAllocator(), u8"project_settings_project");
     REQUIRE(again);
     CHECK(again->Settings().name == String(u8"Renamed"));
+}
+
+namespace dialogprobe
+{
+    class MeterSettings final : public ISerializable
+    {
+        RTTI_OBJECT(MeterSettings, ISerializable)
+    public:
+        u32 volume = 3;
+        String greeting = String(u8"hello");
+        void Serialize(ISerializer& ar) override
+        {
+            foundation::core::Serialize(ar, "volume", volume);
+            foundation::core::Serialize(ar, "greeting", greeting);
+        }
+    };
+
+    REFLECT_MEMBERS(MeterSettings, "rtti::dialogprobe")
+    {
+        builder.DataVersion(1);
+        builder.Property<&MeterSettings::volume>("volume").PropAttribute(engine::project::kSettingLabelAttribute,
+                                                                         String(u8"Volume"));
+        builder.Property<&MeterSettings::greeting>("greeting")
+            .PropAttribute(engine::project::kSettingLabelAttribute, String(u8"Greeting"));
+    }
+}
+
+namespace
+{
+    constexpr char8_t kMeter[] = u8"meter";
+    void LoadMeter(foundation::runtime::PluginContext& context) { (void)context.Settings<dialogprobe::MeterSettings>(); }
+    const foundation::runtime::PluginPart* MeterEngine()
+    {
+        static constexpr foundation::runtime::PluginPart part{kMeter, foundation::runtime::PluginPartKind::Engine,
+                                                              &LoadMeter, nullptr};
+        return &part;
+    }
+}
+
+TEST_CASE("project settings: a group per plugin entry, its state, and a loaded plugin's settings, which Save writes into its entry")
+{
+    Bed bed;
+    bed.dialog->Close();
+    engine::project::ProjectSettings& settings = bed.project->Settings();
+    foundation::runtime::EnabledPlugin meter;
+    meter.id = String(kMeter);
+    settings.plugins.PushBack(Move(meter));
+    foundation::runtime::EnabledPlugin steam;
+    steam.id = String(u8"steam");
+    const StringView unknown = u8"<i32 name=\"appId\">480</i32>";
+    steam.settings.Resize(unknown.Size());
+    MemCopy(steam.settings.Data(), unknown.Data(), unknown.Size());
+    settings.plugins.PushBack(Move(steam));
+
+    foundation::runtime::PluginManifest manifest;
+    manifest.id = String(kMeter);
+    manifest.name = String(u8"Meter");
+    manifest.version = String(u8"1.0");
+    manifest.engineVersion = String(engine::project::kEngineVersionString);
+    manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+    manifest.platforms.PushBack(foundation::runtime::PluginPlatform{String(GetHostPlatformName())});
+    MemoryStream xml;
+    REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+    Array<byte> manifestText;
+    for (byte b : xml.Bytes())
+        manifestText.PushBack(b);
+    manifestText.PushBack(byte{0});
+    const foundation::runtime::PluginPartEntryFn parts[] = {&MeterEngine};
+    const foundation::runtime::LinkedPlugin linked[] = {{reinterpret_cast<const char8_t*>(manifestText.Data()), parts, 1}};
+    foundation::runtime::SubsystemManager subsystems(DefaultAllocator());
+    foundation::runtime::PluginHost host(DefaultAllocator(), subsystems, foundation::runtime::HostRole::Editor,
+                                         engine::project::kEngineVersionString);
+    REQUIRE(host.AddLinked(Span<const foundation::runtime::LinkedPlugin>(linked, 1)).IsOk());
+    (void)host.Load(Span<const foundation::runtime::EnabledPlugin>(settings.plugins.Data(), settings.plugins.Size()));
+    bed.context.SetPlugins(&host);
+    REQUIRE(bed.dialog->Open(*bed.root));
+
+    gui::PropertyBag& bag = bed.Bag();
+    const gui::PropertyInfo* group = bag.FindInfo(u8"plugins.meter");
+    REQUIRE(group != nullptr);
+    CHECK(group->Kind == gui::PropertyKind::Group);
+    CHECK(group->DisplayName == String(u8"Meter"));
+    CHECK(group->Category == String(editor::app::kProjectSettingsDialogPluginsCategory));
+    CHECK(bag.GetValue(u8"plugins.meter.state", 0).AsString() == StringView(u8"loaded"));
+    REQUIRE(bag.FindInfo(u8"plugins.meter.volume") != nullptr);
+    CHECK(bag.FindInfo(u8"plugins.meter.volume")->DisplayName == String(u8"Volume"));
+    CHECK(bag.GetValue(u8"plugins.meter.volume", 0).AsInt() == 3);
+    CHECK(bag.GetValue(u8"plugins.steam.state", 0).AsString().StartsWith(u8"missing: plugin 'steam' is not in this build"));
+    CHECK(bag.FindInfo(u8"plugins.steam.appId") == nullptr); // its settings are not read here
+
+    bed.Edit(u8"plugins.meter.volume", gui::Variant(i64{8}));
+    bed.Edit(u8"plugins.meter.greeting", gui::Variant(StringView(u8"hi")));
+    REQUIRE(bed.dialog->Save());
+    auto* live = Cast<dialogprobe::MeterSettings>(host.Settings(kMeter));
+    REQUIRE(live != nullptr);
+    CHECK(live->volume == 8u);
+    dialogprobe::MeterSettings saved;
+    const foundation::runtime::EnabledPlugin* entry = settings.FindPlugin(kMeter);
+    REQUIRE(entry != nullptr);
+    REQUIRE(foundation::runtime::ReadPluginSettings(Span<const u8>(entry->settings.Data(), entry->settings.Size()), saved,
+                                                    DefaultAllocator())
+                .IsOk());
+    CHECK(saved.volume == 8u);
+    CHECK(saved.greeting == String(u8"hi"));
+    const Array<u8>& kept = settings.FindPlugin(u8"steam")->settings;
+    CHECK(StringView(reinterpret_cast<const utf8char*>(kept.Data()), kept.Size()) == unknown);
+
+    bed.context.SetPlugins(nullptr);
+    host.Unload();
 }

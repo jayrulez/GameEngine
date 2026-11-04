@@ -9,10 +9,13 @@
 // number within its range, a check box, an enum's choices by name, and for each asset setting an
 // asset reference to the source type it names (a list of them for a list setting), so the slot
 // picks, drops and clears as an inspector's does. MSAA's choices are the render subsystem's
-// levels. The engine version the project was last saved with is shown read-only. Save writes the
-// rows back (dropping a list's empty and repeated entries), keeps the path mirrors beside the
-// guids, persists the manifest and notifies the editor; Cancel or closing leaves the manifest as
-// it was.
+// levels. The engine version the project was last saved with is shown read-only. The project's
+// plugins follow in their own section, a group per entry in its order: its state in the process's
+// plugin host, and for a loaded plugin its settings, rows made the same way from its settings
+// type; an entry whose plugin is not loaded keeps its settings as written. Save writes the rows
+// back (dropping a list's empty and repeated entries), keeps the path mirrors beside the guids,
+// writes each loaded plugin's settings into its entry, persists the manifest and notifies the
+// editor; Cancel or closing leaves the manifest as it was.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -26,6 +29,7 @@ import foundation.gui;
 import foundation.gui.toolkit;
 import engine.render;  // the MSAA levels
 import engine.project; // ProjectSettings' reflected settings
+import foundation.runtime; // the plugins' entries and host
 import editor.core;
 import :resource_ref_editor;
 
@@ -43,6 +47,9 @@ export namespace editor::app
     /// static constexpr member from a shared library).
     inline constexpr StringView kProjectSettingsDialogMsaaSetting = u8"renderMsaaSamples";
 
+    /// ProjectSettingsDialog::kPluginsCategory, at namespace scope for another library to read.
+    inline constexpr StringView kProjectSettingsDialogPluginsCategory = u8"Plugins";
+
     /// ProjectSettingsDialog::kPath, at namespace scope for another library to read (MSVC exports no class's
     /// static constexpr member from a shared library).
     inline constexpr const char8_t* kProjectSettingsDialogPath = u8"Editor/ProjectSettings.xml";
@@ -55,7 +62,7 @@ export namespace editor::app
 
         /// Builds the dialog over `context`'s project; `refs` (the asset slots' table) outlives it.
         ProjectSettingsDialog(IAllocator& allocator, editor::EditorContext& context, const ResourceRefServices& refs, RefPtr<gui::Node> body)
-            : m_allocator(allocator), m_context(&context), m_body(Move(body))
+            : m_allocator(allocator), m_context(&context), m_pluginSettings(allocator), m_body(Move(body))
         {
             if (!m_body)
                 return;
@@ -137,6 +144,9 @@ export namespace editor::app
 
         /// The path of the read-only row showing the engine version the project was saved with.
         static constexpr StringView kEngineVersionRow = kProjectSettingsDialogEngineVersionRow;
+        /// The section the project's plugins show in; plugin `id`'s group is `plugins.<id>`, its
+        /// state `plugins.<id>.state` and each setting `plugins.<id>.<name>`.
+        static constexpr StringView kPluginsCategory = kProjectSettingsDialogPluginsCategory;
         /// The MSAA setting, whose choices are the render subsystem's levels.
         static constexpr StringView kMsaaSetting = kProjectSettingsDialogMsaaSetting;
 
@@ -174,7 +184,7 @@ export namespace editor::app
                 if (label == nullptr || property.address == nullptr)
                     continue;
                 const void* address = property.address(instance);
-                gui::PropertyInfo* row = AddRow(property, address);
+                gui::PropertyInfo* row = AddRow(NameOf(property), property, address);
                 if (row == nullptr)
                     continue;
                 row->DisplayName = *label;
@@ -186,11 +196,52 @@ export namespace editor::app
             version.Category = String(engine::project::kSettingDefaultCategory);
             version.Description = String(u8"The engine this project was last saved with; a save stamps the running one.");
             version.ReadOnly = true;
+            FillPlugins(settings);
         }
-        // Adds the row for a setting, or returns null for one no row shows.
-        gui::PropertyInfo* AddRow(const PropertyInfo& property, const void* address)
+        // A group per plugin entry: its state, and a loaded plugin's settings.
+        void FillPlugins(const engine::project::ProjectSettings& settings)
         {
-            const StringView name = NameOf(property);
+            m_pluginSettings.Clear();
+            foundation::runtime::PluginHost* host = m_context->Plugins();
+            for (const foundation::runtime::EnabledPlugin& entry : settings.plugins)
+            {
+                const String group = Format(u8"plugins.{}", entry.id);
+                const foundation::runtime::PluginManifest* manifest = host != nullptr ? host->Manifest(entry.id.AsView()) : nullptr;
+                gui::PropertyInfo& header = m_bag->Add(group.AsView(), gui::PropertyKind::Group);
+                header.DisplayName = manifest != nullptr && !manifest->name.IsEmpty() ? manifest->name : entry.id;
+                header.Category = String(kPluginsCategory);
+                const engine::project::PluginStatus status = engine::project::PluginStatusOf(entry, host, m_allocator);
+                String state(engine::project::PluginStateName(status.state));
+                if (!status.reason.IsEmpty())
+                    state = Format(u8"{}: {}", state, status.reason);
+                for (const String& platform : status.unsupportedPlatforms)
+                    state.Append(Format(u8"; {} is not a platform it supports", platform).AsView());
+                gui::PropertyInfo& stateRow = m_bag->Add(Format(u8"{}.state", group).AsView(), gui::PropertyKind::String, gui::Variant(state.AsView()));
+                stateRow.DisplayName = String(u8"State");
+                stateRow.Category = String(kPluginsCategory);
+                stateRow.ReadOnly = true;
+                ISerializable* object = host != nullptr ? host->Settings(entry.id.AsView()) : nullptr;
+                if (object == nullptr || !host->SettingsRead(entry.id.AsView()))
+                    continue; // kept as written
+                m_pluginSettings.PushBack(PluginSettingsRows{String(entry.id.AsView(), m_allocator), object});
+                const Instance instance(object, object->GetType());
+                for (const PropertyInfo& property : Properties(*object->GetType()))
+                {
+                    const String* label = engine::project::SettingAttribute(property, engine::project::kSettingLabelAttribute);
+                    if (label == nullptr || property.address == nullptr)
+                        continue;
+                    const String path = Format(u8"{}.{}", group, NameOf(property));
+                    gui::PropertyInfo* row = AddRow(path.AsView(), property, property.address(instance));
+                    if (row == nullptr)
+                        continue;
+                    row->DisplayName = *label;
+                    row->Category = String(kPluginsCategory);
+                }
+            }
+        }
+        // Adds the row for a setting at `name`, or returns null for one no row shows.
+        gui::PropertyInfo* AddRow(StringView name, const PropertyInfo& property, const void* address)
+        {
             const TypeInfo& type = *property.type;
             const String* assetType = engine::project::SettingAttribute(property, engine::project::kSettingAssetTypeAttribute);
             const String* emptyText = engine::project::SettingAttribute(property, engine::project::kSettingEmptyTextAttribute);
@@ -248,15 +299,29 @@ export namespace editor::app
             }
             return nullptr;
         }
-        // Writes the rows into `settings`.
+        // Writes the rows into `settings`, and each loaded plugin's into its object and its entry.
         void WriteBack(engine::project::ProjectSettings& settings)
         {
             if (!m_bag)
                 return;
-            const Instance instance(&settings, &SettingsType());
-            for (const PropertyInfo& property : Properties(SettingsType()))
+            WriteRows(Instance(&settings, &SettingsType()), SettingsType(), StringView{});
+            for (const PluginSettingsRows& plugin : m_pluginSettings)
             {
-                const StringView name = NameOf(property);
+                foundation::runtime::EnabledPlugin* entry = settings.FindPlugin(plugin.id.AsView());
+                if (entry == nullptr)
+                    continue;
+                const String group = Format(u8"plugins.{}", plugin.id);
+                WriteRows(Instance(plugin.object, plugin.object->GetType()), *plugin.object->GetType(), group.AsView());
+                if (!foundation::runtime::WritePluginSettings(*plugin.object, entry->settings, m_allocator).IsOk())
+                    LOG_ERROR(u8"Editor", u8"plugin '{}': its settings did not write into the project", plugin.id);
+            }
+        }
+        // Writes the rows under `group` (top level when empty) into `instance`, a `type`.
+        void WriteRows(const Instance& instance, const TypeInfo& type, StringView group)
+        {
+            for (const PropertyInfo& property : Properties(type))
+            {
+                const String name = group.IsEmpty() ? String(NameOf(property)) : Format(u8"{}.{}", group, NameOf(property));
                 if (m_bag->FindInfo(name) == nullptr || property.address == nullptr || m_bag->FindInfo(name)->ReadOnly)
                     continue;
                 void* address = property.address(instance);
@@ -310,8 +375,16 @@ export namespace editor::app
             return nullptr;
         }
 
+        // A loaded plugin whose settings the rows show, and the object they write into.
+        struct PluginSettingsRows
+        {
+            String id;
+            ISerializable* object = nullptr; // the plugin host's, alive while the plugin is loaded
+        };
+
         IAllocator& m_allocator;
         editor::EditorContext* m_context;
+        Array<PluginSettingsRows> m_pluginSettings; // rebuilt at each open
         RefPtr<gui::Node> m_body;
         RefPtr<gui::Window> m_window;
         gui::PropertyGrid* m_grid = nullptr;

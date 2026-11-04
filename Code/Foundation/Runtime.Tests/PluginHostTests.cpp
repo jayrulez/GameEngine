@@ -845,3 +845,21 @@ TEST_CASE("enabled plugin: an entry's settings are kept verbatim, read by nobody
     REQUIRE(reader.IsOk());
     CHECK(WriteXml(copied) == first);
 }
+
+// A project's package added before its development build made any library of a part it lists is
+// refused, saying the part is not built.
+TEST_CASE("plugin host: a development package with no library of a part is refused as not built")
+{
+    SubsystemManager subsystems(DefaultAllocator());
+    PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+    UniquePtr<PluginManifest> manifest = MakeUnique<PluginManifest>(DefaultAllocator());
+    manifest->id = String(u8"unbuilt");
+    manifest->version = String(u8"0.1.0");
+    manifest->engineVersion = String(u8"0.1");
+    manifest->parts.PushBack(PluginManifestPart{String(u8"Engine")});
+    manifest->platforms.PushBack(PluginPlatform{String(GetHostPlatformName())});
+    host.AddShared(Move(manifest), Span<const PluginLibrary>{});
+    const StringView enabled[] = {u8"unbuilt"};
+    const PluginLoadReport report = LoadIds(host, Span<const StringView>(enabled, 1));
+    CHECK(RefusedWith(report, u8"unbuilt", u8"its Engine part is not built"));
+}

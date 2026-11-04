@@ -468,8 +468,13 @@ export namespace foundation::runtime
                 }
                 if (LinkedPart(candidate, kind) == nullptr && SharedPart(candidate, kind) == nullptr)
                 {
-                    return core::Format(u8"plugin '{}': its {} part is not in this build", candidate.manifest->id,
-                                        PluginPartKindName(kind));
+                    // A development package with no library of the part has not been built yet.
+                    return candidate.linked.IsEmpty()
+                               ? core::Format(u8"plugin '{}': its {} part is not built (no library of it; build the "
+                                              u8"project's plugins)",
+                                              candidate.manifest->id, PluginPartKindName(kind))
+                               : core::Format(u8"plugin '{}': its {} part is not in this build", candidate.manifest->id,
+                                              PluginPartKindName(kind));
                 }
             }
             return {};

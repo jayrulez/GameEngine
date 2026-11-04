@@ -859,6 +859,11 @@ if(OPTION_BUILD_TESTS)
         util_test_suite(Code/Integration/Integration.GuiScript         Foundation::GUI.Gamekit)
     endif()
     util_test_suite(Code/Integration/Integration.Mcp                Editor::Mcp)  # golden flow: create, open and inspect a project
+    # A project's own plugin package (NativeSample's, four parts) built here and loaded by each host;
+    # a build adding a project's packages (ENGINE_PROJECT_PLUGINS) has its own copy of it.
+    if(NOT ENGINE_PROJECT_PLUGINS)
+        util_test_suite(Code/Integration/Integration.Plugins        Editor::App)
+    endif()
     # Engine composition against pipeline registration: every factory description's cooked form has a builder.
     util_test_suite(Code/Integration/Integration.Composition        Pipeline::Registration)
     # Animation and physics in a running scene: root motion walking a character, which still collides.

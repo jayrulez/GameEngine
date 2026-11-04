@@ -2500,7 +2500,7 @@ TEST_CASE("export: the NativeSample fixture pins the game-package conventions")
 {
     // The committed reference project (Data/SampleProjects/NativeSample) must stay a valid input
     // to the package pipeline: its manifest enables its own package, whose Plugin.xml reads, names
-    // the same id, has an Engine part, and whose part folder holds the CMakeLists and the source.
+    // the same id and lists every part kind, each with its folder.
     const String root = Format(u8"{}/Data/SampleProjects/NativeSample",
                                StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)));
     foundation::vfs::NativeFileSystem fs(root.AsView(), foundation::core::DefaultAllocator());
@@ -2516,11 +2516,15 @@ TEST_CASE("export: the NativeSample fixture pins the game-package conventions")
                                                     DefaultAllocator())
                 .IsOk());
     CHECK(manifest.id == u8"nativesample");
-    CHECK(manifest.HasPart(foundation::runtime::PluginPartKind::Engine));
     String why;
     CHECK(foundation::runtime::CheckPluginManifest(manifest, engine::project::kEngineVersionString, why));
-    CHECK(fs.Exists(u8"Plugins/NativeSample/NativeSample.Engine/CMakeLists.txt"));
-    CHECK(fs.Exists(u8"Plugins/NativeSample/NativeSample.Engine/NativeSampleEngine.cpp"));
+    // Every part kind, each a folder with its CMakeLists (Integration.Plugins builds and loads them).
+    for (foundation::runtime::PluginPartKind kind : foundation::runtime::kPluginPartKinds)
+    {
+        CAPTURE(foundation::runtime::PluginPartKindName(kind));
+        CHECK(manifest.HasPart(kind));
+        CHECK(fs.Exists(Format(u8"Plugins/NativeSample/NativeSample.{}/CMakeLists.txt", foundation::runtime::PluginPartKindName(kind)).AsView()));
+    }
 }
 
 TEST_CASE("export: Add Native Code scaffolds the game's package with the parts asked for, and adds parts to it")

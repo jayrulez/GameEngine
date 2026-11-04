@@ -8,3 +8,8 @@ target_link_libraries(Tools.Cook PRIVATE
     Engine::Composition) # RegisterAllScriptFacades: the complete engine facade surface the
                            # script cooks compile against (run/ui/physics/audio/... facades)
 
+
+# Its runtime dependencies beside it, listed in Tools.Cook.runtime-libs (the editor distribution ships
+# the tool with them): the engine's own libraries in a shared build, and DXC, which its shader cooks
+# load at run time.
+util_copy_runtime_deps(Tools.Cook EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_NOTICES_FILE})

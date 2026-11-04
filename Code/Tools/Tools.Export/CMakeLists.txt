@@ -29,3 +29,8 @@ add_test(NAME Tools.Export.Arguments
 set_tests_properties(Tools.Export.Arguments PROPERTIES
                      PASS_REGULAR_EXPRESSION "failed to open project"
                      FAIL_REGULAR_EXPRESSION "unknown option")
+
+# Its runtime dependencies beside it, listed in Tools.Export.runtime-libs (the editor distribution ships
+# the tool with them): the engine's own libraries in a shared build, and DXC, which its shader cooks
+# load at run time.
+util_copy_runtime_deps(Tools.Export EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_NOTICES_FILE})

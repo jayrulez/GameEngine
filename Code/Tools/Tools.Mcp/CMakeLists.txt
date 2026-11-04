@@ -38,3 +38,8 @@ target_link_libraries(Tools.Mcp PRIVATE Foundation::VFS
     Engine::Composition
     Pipeline::Registration Pipeline::Core Pipeline::Importer # the write tools' builder/importer set
     Foundation::Mcp Foundation::Json Foundation::Core Foundation::Policy)
+
+# Its runtime dependencies beside it, listed in Tools.Mcp.runtime-libs (the editor distribution ships
+# the tool with them): the engine's own libraries in a shared build, and DXC, which its shader cooks
+# load at run time.
+util_copy_runtime_deps(Tools.Mcp EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_NOTICES_FILE})

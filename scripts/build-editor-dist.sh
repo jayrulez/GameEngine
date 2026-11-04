@@ -5,7 +5,8 @@
 #
 # build-editor-dist.sh - assemble a portable, downloadable editor distribution for Linux.
 #
-# The result is an unzip-and-run folder: the Tools.Editor executable, its runtime sidecars (DXC,
+# The result is an unzip-and-run folder: the Tools.Editor executable and the CLI tools (Tools.Cook,
+# Tools.Export, Tools.Mcp), the engine's shared libraries they run on, their runtime sidecars (DXC,
 # since the editor cooks and recompiles shaders), and the Data root (Engine, Editor, Branding,
 # Templates and the .dataroot marker) beside the exe. Data/Engine/Shaders holds the cooked engine
 # shader pack (shaders.dpak, the path the ShaderSystemHost opens), the shader sources (an export
@@ -13,10 +14,12 @@
 # and not by compiling the sources. FindDataRoot() discovers Data/ beside the exe, and $ORIGIN on
 # the exe's RUNPATH finds the sidecars, so the folder relocates to any machine.
 #
-# Built RelWithDebInfo (the clang-reldbg preset): optimised, asserts kept (a development tool; an
-# assert names the bug), and the debug info split off into <dist>-symbols.tar.gz
-# (Tools.Editor.debug, linked from the stripped exe by .gnu_debuglink), so a crash in a shipped
-# editor can be resolved against the build that made it.
+# Built RelWithDebInfo with the engine as shared libraries (the clang-reldbg-shared preset), so the
+# editor and the tools load a project's own plugin packages built against the same engine:
+# optimised, asserts kept (a development tool; an assert names the bug), and the debug info split
+# off into <dist>-symbols.tar.gz (<binary>.debug for each executable and library, linked from the
+# stripped one by .gnu_debuglink), so a crash in a shipped editor can be resolved against the build
+# that made it.
 #
 # Not bundled: Vulkan (a system dependency: the target needs GPU drivers and the Vulkan loader,
 # the same as the build dependencies).
@@ -36,9 +39,10 @@ cd "$ROOT"
 
 JOBS="${JOBS:-4}"
 FORMATS="${FORMATS:-spirv}"
-PRESET="clang-reldbg"                        # RelWithDebInfo: $ORIGIN rpath, DXC beside the editor
+PRESET="clang-reldbg-shared"                 # RelWithDebInfo, shared engine: $ORIGIN rpath, the libraries beside the editor
 BUILD="build/$PRESET"
-BIN="Bin/RelWithDebInfo/Linux64-Clang"       # Bin/<Config>/<Platform>-<Compiler>, from the preset
+BIN="Bin/RelWithDebInfo/Linux64-Clang-Shared" # Bin/<Config>/<Platform>-<Compiler><suffix>, from the preset
+TOOLS=(Tools.Editor Tools.Cook Tools.Export Tools.Mcp) # what the dist runs
 
 # Version stamp: the one source of truth is project(VERSION) in the root CMakeLists (the same
 # value the binary reports with --version). It is folded into the dist folder and archive names so
@@ -53,8 +57,8 @@ DIST="$RAW_DIR/${RAW_NAME%-*}-${VERSION}-${RAW_NAME##*-}"  # e.g. dist/Editor-0.
 
 log() { printf '\n== %s ==\n' "$*"; }
 
-# 1. Build the editor and the shader-pack cooker (the preset: clang, RelWithDebInfo).
-log "Building Tools.Editor + Tools.ShaderPack ($PRESET)"
+# 1. Build the editor, the CLI tools and the shader-pack cooker (the preset: clang, RelWithDebInfo, shared).
+log "Building ${TOOLS[*]} + Tools.ShaderPack ($PRESET)"
 if [[ ! -f "$BUILD/CMakeCache.txt" ]]; then
     # The preset pins clang (the Bin/ folder is named for CMAKE_CXX_COMPILER_ID, so a default GCC
     # configure would build into Linux64-GCC and every cp below would fail). CXX_COMPILER env
@@ -64,7 +68,7 @@ if [[ ! -f "$BUILD/CMakeCache.txt" ]]; then
     cmake --preset "$PRESET" -DCMAKE_C_COMPILER="$C_BIN" -DCMAKE_CXX_COMPILER="$CXX_BIN" \
         -DCMAKE_ASM_COMPILER="$CXX_BIN"
 fi
-cmake --build "$BUILD" --target Tools.Editor Tools.ShaderPack -j"$JOBS"
+cmake --build "$BUILD" --target "${TOOLS[@]}" Tools.ShaderPack -j"$JOBS"
 
 # 2. Fresh dist tree.
 log "Staging into $DIST"
@@ -72,8 +76,16 @@ SYMBOLS="${DIST}-symbols"
 rm -rf "$DIST" "$SYMBOLS"
 mkdir -p "$DIST/Data" "$SYMBOLS"
 
-# 3. The editor exe + its runtime sidecars (the .runtime-libs manifest lists DXC on Linux).
-cp "$BIN/Tools.Editor" "$DIST/"
+# 3. The executables, the engine's shared libraries they load (those ldd resolves inside the build's
+#    Bin folder, through their $ORIGIN rpath), and the editor's runtime sidecars (the .runtime-libs
+#    manifest lists DXC on Linux).
+BIN_ABS="$(cd "$BIN" && pwd)"
+for tool in "${TOOLS[@]}"; do
+    cp "$BIN/$tool" "$DIST/"
+    while IFS= read -r lib; do
+        [[ -n "$lib" && ! -f "$DIST/$(basename "$lib")" ]] && cp "$lib" "$DIST/"
+    done < <(ldd "$BIN/$tool" | awk -v bin="$BIN_ABS/" 'index($3, bin) == 1 { print $3 }')
+done
 if [[ -f "$BIN/Tools.Editor.runtime-libs" ]]; then
     while IFS= read -r lib; do
         [[ -n "$lib" ]] || continue
@@ -86,10 +98,16 @@ if [[ -f "$BIN/Tools.Editor.runtime-libs" ]]; then
 fi
 # Copy DXC directly as well, in case the manifest omits it (the editor cooks shaders, so it needs it).
 [[ -f "$BIN/libdxcompiler.so" && ! -f "$DIST/libdxcompiler.so" ]] && cp "$BIN/libdxcompiler.so" "$DIST/"
-# The debug info to the symbols folder, the exe stripped and linked to it by name.
-objcopy --only-keep-debug "$DIST/Tools.Editor" "$SYMBOLS/Tools.Editor.debug"
-strip --strip-debug "$DIST/Tools.Editor"
-objcopy --add-gnu-debuglink="$SYMBOLS/Tools.Editor.debug" "$DIST/Tools.Editor"
+# The debug info to the symbols folder, each executable and engine library stripped and linked to its
+# own by name (DXC ships as vendored, untouched).
+for binary in "${TOOLS[@]/#/$DIST/}" "$DIST"/lib*.so; do
+    [[ -f "$binary" ]] || continue
+    name="$(basename "$binary")"
+    [[ "$name" == libdxcompiler.so || "$name" == libdxil.so ]] && continue
+    objcopy --only-keep-debug "$binary" "$SYMBOLS/$name.debug"
+    strip --strip-debug "$binary"
+    objcopy --add-gnu-debuglink="$SYMBOLS/$name.debug" "$binary"
+done
 
 # 4. The data the editor reads, whole folders: Engine (what the runtime
 #    reads: the shader sources an export cooks a game's pack from, the GUI's font), Editor (its
@@ -117,6 +135,9 @@ cat > "$DIST/README.txt" <<'EOF'
 Editor (Linux x86_64)
 
 Run:  ./Tools.Editor
+
+The command-line tools beside it run on the same engine: ./Tools.Cook <project> cooks,
+./Tools.Export <project> exports, and ./Tools.Mcp serves the engine's MCP tools over stdio.
 
 Requires GPU drivers with Vulkan support and the Vulkan loader installed
 (e.g. on Ubuntu:  sudo apt install libvulkan1 mesa-vulkan-drivers).

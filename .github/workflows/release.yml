@@ -93,9 +93,9 @@ jobs:
       - name: Build editor distribution
         run: CXX_COMPILER=clang++-21 C_COMPILER=clang-21 OUT=dist/Editor-Linux64 scripts/build-editor-dist.sh
       # The DEPLOYMENT TEMPLATE (game runtime: Engine.Player + sidecars + template.xml) - a SEPARATE
-      # downloadable package a developer exports their game against. Reuses build/clang-reldbg from
-      # the editor build above (adds Engine.Player + Tools.Export): both are RelWithDebInfo, so the
-      # engine builds once. The Web template is a separate job below (needs emsdk).
+      # downloadable package a developer exports their game against. Its own static tree
+      # (build/clang-reldbg: a player links its plugins statically), beside the editor's shared one.
+      # The Web template is a separate job below (needs emsdk).
       - name: Build deployment template (Linux runtime)
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
@@ -165,7 +165,7 @@ jobs:
       - name: Verify the Vulkan backend is in the build
         shell: pwsh
         run: |
-          $cache = 'build/msvc-reldbg/CMakeCache.txt'
+          $cache = 'build/msvc-reldbg-shared/CMakeCache.txt' # the editor's tree (shared)
           if (-not (Test-Path $cache)) { throw "$cache missing - did the dist build change its preset?" }
           $line = Select-String -Path $cache -Pattern '^Vulkan_LIBRARY:FILEPATH=(.+)$' |
                   Select-Object -First 1
@@ -176,8 +176,8 @@ jobs:
           Write-Host ("Vulkan backend present: " + $line.Matches[0].Groups[1].Value)
       # The DEPLOYMENT TEMPLATE (Windows game runtime: Engine.Player.exe + sidecars + template.xml) -
       # a SEPARATE downloadable package a developer exports a Windows game against, mirroring the
-      # Linux/Web template jobs. Reuses build/msvc-reldbg from the editor build above (it adds
-      # Engine.Player + Tools.Export): both are RelWithDebInfo, so the engine builds once.
+      # Linux/Web template jobs. Its own static tree (build/msvc-reldbg: a player links its plugins
+      # statically), beside the editor's shared one.
       - name: Build deployment template (Windows runtime)
         shell: pwsh
         run: |

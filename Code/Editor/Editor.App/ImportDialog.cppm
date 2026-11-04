@@ -1034,6 +1034,10 @@ export namespace editor::app
 
         IAllocator& m_allocator;
         Services m_services;
+        // Before the window's tree: the grids in it show these, and a grid's source must outlive it,
+        // so they are destroyed after the tree.
+        UniquePtr<gui::ReflectedPropertySource> m_settings; // the selected file's settings, which its grid shows
+        UniquePtr<gui::ReflectedPropertySource> m_partSettings; // the selected part's own settings
         RefPtr<gui::Node> m_body;
         RefPtr<gui::Window> m_window;
         RefPtr<AssetImport::Session> m_session;
@@ -1045,8 +1049,6 @@ export namespace editor::app
         };
         Array<OpenKind> m_openKinds; // the kinds open in the tree, by file
         i64 m_part = -1;             // the selected part, an entry of the selected file's plan; -1: the file
-        UniquePtr<gui::ReflectedPropertySource> m_settings; // the selected file's settings, which its grid shows
-        UniquePtr<gui::ReflectedPropertySource> m_partSettings; // the selected part's own settings
         RefPtr<gui::PropertyGrid> m_settingsGrid;
         UniquePtr<editor::IImportPreview> m_preview; // the selected file's, while its path and type stay
         String m_previewPath;

@@ -38,6 +38,7 @@ export import :entity_picker_window;
 export import :entity_ref_editor;
 export import :bone_name_editor;
 export import :collision_matrix_editor;
+export import :shown_state;
 export import :inspector_extras;
 export import :script_behaviors_source;
 export import :scene_settings_source;

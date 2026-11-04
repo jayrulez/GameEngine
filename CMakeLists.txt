@@ -543,6 +543,10 @@ add_subdirectory(Code/Engine/Engine.Composition) # the composition root: the one
 if(OPTION_PLUGIN_IMGUI)
     util_add_plugin(Code/Plugins/Imgui) # Dear ImGui debug UI (RHI renderer and subsystem) over Runtime, from its Plugin.xml
 endif()
+# The plugins the engine's hosts link (the players, the editor and the CLI tools, each the parts its
+# role loads), so a project can enable them: the engine's official plugins. Imgui is the framework
+# samples' debug UI and is in none of them.
+set(UTIL_HOST_PLUGINS "")
 add_subdirectory(Code/Engine/Engine.Player)        # Generic game runner
 
 

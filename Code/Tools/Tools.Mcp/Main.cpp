@@ -20,6 +20,7 @@ import foundation.shaders.system; // kShaderFolder (shader_validate's include pa
 import foundation.json;
 import foundation.content; // Instance, the primary object passed to onImported
 import foundation.mcp;
+import foundation.runtime; // the plugins this host links (LinkedPluginList)
 import pipeline.core;
 import pipeline.importer;
 import pipeline.registration;
@@ -128,7 +129,8 @@ int main(int argc, char** argv)
     editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
                                      paths, operations);
     // This host's additions: an agent opens (or scaffolds) the project it wants to work on.
-    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, dataRoot.AsView());
+    editor::mcp::RegisterProjectOpenTools(server, session, owner, &creators, dataRoot.AsView(),
+                                          foundation::runtime::LinkedPluginList()); // what a project may enable
     // host_info: the process id, build stamp, versions and open-project state.
     RegisterHostInfoTool(
         server, String(reinterpret_cast<const char8_t*>(BuildStamp())),

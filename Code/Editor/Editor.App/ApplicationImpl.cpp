@@ -80,6 +80,7 @@ namespace editor::app
         services.projects = &m_projectManager;
         services.runtime = &m_runtimeContext;
         services.native = &m_native;
+        services.linkedPlugins = m_config.linkedPlugins;
         EditorApplication* self = this;
         services.seedNewProject = [self](editor::EditorContext& context, editor::EditorProject& project)
         {

@@ -186,13 +186,20 @@ TEST_CASE("integration.mcp: an agent lists the project's plugins and sets a load
     settings.plugins.PushBack(Move(steam));
     REQUIRE(session.project->SaveSettings().IsOk());
 
-    // Without a plugin host every entry is missing, and nothing can be set.
+    // The host's own plugins (project_open loaded the ones it links, none here): every entry is
+    // missing, and nothing can be set.
+    REQUIRE(session.plugins != nullptr);
     {
         const Called listed = Call(server, u8"plugin_list", JsonValue::MakeObject());
         REQUIRE_FALSE(listed.error);
         CHECK(listed.value.Get(u8"plugins").At(0).Get(u8"state").AsString() == String(u8"missing"));
         const Called set = Call(server, u8"plugin_settings_set", Args(kMeter, JsonValue::MakeObject()));
         CHECK(set.error);
+        CHECK(set.text.AsView().Contains(u8"not in this build; its settings are kept as written"));
+    }
+    session.plugins = nullptr;
+    {
+        const Called set = Call(server, u8"plugin_settings_set", Args(kMeter, JsonValue::MakeObject()));
         CHECK(set.text.AsView().Contains(u8"this host loads no plugins; its settings are kept as written"));
     }
 

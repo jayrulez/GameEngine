@@ -19,3 +19,4 @@ export import :template_icons;
 export import :export_template;
 export import :export_controller;
 export import :export_pipeline;
+export import :tool_plugins;

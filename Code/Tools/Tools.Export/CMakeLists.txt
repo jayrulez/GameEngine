@@ -1,6 +1,7 @@
 # Tools.Export - packages a project into a shippable dist: cook, stage the scenes, and write
 # Content.pak and player.xml beside Engine.Player.
 add_executable(Tools.Export Main.cpp)
+util_link_plugins(Tools.Export ROLE export PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 add_dependencies(Tools.Export Engine.Player)   # stages the player exe when present
 target_link_libraries(Tools.Export PRIVATE
     Foundation::Core Foundation::Scene.Resource

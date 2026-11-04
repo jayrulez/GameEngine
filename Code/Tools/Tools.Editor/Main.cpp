@@ -287,6 +287,7 @@ int main(int argc, char** argv)
     const String splashFontPath = foundation::vfs::DataPath(EditorDataRoot(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
     const Span<const u8> embeddedFont(reinterpret_cast<const u8*>(g_embeddedEditorFont), static_cast<usize>(g_embeddedEditorFontSize));
     config.logBuffer = &logBuffer;
+    config.linkedPlugins = foundation::runtime::LinkedPluginList(); // what a project may enable
 
     // Assembly: this is where the engine subsystems and per-subsystem editor plugins are chosen.
     // The editor core and app libraries never link engine modules; the app drives scene rendering

@@ -15,6 +15,7 @@ add_custom_command(
     COMMENT "Embedding the editor fallback font")
 
 add_executable(Tools.Editor Main.cpp "${_embedded_font_src}")
+util_link_plugins(Tools.Editor ROLE editor PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 # The editor's libraries, each Editor:: page library among them.
 target_link_libraries(Tools.Editor PRIVATE
     Foundation::Core

@@ -57,6 +57,8 @@ export namespace editor::app
             foundation::runtime::IApplicationHost* embeddedHost = nullptr;
             engine::runtime::DefaultApplication* embeddedApp = nullptr;
             EditorNativeModule* native = nullptr;
+            /// The plugins this editor links; each project's enabled ones load with it.
+            Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
             /// Seeds a new project's starter content (the executable composes it); null: none.
             Function<void(editor::EditorContext&, editor::EditorProject&)> seedNewProject;
             /// Called when the project has opened and its services are up: the application brings
@@ -113,6 +115,7 @@ export namespace editor::app
             }
             editor::EditorProject& project = *m_project;
             context.SetProject(&project);
+            LoadPlugins(project, context);
             ConfigureThumbnails(directory);
             {
                 // Log what the open-time header scans cost (the parse volume informs the partial-parse work).
@@ -166,6 +169,22 @@ export namespace editor::app
             return true;
         }
 
+        /// Loads the plugins the project enables, those this editor links, into the embedded
+        /// runtime's plugin host, before anything reads their types (the resources, the native
+        /// module, the pages): their Engine, Pipeline, Tooling and Editor parts, each part given the
+        /// editor's context. Without an embedded runtime no plugin loads.
+        void LoadPlugins(editor::EditorProject& project, editor::EditorContext& context)
+        {
+            if (m_services.embeddedApp == nullptr)
+                return;
+            foundation::runtime::PluginHost* plugins = m_services.embeddedApp->CreatePluginHost(foundation::runtime::HostRole::Editor);
+            if (plugins == nullptr)
+                return;
+            (void)plugins->Provide(context);
+            (void)engine::project::LoadProjectPlugins(*plugins, m_services.linkedPlugins, project.Settings());
+            context.SetPlugins(plugins);
+        }
+
         /// Tells the user which of the project's plugins did not load here (missing or refused), each
         /// with why in the log; their entries and settings are kept as written.
         static void ReportPluginsNotLoaded(editor::EditorProject& project, editor::EditorContext& context)
@@ -176,7 +195,8 @@ export namespace editor::app
                 const engine::project::PluginStatus status = engine::project::PluginStatusOf(entry, context.Plugins(), project.Allocator());
                 if (status.state != engine::project::PluginState::Missing && status.state != engine::project::PluginState::Refused)
                     continue;
-                LOG_WARNING(u8"Editor", u8"{}; its entry and settings are kept as written", status.reason);
+                if (context.Plugins() == nullptr) // a host logged its own refusals as it loaded
+                    LOG_WARNING(u8"Editor", u8"{}; its entry and settings are kept as written", status.reason);
                 names += names.IsEmpty() ? u8"" : u8", ";
                 names += entry.id.AsView();
             }
@@ -221,6 +241,10 @@ export namespace editor::app
             }
             context.SetResources(nullptr);
             m_resources.Reset();
+            // The project's plugins after what may hold their types (the resources), before the project.
+            context.SetPlugins(nullptr);
+            if (m_services.embeddedApp != nullptr)
+                m_services.embeddedApp->DestroyPluginHost();
             context.SetProjectEditorSettings(nullptr);
             context.OnProjectEditorSettingsSaveRequested = {};
             m_store.Reset();

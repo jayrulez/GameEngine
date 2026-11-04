@@ -50,6 +50,8 @@ export namespace editor::mcp
     struct ProjectOwner
     {
         UniquePtr<editor::EditorProject> project;
+        /// The open project's plugins, those this host links (after the project: they go first).
+        UniquePtr<editor::ToolPlugins> plugins;
     };
 }
 

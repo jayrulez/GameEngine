@@ -133,6 +133,14 @@ namespace engine::player
                 GUI()->SetTextInputTarget(host.Shell()->MainWindow());
             }
 
+            // The plugins the project enables that this player links, after the base startup so a
+            // part finds the engine's subsystems, and before the native game, which may use them,
+            // and the initial scene, whose components may be theirs.
+            if (runtime::PluginHost* plugins = CreatePluginHost(runtime::HostRole::Player))
+            {
+                (void)project::LoadProjectPlugins(*plugins, runtime::LinkedPluginList(), m_settings);
+            }
+
             // The native game plugin. Loaded after the base startup so OnLoad can resolve engine
             // subsystems from Subsystems(), and before the initial scene resolves so
             // plugin-registered types deserialize. Two paths converge here: a ship stub hands the

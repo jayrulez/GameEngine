@@ -83,6 +83,10 @@ export namespace editor::app
         // startup logs reach the console. Borrowed; main owns it (outlives the app).
         editor::EditorLogBuffer* logBuffer = nullptr;
 
+        // The plugins the editor executable links (its generated registry's list), which a project
+        // may enable: loaded with each project, each the parts an editor loads.
+        Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
+
         // Start on the project manager screen instead of opening projectDirectory (set by
         // main() when no project was given).
         bool startInProjectManager = false;

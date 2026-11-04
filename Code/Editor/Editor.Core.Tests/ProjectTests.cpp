@@ -779,3 +779,115 @@ TEST_CASE("project: the plugins list is appended, and an entry no plugin here re
     (void)FileDelete(manifestPath.AsView());
     (void)RemoveDirectory(dir);
 }
+
+namespace
+{
+    // A plugin with all four parts, linked into this test as the generated registry links one: each
+    // part records its kind as it loads and unloads.
+    constexpr char8_t kFourParts[] = u8"four_parts";
+    Array<String>& FourPartsLog()
+    {
+        static Array<String> log;
+        return log;
+    }
+    template <foundation::runtime::PluginPartKind Kind>
+    void FourPartsLoad(foundation::runtime::PluginContext&)
+    {
+        FourPartsLog().PushBack(Format(u8"load:{}", foundation::runtime::PluginPartKindName(Kind)));
+    }
+    template <foundation::runtime::PluginPartKind Kind>
+    void FourPartsUnload(foundation::runtime::PluginContext&)
+    {
+        FourPartsLog().PushBack(Format(u8"unload:{}", foundation::runtime::PluginPartKindName(Kind)));
+    }
+    template <foundation::runtime::PluginPartKind Kind>
+    const foundation::runtime::PluginPart* FourPartsPart()
+    {
+        static constexpr foundation::runtime::PluginPart part{kFourParts, Kind, &FourPartsLoad<Kind>, &FourPartsUnload<Kind>};
+        return &part;
+    }
+
+    struct FourPartsLinked
+    {
+        Array<byte> manifest;
+        foundation::runtime::PluginPartEntryFn parts[4] = {
+            &FourPartsPart<foundation::runtime::PluginPartKind::Engine>, &FourPartsPart<foundation::runtime::PluginPartKind::Pipeline>,
+            &FourPartsPart<foundation::runtime::PluginPartKind::Tooling>, &FourPartsPart<foundation::runtime::PluginPartKind::Editor>};
+        foundation::runtime::LinkedPlugin linked[1]{};
+
+        FourPartsLinked()
+        {
+            foundation::runtime::PluginManifest written;
+            written.id = String(kFourParts);
+            written.name = String(u8"Four parts");
+            written.version = String(u8"1.0");
+            written.engineVersion = String(engine::project::kEngineVersionString);
+            for (foundation::runtime::PluginPartKind kind : foundation::runtime::kPluginPartKinds)
+                written.parts.PushBack(foundation::runtime::PluginManifestPart{String(foundation::runtime::PluginPartKindName(kind))});
+            written.platforms.PushBack(foundation::runtime::PluginPlatform{String(GetHostPlatformName())});
+            MemoryStream xml;
+            REQUIRE(foundation::runtime::WritePluginManifest(written, xml).IsOk());
+            for (byte b : xml.Bytes())
+                manifest.PushBack(b);
+            manifest.PushBack(byte{0});
+            linked[0] = foundation::runtime::LinkedPlugin{reinterpret_cast<const char8_t*>(manifest.Data()), parts, 4};
+        }
+        [[nodiscard]] Span<const foundation::runtime::LinkedPlugin> List() const { return Span<const foundation::runtime::LinkedPlugin>(linked, 1); }
+    };
+}
+
+// A headless tool has no application: its plugins run over a subsystem manager of its own, and each
+// tool loads exactly the parts its role takes of the plugins the project enables, unloading them
+// when it goes.
+TEST_CASE("tool plugins: the cook, the exporter and the MCP host each load the parts their role takes")
+{
+    const StringView dir = u8"scratch_project_tool_plugins";
+    (void)RemoveDirectoryRecursive(dir);
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"Tools").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(static_cast<bool>(project));
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(kFourParts);
+    project->Settings().plugins.PushBack(Move(entry));
+    const FourPartsLinked linked;
+
+    const auto loadsFor = [&](foundation::runtime::HostRole role)
+    {
+        FourPartsLog().Clear();
+        {
+            ToolPlugins plugins(DefaultAllocator(), role, *project, linked.List());
+            CHECK(plugins.Report().loaded.Size() == 1u);
+            CHECK(plugins.Host().IsLoaded(kFourParts));
+            CHECK(plugins.Host().Role() == role);
+        }
+        Array<String> loads;
+        bool unloaded = false;
+        for (const String& line : FourPartsLog())
+        {
+            if (line.AsView().StartsWith(u8"load:"))
+                loads.PushBack(String(line.AsView().SubStr(5, line.Size() - 5)));
+            unloaded = unloaded || line.AsView().StartsWith(u8"unload:");
+        }
+        CHECK(unloaded); // the tool's plugins went with it
+        String joined;
+        for (const String& kind : loads)
+        {
+            joined += joined.IsEmpty() ? u8"" : u8",";
+            joined += kind.AsView();
+        }
+        return joined;
+    };
+    CHECK(loadsFor(foundation::runtime::HostRole::Cook) == String(u8"Engine,Pipeline"));
+    CHECK(loadsFor(foundation::runtime::HostRole::Export) == String(u8"Engine,Pipeline,Tooling"));
+    CHECK(loadsFor(foundation::runtime::HostRole::Mcp) == String(u8"Engine,Pipeline,Tooling"));
+
+    // A plugin this tool does not link stays missing; the project keeps its entry.
+    {
+        ToolPlugins plugins(DefaultAllocator(), foundation::runtime::HostRole::Cook, *project,
+                            Span<const foundation::runtime::LinkedPlugin>{});
+        REQUIRE(plugins.Report().FindRefusal(kFourParts) != nullptr);
+        CHECK(project->Settings().FindPlugin(kFourParts) != nullptr);
+    }
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+}

@@ -1,5 +1,6 @@
 # Tools.Cook - the command-line cooker (headless: no shell/GPU).
 add_executable(Tools.Cook Main.cpp)
+util_link_plugins(Tools.Cook ROLE cook PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 target_link_libraries(Tools.Cook PRIVATE
     Foundation::Core Foundation::Content Foundation::VFS
     Pipeline::Core Editor::Project Pipeline::Cook

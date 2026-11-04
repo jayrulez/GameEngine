@@ -10,6 +10,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
 export module engine.project;
@@ -376,6 +377,30 @@ export namespace engine::project
         }
         status.reason = Format(u8"plugin '{}' is not in this build", id);
         return status;
+    }
+
+    /// Loads the plugins `settings` enables into `host`, the process's plugin host for its role,
+    /// after adding the plugins this binary links. What loaded is logged, and what did not, each
+    /// with why; the report says the same. A plugin that does not load leaves its entry as it is.
+    inline foundation::runtime::PluginLoadReport LoadProjectPlugins(foundation::runtime::PluginHost& host,
+                                                                    Span<const foundation::runtime::LinkedPlugin> linked,
+                                                                    const ProjectSettings& settings)
+    {
+        if (!host.AddLinked(linked).IsOk())
+        {
+            LOG_ERROR(u8"Plugins", u8"a plugin linked into this build has a manifest that does not read");
+        }
+        foundation::runtime::PluginLoadReport report = host.Load(
+            Span<const foundation::runtime::EnabledPlugin>(settings.plugins.Data(), settings.plugins.Size()));
+        for (const String& id : report.loaded)
+        {
+            LOG_INFO(u8"Plugins", u8"plugin '{}' loaded ({})", id, foundation::runtime::HostRoleName(host.Role()));
+        }
+        for (const foundation::runtime::PluginRefusal& refusal : report.refused)
+        {
+            LOG_WARNING(u8"Plugins", u8"{}; its entry and settings are kept", refusal.reason);
+        }
+        return report;
     }
 
     /// Read a manifest (Project.xml / player.xml) from `root`. NotFound when absent.

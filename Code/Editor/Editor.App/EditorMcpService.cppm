@@ -124,6 +124,7 @@ export namespace editor::app
             // shader_validate compiles against the engine's shader library under the data root.
             paths.shaderLibrary = foundation::vfs::DataPath(m_services.dataRoot.AsView(), foundation::shaders::kShaderFolder);
             m_session.project = project;
+            m_session.plugins = m_services.context->Plugins(); // the project's plugins, loaded with it
 
             EditorProjectOperationsSeams operations;
             operations.allocator = &m_allocator;
@@ -219,6 +220,7 @@ export namespace editor::app
             m_host.Reset();
             m_operations.Reset();
             m_session.project = nullptr;
+            m_session.plugins = nullptr;
         }
 
         /// Called each frame: answers the calls that arrived, on the main thread.

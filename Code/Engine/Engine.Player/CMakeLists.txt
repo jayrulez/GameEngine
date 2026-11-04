@@ -44,6 +44,7 @@ if(EMSCRIPTEN)
 
     add_executable(Engine.Player WebMain.cpp "${_engine_logo_src}")
     target_link_libraries(Engine.Player PRIVATE ${_web_player_libs})
+    util_link_plugins(Engine.Player ROLE player PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 
     # No content is baked into this binary: the player fetches player.xml and Content.pak (the
     # export output) and shaders.dpak (the export-cooked WGSL engine pack) from the serving folder
@@ -70,6 +71,7 @@ if(EMSCRIPTEN)
         add_executable(Engine.GamePlayer WebMain.cpp "${_engine_logo_src}")
         target_link_libraries(Engine.GamePlayer PRIVATE
             ${_web_player_libs} ${ENGINE_GAME_NATIVE_TARGET})
+        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
         target_compile_definitions(Engine.GamePlayer PRIVATE ENGINE_SHIP_NATIVE_GAME)
         target_link_options(Engine.GamePlayer PRIVATE
             "--shell-file=${_web_shell}"
@@ -129,6 +131,7 @@ else()
 
     add_executable(Engine.Player Main.cpp)
     target_link_libraries(Engine.Player PRIVATE Engine.Player.Main Foundation::Policy)
+    util_link_plugins(Engine.Player ROLE player PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 
     # The shipping player, only when a game's native directory is wired into this build
     # (ENGINE_GAME_NATIVE_DIR/_TARGET, which the exporter sets and which work by hand too).
@@ -138,6 +141,7 @@ else()
         add_executable(Engine.GamePlayer ShipMain.cpp)
         target_link_libraries(Engine.GamePlayer PRIVATE
             Engine.Player.Main ${ENGINE_GAME_NATIVE_TARGET} Foundation::Policy)
+        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
         util_copy_runtime_deps(Engine.GamePlayer EXTRA ${BUILDSYSTEM_WGPU_LIB} ${BUILDSYSTEM_NOTICES_FILE})
         if(UNIX AND NOT APPLE)
             set_property(TARGET Engine.GamePlayer APPEND PROPERTY BUILD_RPATH "$ORIGIN")

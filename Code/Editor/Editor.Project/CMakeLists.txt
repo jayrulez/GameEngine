@@ -47,4 +47,5 @@ target_sources(Editor.Project
             ExportTemplate.cppm
             ExportController.cppm
             CookService.cppm
+            ToolPlugins.cppm
             EditorProjectModule.cppm)

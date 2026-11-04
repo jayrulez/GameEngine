@@ -2,6 +2,7 @@
 # Its tools are the ones the engine's modules contribute (reflection, scripting, the project tools).
 
 add_executable(Tools.Mcp Main.cpp)
+util_link_plugins(Tools.Mcp ROLE mcp PLUGINS ${UTIL_HOST_PLUGINS}) # what a project may enable
 
 # Per-executable build stamp (as Runtime.Client has): regenerated on git-state changes,
 # content-compared; host_info reports it for stale-binary detection.

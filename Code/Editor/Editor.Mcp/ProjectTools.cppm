@@ -850,10 +850,10 @@ export namespace editor::mcp
         RegisterLogTools(server, logBuffer, paths.knownIssues);
         RegisterSceneTools(server, session);
         // The scene format reference, generated from this host's own registrations (the engine
-        // composition's managers, settings systems and factory descriptions, a game's native
-        // module's among them, plus its builders) each time it is read: docs://generated/* beside
-        // the shipping docs, component_schema for one entry. Every host answers the same for the
-        // same build and native module.
+        // composition's managers, settings systems and factory descriptions, the project's plugins'
+        // among them, plus its builders) each time it is read: docs://generated/* beside the
+        // shipping docs, component_schema for one entry. Every host answers the same for the same
+        // build and plugins.
         RegisterComponentSchemaTool(server, editor::EditorRootAllocator(), builders);
         if (!paths.shippingDocsDir.IsEmpty())
         {

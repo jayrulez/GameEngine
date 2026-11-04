@@ -647,9 +647,9 @@ export namespace pipeline{
 
     /// A hash of the script surface the player has: every runtime-domain type in `registry`, its id,
     /// members and their shapes, whatever order they were registered in. A script's bytecode is
-    /// bound to it, so its change (an engine or native module whose facades changed) recooks the
-    /// scripts. Editor-only types stay out, so every host that cooks gets the same answer for the
-    /// same build and native module. Defined in ScriptAssetImpl.cpp.
+    /// bound to it, so its change (a plugin enabled, removed or updated) recooks the scripts.
+    /// Editor-only types stay out, so every host that cooks gets the same answer for the same
+    /// build and plugins. Defined in ScriptAssetImpl.cpp.
     [[nodiscard]] u64 ScriptSurfaceHash(const TypeRegistry& registry);
 
     // Cooks a ScriptClassAsset to a ScriptClassSource by delegating to the language cook the

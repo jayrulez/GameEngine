@@ -39,6 +39,9 @@ option(ENGINE_SHARED_LIBS "Build engine libraries as shared libraries" OFF)
 # one the archives Engine.GamePlayer, the project's player, links. The editor's development build
 # and the exporter set it; setting it by hand works too.
 set(ENGINE_PROJECT_PLUGINS "" CACHE STRING "A project's plugin package folders, ;-separated (adds them and Engine.GamePlayer)")
+# Engine.GamePlayer with no packages of the project's: the engine's plugins alone, for an export whose
+# template does not carry a plugin the project enables. The exporter sets it.
+option(ENGINE_GAME_PLAYER "Build Engine.GamePlayer, the project's player, without packages of its own" OFF)
 # The GitHub repository (owner/name) whose releases carry what an editor downloads for its own
 # version, such as the sample games: release v<project VERSION> of it. Stamped into engine.project.
 set(ENGINE_RELEASE_REPOSITORY "jayrulez/GameEngine" CACHE STRING "GitHub owner/name whose releases carry the editor's downloads (the sample games)")
@@ -891,6 +894,8 @@ if(EMSCRIPTEN)
     # non-Emscripten block at the end of the file, which this branch return()s before reaching.
     if(ENGINE_PROJECT_PLUGINS)
         util_add_project_plugins(${ENGINE_PROJECT_PLUGINS})
+    elseif(TARGET Engine.GamePlayer)
+        util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
     endif()
     return()
 endif()
@@ -909,4 +914,6 @@ endif()
 # them.
 if(ENGINE_PROJECT_PLUGINS)
     util_add_project_plugins(${ENGINE_PROJECT_PLUGINS})
+elseif(TARGET Engine.GamePlayer)
+    util_link_plugins(Engine.GamePlayer ROLE player PLUGINS ${UTIL_HOST_PLUGINS})
 endif()

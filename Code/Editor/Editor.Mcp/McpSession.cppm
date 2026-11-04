@@ -43,6 +43,9 @@ export namespace editor::mcp
         /// entry against it and plugin_settings_set edits the settings it holds. Null where the
         /// host loads no plugins.
         foundation::runtime::PluginHost* plugins = nullptr;
+        /// The export hooks the project's plugins added, which project_export runs once a dist is
+        /// staged (null: none).
+        const editor::ExportPluginServices* exportHooks = nullptr;
     };
 
     // The stdio host's project ownership: project_open stores what it opened here and points

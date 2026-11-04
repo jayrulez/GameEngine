@@ -104,6 +104,7 @@ int main(int argc, char** argv)
     // The MCP tools a project's plugins add through their Tooling parts: served by this server,
     // and gone from it with their plugin. It outlives the server and the project's plugins.
     editor::mcp::McpPluginServices pluginTools{foundation::core::DefaultAllocator()};
+    editor::ExportPluginServices exportHooks{foundation::core::DefaultAllocator()}; // and their export hooks
 
     McpServer server;
     server.SetServerInfo(u8"engine-mcp", u8"0.1.0");
@@ -139,7 +140,8 @@ int main(int argc, char** argv)
     editor::mcp::RegisterProjectOpenTools(
         server, session, owner, &creators, dataRoot.AsView(),
         editor::mcp::ProjectPlugins{foundation::runtime::LinkedPluginList(),
-                                    pipeline::PipelineRegistries{&builders, &importers, &creators}, &pluginTools});
+                                    pipeline::PipelineRegistries{&builders, &importers, &creators}, &pluginTools,
+                                    &exportHooks});
     // host_info: the process id, build stamp, versions and open-project state.
     RegisterHostInfoTool(
         server, String(reinterpret_cast<const char8_t*>(BuildStamp())),

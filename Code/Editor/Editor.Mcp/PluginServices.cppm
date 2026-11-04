@@ -21,6 +21,7 @@ import foundation.json;
 import foundation.mcp;
 import foundation.runtime;
 import pipeline.importer; // PipelineRegistries
+import editor.project;    // ExportPluginServices
 import :session;
 
 using namespace foundation::core;
@@ -272,5 +273,6 @@ export namespace editor::mcp
         Span<const foundation::runtime::LinkedPlugin> linked;
         pipeline::PipelineRegistries registries;
         McpPluginServices* tools = nullptr;
+        editor::ExportPluginServices* exportHooks = nullptr; // what their Tooling parts run after an export's staging
     };
 }

@@ -37,6 +37,7 @@ import :project;
 import :export_preset;
 import :export_roots;
 import :export_template;
+import foundation.runtime; // the project's plugins (their manifests, where each is enabled)
 
 using namespace foundation::core;
 using namespace foundation;
@@ -885,6 +886,154 @@ namespace editor
             return list;
         }
 
+        // The manifest of the plugin `entry` names: its project package's, else the copy the
+        // template's player lists, else the engine checkout's (Code/Plugins/<Name>/Plugin.xml).
+        // False when there is none.
+        [[nodiscard]] bool FindPluginManifest(const EditorProject& project, const ExportTemplate& tmpl,
+                                              const foundation::runtime::EnabledPlugin& entry,
+                                              foundation::runtime::PluginManifest& out)
+        {
+            if (!entry.path.IsEmpty())
+            {
+                return foundation::runtime::LoadPluginManifest(PathJoin(project.Directory(), entry.path.AsView()).AsView(), out,
+                                                               editor::EditorRootAllocator())
+                           .IsOk() &&
+                       out.id == entry.id;
+            }
+            for (const PlayerPlugin& linked : ReadPlayerPlugins(tmpl.directory.AsView(), kPlayerBaseName))
+            {
+                if (linked.id == entry.id &&
+                    foundation::runtime::LoadPluginManifest(linked.packageDir.AsView(), out, editor::EditorRootAllocator()).IsOk())
+                {
+                    return true;
+                }
+            }
+            const String plugins = PathJoin(StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_ENGINE_ROOT)), u8"Code/Plugins");
+            bool found = false;
+            Array<String> folders;
+            (void)ListDirectory(
+                plugins.AsView(),
+                [](void* ctx, StringView name, bool isDirectory)
+                {
+                    if (isDirectory)
+                    {
+                        static_cast<Array<String>*>(ctx)->PushBack(String(name));
+                    }
+                },
+                &folders);
+            for (const String& folder : folders)
+            {
+                if (!found &&
+                    foundation::runtime::LoadPluginManifest(PathJoin(plugins.AsView(), folder.AsView()).AsView(), out,
+                                                            editor::EditorRootAllocator())
+                        .IsOk() &&
+                    out.id == entry.id)
+                {
+                    found = true;
+                }
+            }
+            return found;
+        }
+
+    }
+
+    detail::PlayerChoice detail::ChoosePlayer(const EditorProject& project, const ExportTemplate& tmpl, StringView platform)
+    {
+        PlayerChoice choice;
+        for (const foundation::runtime::EnabledPlugin& entry : project.Settings().plugins)
+        {
+            foundation::runtime::PluginManifest manifest;
+            if (!FindPluginManifest(project, tmpl, entry, manifest))
+            {
+                choice.refusal = Format(u8"plugin '{}' is in no package the export can find (the project's, the "
+                                        u8"template's or the engine's)",
+                                        entry.id);
+                return choice;
+            }
+            const foundation::runtime::PluginEnablement enablement = foundation::runtime::EnablementOn(entry, manifest, platform);
+            if (enablement == foundation::runtime::PluginEnablement::NotEnabled)
+            {
+                continue;
+            }
+            if (enablement == foundation::runtime::PluginEnablement::Unsupported)
+            {
+                choice.refusal = Format(u8"plugin '{}' is enabled on {}, which it does not support", entry.id, platform);
+                return choice;
+            }
+            choice.enabled.PushBack(entry.id);
+            if (choice.build)
+            {
+                continue;
+            }
+            if (!entry.path.IsEmpty())
+            {
+                choice.build = true;
+                choice.reason = Format(u8"the project's own package '{}' is enabled on {}", entry.id, platform);
+                continue;
+            }
+            const TemplatePlugin* carried = nullptr;
+            for (const TemplatePlugin& plugin : tmpl.plugins)
+            {
+                carried = plugin.id == entry.id ? &plugin : carried;
+            }
+            const Optional<foundation::runtime::PluginVersion> have =
+                carried != nullptr ? foundation::runtime::ParsePluginVersion(carried->version.AsView()) : Optional<foundation::runtime::PluginVersion>{};
+            const Optional<foundation::runtime::PluginVersion> want = foundation::runtime::ParsePluginVersion(manifest.version.AsView());
+            if (carried == nullptr)
+            {
+                choice.build = true;
+                choice.reason = Format(u8"template '{}' does not carry plugin '{}'", tmpl.id, entry.id);
+            }
+            else if (!have || !want || !foundation::runtime::VersionAtLeast(*have, *want))
+            {
+                choice.build = true;
+                choice.reason = Format(u8"template '{}' carries plugin '{}' {}, older than {}", tmpl.id, entry.id,
+                                       carried->version, manifest.version);
+            }
+        }
+        return choice;
+    }
+
+    namespace
+    {
+        // Stages the deploy files of the plugins `enabled` names for `platform`, beside the player in
+        // `outDir`, from the package folders the player at `playerDir` lists. False (logged) when a
+        // deploy file a manifest lists is missing.
+        [[nodiscard]] bool StageDeployFiles(StringView playerDir, StringView playerBase, Span<const String> enabled,
+                                            StringView platform, StringView outDir, usize& staged)
+        {
+            for (const PlayerPlugin& linked : ReadPlayerPlugins(playerDir, playerBase))
+            {
+                bool wanted = false;
+                for (const String& id : enabled)
+                {
+                    wanted = wanted || id == linked.id;
+                }
+                foundation::runtime::PluginManifest manifest;
+                if (!wanted ||
+                    !foundation::runtime::LoadPluginManifest(linked.packageDir.AsView(), manifest, editor::EditorRootAllocator()).IsOk())
+                {
+                    continue;
+                }
+                const foundation::runtime::PluginPlatform* target = manifest.FindPlatform(platform);
+                if (target == nullptr)
+                {
+                    continue;
+                }
+                for (const String& file : target->deploy)
+                {
+                    if (!FileCopyPreserving(PathJoin(linked.packageDir.AsView(), file.AsView()).AsView(),
+                                            PathJoin(outDir, PathFilename(file.AsView())).AsView()))
+                    {
+                        LOG_ERROR(u8"Export", u8"plugin '{}': its deploy file '{}' for {} is missing", linked.id, file, platform);
+                        return false;
+                    }
+                    ++staged;
+                }
+            }
+            return true;
+        }
+
         // Builds Engine.GamePlayer for a project with packages of its own: re-invokes cmake over the
         // engine checkout with the project's packages added (ENGINE_PROJECT_PLUGINS), a
         // persistent per-project build directory under the project's .cache (for incremental
@@ -947,13 +1096,9 @@ namespace editor
                           engineRoot);
                 return Status{ErrorCode::NotFound};
             }
+            // The project's packages, or none: a player of the engine's plugins alone, for a project
+            // whose plugins the template does not carry.
             const String packages = ProjectPackageList(project);
-            if (packages.IsEmpty())
-            {
-                LOG_ERROR(u8"Export", u8"the project enables no package of its own with a Plugin.xml "
-                                      u8"(each under Plugins/<Name>)");
-                return Status{ErrorCode::NotFound};
-            }
             const String suffix = detail::ShipOutputSuffix(project.Settings().name.AsView());
             const String buildType = config.IsEmpty() ? String(u8"Release") : String(config);
             const String shipDir = PathJoin(
@@ -972,7 +1117,8 @@ namespace editor
                 Format(u8"-DCMAKE_CXX_COMPILER={}",
                        StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CXX_COMPILER)));
             const String defBuildType = Format(u8"-DCMAKE_BUILD_TYPE={}", buildType);
-            const String defPackages = Format(u8"-DENGINE_PROJECT_PLUGINS={}", packages);
+            const String defPackages = packages.IsEmpty() ? String(u8"-DENGINE_GAME_PLAYER=ON")
+                                                          : Format(u8"-DENGINE_PROJECT_PLUGINS={}", packages);
             const String defSuffix = Format(u8"-DBUILDSYSTEM_OUTPUT_SUFFIX={}", suffix);
             // Web: the toolchain file selects the compiler (never pin clang++ under it).
             const StringView compilerOrToolchain =
@@ -1159,7 +1305,7 @@ namespace editor
                      const ExportProgress& onProgress, bool cook,
                      const HashMap<Guid, Array<byte>>* sceneStreams,
                      const SceneReferenceScanner* scanner,
-                     const Array<Guid>* precomputedReachableRoots)
+                     const Array<Guid>* precomputedReachableRoots, const ExportPluginServices* hooks)
     {
         const ExportTemplate* tmpl = templates.Resolve(preset);
         if (tmpl == nullptr)
@@ -1171,6 +1317,22 @@ namespace editor
         }
 
         ExportResult result;
+
+        // The player this dist runs, and whether the project's plugins allow the export at all.
+        const detail::PlayerChoice choice = detail::ChoosePlayer(project, *tmpl, preset.platform.AsView());
+        if (!choice.refusal.IsEmpty())
+        {
+            LOG_ERROR(u8"Export", u8"preset '{}': {}", preset.name, choice.refusal);
+            result.refusal = choice.refusal;
+            if (outResult != nullptr)
+            {
+                *outResult = result;
+            }
+            return Status{ErrorCode::InvalidArgument};
+        }
+        result.playerReason = choice.build ? choice.reason : Format(u8"template '{}' carries every plugin enabled on {}", tmpl->id, preset.platform);
+        LOG_INFO(u8"Export", u8"preset '{}': {} player ({})", preset.name, choice.build ? u8"a built" : u8"the template's",
+                 result.playerReason);
 
         // Soft engine-version match, like EditorProject::Open's project-manifest check: a template
         // built against a different engine version may be binary-incompatible with the cooked
@@ -1301,7 +1463,7 @@ namespace editor
         // built with the game's native module statically linked (for Web presets too, as the wasm
         // build). Ship players ignore the manifest's dlopen module, since the static plugin takes
         // precedence.
-        const bool nativeShip = !ProjectPackageDirs(project).IsEmpty();
+        const bool nativeShip = choice.build;
         const bool nativeWeb = nativeShip && (preset.platform.AsView().StartsWith(u8"Web") ||
                                               preset.platform.AsView().StartsWith(u8"Wasm"));
         String shipPlayerPath;
@@ -1361,6 +1523,18 @@ namespace editor
             return Status{ErrorCode::Internal};
         }
         ++result.filesStaged;
+        // The deploy files of the plugins the project enables on this platform, beside the player.
+        if (!StageDeployFiles(nativeShip ? shipPlayerDir.AsView() : tmpl->directory.AsView(),
+                              nativeShip ? StringView(u8"Engine.GamePlayer") : kPlayerBaseName,
+                              Span<const String>(choice.enabled.Data(), choice.enabled.Size()), preset.platform.AsView(),
+                              result.outputDir.AsView(), result.filesStaged))
+        {
+            if (outResult != nullptr)
+            {
+                *outResult = result;
+            }
+            return Status{ErrorCode::NotFound};
+        }
         if (nativeWeb)
         {
             // The rest of the ship trio (the js glue and the wasm), with the same basenames.
@@ -1479,6 +1653,26 @@ namespace editor
             }
         }
 
+        // The project's plugins' export hooks, over the staged dist.
+        if (hooks != nullptr && hooks->Count() > 0)
+        {
+            if (onProgress)
+            {
+                onProgress(u8"Running the plugins' export hooks...", 0.99f);
+            }
+            const String failed = hooks->Run(ExportHookContext{&project, &preset, result.outputDir.AsView()});
+            if (!failed.IsEmpty())
+            {
+                LOG_ERROR(u8"Export", u8"preset '{}': export hook {}", preset.name, failed);
+                result.refusal = Format(u8"export hook {}", failed);
+                if (outResult != nullptr)
+                {
+                    *outResult = result;
+                }
+                return Status{ErrorCode::Internal};
+            }
+        }
+
         if (onProgress)
         {
             onProgress(u8"Done", 1.0f);
@@ -1496,7 +1690,7 @@ namespace editor
                      const ExportProgress& onProgress, bool cook,
                      const HashMap<Guid, Array<byte>>* sceneStreams,
                      const SceneReferenceScanner* scanner,
-                     const Array<Guid>* precomputedReachableRoots)
+                     const Array<Guid>* precomputedReachableRoots, const ExportPluginServices* hooks)
     {
         // The reachable-root closure is project-level (not per-preset), so one precomputed set
         // seeds every pruning preset in the run.
@@ -1519,7 +1713,7 @@ namespace editor
             };
             ExportResult result;
             if (ExportOne(project, preset, templates, builders, outRoot, dataRoot, rebuild, &result,
-                          scoped, cook, sceneStreams, scanner, precomputedReachableRoots)
+                          scoped, cook, sceneStreams, scanner, precomputedReachableRoots, hooks)
                     .IsOk())
             {
                 ++ok;

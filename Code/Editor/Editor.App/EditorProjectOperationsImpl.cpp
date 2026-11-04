@@ -287,10 +287,11 @@ namespace editor::app
         const String toolDir = m_seams.hostToolDir;
         const String templatesRoot = m_seams.templatesRoot;
         const String dataRoot = m_seams.dataRoot;
+        const editor::ExportPluginServices* hooks = m_seams.context != nullptr ? m_seams.context->ExportHooks() : nullptr;
         (void)m_seams.tasks->Submit(
             Format(u8"Export {}", shared->preset.name.AsView()).AsView(),
             Function<Status(TaskContext&)>{
-                [shared, project, builders, toolDir, templatesRoot, dataRoot](
+                [shared, project, builders, toolDir, templatesRoot, dataRoot, hooks](
                     TaskContext& ctx) -> Status
                 {
                     foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(),
@@ -310,7 +311,7 @@ namespace editor::app
                         *project, shared->preset, templates, *builders, shared->outRoot.AsView(),
                         dataRoot.AsView(), /*rebuild=*/false, &shared->result, onProgress,
                         /*cook=*/false, &shared->sceneStreams, /*scanner=*/nullptr,
-                        shared->reachableValid ? &shared->reachableRoots : nullptr);
+                        shared->reachableValid ? &shared->reachableRoots : nullptr, hooks);
                 }},
             Function<void(Status)>{[shared](Status status)
                                    {

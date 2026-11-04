@@ -3,7 +3,8 @@
 
 // NativeSample.Tooling's entry. Load adds an MCP tool, nativesample_notes, that every MCP host serves
 // while the plugin is loaded: the open project's notes (the Pipeline part's asset type), each with
-// its text. It leaves every host with the plugin.
+// its text; and an export hook that writes how many notes the project has into each dist
+// (nativesample-notes.txt). Both leave with the plugin.
 
 #include "Core/Prelude.h"
 #include "Runtime/PluginEntry.h"
@@ -23,6 +24,27 @@ namespace
 
     void Load(foundation::runtime::PluginContext& context)
     {
+        // The exporter, the editor and the MCP host run export hooks; each offers the service.
+        if (editor::ExportPluginServices* exports = context.Find<editor::ExportPluginServices>())
+        {
+            (void)exports->AddHook(
+                u8"nativesample",
+                [](const editor::ExportHookContext& at) -> foundation::core::String
+                {
+                    foundation::core::usize count = 0;
+                    nativesample::ForEachNote(*at.project->SourceDb().RootGroup(),
+                                              [&count](foundation::content::Instance&) { ++count; });
+                    const foundation::core::String text = foundation::core::Format(u8"{}\n", count);
+                    const foundation::core::String path = foundation::core::PathJoin(at.outputDir, u8"nativesample-notes.txt");
+                    if (!foundation::core::WriteFile(path.AsView(), foundation::core::Span<const foundation::core::byte>(
+                                                                         reinterpret_cast<const foundation::core::byte*>(text.Data()), text.Size()))
+                             .IsOk())
+                    {
+                        return foundation::core::String(u8"could not write nativesample-notes.txt");
+                    }
+                    return foundation::core::String{};
+                });
+        }
         editor::mcp::McpPluginServices* tools = context.Find<editor::mcp::McpPluginServices>();
         if (tools == nullptr)
         {

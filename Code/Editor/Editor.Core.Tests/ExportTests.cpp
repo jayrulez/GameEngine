@@ -8,6 +8,7 @@
 // format involved is a versioned payload.
 #include <atomic> // gcc modules: pull in std::atomic bodies before this import mix
 #include <doctest/doctest.h>
+#include <initializer_list>
 
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -2689,4 +2690,274 @@ TEST_CASE("export: a created template carries its icon, the platform's unless on
 
     NukeTree(base.AsView());
     NukeTree(outFolder.AsView());
+}
+
+namespace
+{
+    // A plugin package on disk: its Plugin.xml (supported on `platforms`) and, for the host's
+    // platform, one deploy file.
+    void WritePackage(StringView dir, StringView id, StringView version, std::initializer_list<StringView> platforms)
+    {
+        NukeTree(dir);
+        REQUIRE(CreateDirectories(PathJoin(dir, u8"Deploy").AsView()));
+        foundation::runtime::PluginManifest manifest;
+        manifest.id = String(id);
+        manifest.version = String(version);
+        manifest.engineVersion = String(engine::project::kEngineVersionString);
+        manifest.parts.PushBack(foundation::runtime::PluginManifestPart{String(u8"Engine")});
+        for (StringView platform : platforms)
+        {
+            foundation::runtime::PluginPlatform entry{String(platform)};
+            if (platform == GetHostPlatformName())
+            {
+                entry.deploy.PushBack(Format(u8"Deploy/{}-runtime.bin", id));
+            }
+            manifest.platforms.PushBack(Move(entry));
+        }
+        MemoryStream xml;
+        REQUIRE(foundation::runtime::WritePluginManifest(manifest, xml).IsOk());
+        REQUIRE(WriteFile(PathJoin(dir, u8"Plugin.xml").AsView(), xml.Bytes()).IsOk());
+        const String deploy = Format(u8"{} runtime\n", id);
+        REQUIRE(WriteFile(PathJoin(dir, Format(u8"Deploy/{}-runtime.bin", id).AsView()).AsView(),
+                          Span<const byte>(reinterpret_cast<const byte*>(deploy.Data()), deploy.Size()))
+                    .IsOk());
+    }
+}
+
+// A template records the plugins its player links (the build's <player>.plugins), each with its
+// version, and carries each one's Plugin.xml and deploy files for its platform, so an export has them
+// with no engine checkout.
+TEST_CASE("export: a created template records the plugins its player links and carries their package files")
+{
+    const String base = TempDir(u8"scratch_tmpl_plugins");
+    const String root = TempDir(u8"scratch_tmpl_plugins_root");
+    const String package = TempDir(u8"scratch_tmpl_plugins_pkg");
+    NukeTree(base.AsView());
+    NukeTree(root.AsView());
+    WritePackage(package.AsView(), u8"steamish", u8"1.4.0", {GetHostPlatformName()});
+
+    String leaf(GetHostPlatformName());
+    leaf += u8"-Clang";
+    const String binDir = PathJoin(PathJoin(PathJoin(base.AsView(), u8"Bin").AsView(), u8"Release").AsView(), leaf.AsView());
+    REQUIRE(CreateDirectories(binDir.AsView()));
+    foundation::vfs::NativeFileSystem binFs(binDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(binFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    SaveText(binFs, u8"Engine.Player.plugins", Format(u8"steamish|{}\n", package).AsView());
+
+    String createdId, createdDir;
+    REQUIRE(editor::CreateTemplate(binDir.AsView(), root.AsView(), editor::TemplateOutput::Install, &createdId, &createdDir).IsOk());
+    foundation::vfs::NativeFileSystem bundleFs(createdDir.AsView(), foundation::core::DefaultAllocator());
+    CHECK(bundleFs.Exists(u8"plugins/steamish/Plugin.xml"));
+    CHECK(bundleFs.Exists(u8"plugins/steamish/Deploy/steamish-runtime.bin"));
+    const Array<editor::PlayerPlugin> listed = editor::ReadPlayerPlugins(createdDir.AsView(), u8"Engine.Player");
+    REQUIRE(listed.Size() == 1u);
+    CHECK(listed[0].packageDir == PathJoin(createdDir.AsView(), u8"plugins/steamish")); // the bundle's copy
+
+    editor::ExportTemplate read;
+    REQUIRE(editor::LoadTemplateManifest(bundleFs, read).IsOk());
+    REQUIRE(read.plugins.Size() == 1u);
+    CHECK(read.plugins[0].id == u8"steamish");
+    CHECK(read.plugins[0].version == u8"1.4.0");
+
+    NukeTree(base.AsView());
+    NukeTree(root.AsView());
+    NukeTree(package.AsView());
+}
+
+// Which player a dist runs, from the plugins the project enables on the preset's platform: the
+// template's when it carries them all at a recent enough version, one built for the project
+// otherwise (its own package enabled there, a plugin the template lacks or carries older), and no
+// export at all for an entry enabled on a platform its plugin does not support or a plugin no
+// package holds.
+TEST_CASE("export: the template's player when it carries the project's plugins, a built one when not, a refusal when they cannot ship")
+{
+    const String projectDir = TempDir(u8"scratch_choose_player");
+    const String carriedDir = TempDir(u8"scratch_choose_player_carried");
+    NukeTree(projectDir.AsView());
+    const StringView host = GetHostPlatformName();
+    const StringView other = host == StringView(u8"Linux64") ? StringView(u8"Win64") : StringView(u8"Linux64");
+    WritePackage(carriedDir.AsView(), u8"carried", u8"1.0.0", {host});
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Choose").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+
+    // The template's player lists the carried plugin (as the host template does from Bin).
+    editor::ExportTemplate tmpl;
+    tmpl.id = String(u8"test-template");
+    tmpl.directory = TempDir(u8"scratch_choose_player_tmpl");
+    NukeTree(tmpl.directory.AsView());
+    REQUIRE(CreateDirectories(tmpl.directory.AsView()));
+    {
+        foundation::vfs::NativeFileSystem fs(tmpl.directory.AsView(), foundation::core::DefaultAllocator());
+        SaveText(fs, u8"Engine.Player.plugins", Format(u8"carried|{}\n", carriedDir).AsView());
+    }
+    tmpl.plugins.PushBack(editor::TemplatePlugin{String(u8"carried"), String(u8"1.0.0")});
+
+    const auto enable = [&](StringView id, StringView path, std::initializer_list<StringView> platforms)
+    {
+        project->Settings().plugins.Clear();
+        foundation::runtime::EnabledPlugin entry;
+        entry.id = String(id);
+        entry.path = String(path);
+        for (StringView platform : platforms)
+            entry.platforms.PushBack(String(platform));
+        project->Settings().plugins.PushBack(Move(entry));
+    };
+
+    // Carried, enabled here: the template's player, and the plugin's deploy files go with it.
+    enable(u8"carried", u8"", {});
+    editor::detail::PlayerChoice choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.refusal.IsEmpty());
+    CHECK_FALSE(choice.build);
+    REQUIRE(choice.enabled.Size() == 1u);
+    // Enabled elsewhere only: absent here, so nothing to carry.
+    enable(u8"carried", u8"", {other});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK_FALSE(choice.build);
+    CHECK(choice.enabled.IsEmpty());
+    // Carried older than the version known: built.
+    tmpl.plugins[0].version = String(u8"0.9.0");
+    enable(u8"carried", u8"", {});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.build);
+    CHECK(choice.reason.AsView().Contains(u8"older than 1.0.0"));
+    // Not carried at all: built.
+    tmpl.plugins.Clear();
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.build);
+    CHECK(choice.reason.AsView().Contains(u8"does not carry plugin 'carried'"));
+    // The project's own package enabled here: built.
+    WritePackage(PathJoin(projectDir.AsView(), u8"Plugins/Own").AsView(), u8"own", u8"0.1.0", {host});
+    enable(u8"own", u8"Plugins/Own", {});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.build);
+    CHECK(choice.reason.AsView().Contains(u8"the project's own package 'own'"));
+    // Named on a platform its manifest lacks: refused.
+    WritePackage(PathJoin(projectDir.AsView(), u8"Plugins/Elsewhere").AsView(), u8"elsewhere", u8"0.1.0", {other});
+    enable(u8"elsewhere", u8"Plugins/Elsewhere", {host});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.refusal.AsView().Contains(u8"is enabled on"));
+    CHECK(choice.refusal.AsView().Contains(u8"which it does not support"));
+    // A plugin in no package: refused.
+    enable(u8"nowhere_at_all", u8"", {});
+    choice = editor::detail::ChoosePlayer(*project, tmpl, host);
+    CHECK(choice.refusal.AsView().Contains(u8"plugin 'nowhere_at_all' is in no package"));
+
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(carriedDir.AsView());
+    NukeTree(tmpl.directory.AsView());
+}
+
+// An export whose template carries the project's plugins ships the template's player, with each
+// enabled plugin's deploy files beside it and the result saying which player it is; an export the
+// plugins cannot ship is refused, with the reason, and writes nothing.
+TEST_CASE("export: ExportOne ships an enabled plugin's deploy files beside the template's player, and refuses what cannot ship")
+{
+    const String projectDir = TempDir(u8"scratch_export_plugins_proj");
+    const String toolDir = TempDir(u8"scratch_export_plugins_tool");
+    const String outRoot = TempDir(u8"scratch_export_plugins_out");
+    const String package = TempDir(u8"scratch_export_plugins_pkg");
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    WritePackage(package.AsView(), u8"carried", u8"1.0.0", {GetHostPlatformName()});
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Plugins Export").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+    foundation::runtime::EnabledPlugin entry;
+    entry.id = String(u8"carried");
+    project->Settings().plugins.PushBack(Move(entry));
+    REQUIRE(project->SaveSettings().IsOk());
+
+    REQUIRE(CreateDirectory(toolDir.AsView()));
+    foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    SaveText(toolFs, u8"Engine.Player.plugins", Format(u8"carried|{}\n", package).AsView());
+    editor::TemplateRegistry registry;
+    registry.Refresh(StringView{}, nullptr, toolDir.AsView(), &toolFs); // the host template, which records the plugin
+
+    editor::ExportPreset preset;
+    preset.name = String(u8"Host Build");
+    preset.platform = String(GetHostPlatformName());
+    preset.outputSubdir = String(u8"host");
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    editor::ExportResult result;
+    REQUIRE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result).IsOk());
+    foundation::vfs::NativeFileSystem distFs(result.outputDir.AsView(), foundation::core::DefaultAllocator());
+    CHECK(distFs.Exists(GetExecutableName(u8"Engine.Player").AsView()));
+    CHECK(distFs.Exists(u8"carried-runtime.bin")); // beside the player
+    CHECK(result.playerReason.AsView().Contains(u8"carries every plugin"));
+
+    // A plugin no package holds: refused, with the reason.
+    project->Settings().plugins[0].id = String(u8"missing_plugin");
+    editor::ExportResult refused;
+    CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &refused).IsOk());
+    CHECK(refused.refusal.AsView().Contains(u8"plugin 'missing_plugin' is in no package"));
+
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    NukeTree(package.AsView());
+}
+
+// A plugin's export hooks run once a dist is staged, in the order they were added, over the staged
+// folder; one that fails fails the export, its reason in the result.
+TEST_CASE("export: ExportOne runs the plugins' export hooks over the staged dist, and a failing one fails it")
+{
+    const String projectDir = TempDir(u8"scratch_export_hooks_proj");
+    const String toolDir = TempDir(u8"scratch_export_hooks_tool");
+    const String outRoot = TempDir(u8"scratch_export_hooks_out");
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"Hooked").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
+    REQUIRE(project);
+    REQUIRE(CreateDirectory(toolDir.AsView()));
+    foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
+    SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
+    editor::TemplateRegistry registry;
+    registry.Refresh(StringView{}, nullptr, toolDir.AsView(), &toolFs);
+    editor::ExportPreset preset;
+    preset.name = String(u8"Host Build");
+    preset.platform = String(GetHostPlatformName());
+    preset.outputSubdir = String(u8"host");
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+
+    editor::ExportPluginServices hooks(DefaultAllocator());
+    Array<String> ran;
+    REQUIRE(hooks.AddHook(u8"first", [&ran](const editor::ExportHookContext& at) -> String
+                          {
+                              ran.PushBack(String(u8"first"));
+                              CHECK(FileExists(PathJoin(at.outputDir, u8"player.xml").AsView())); // after staging
+                              CHECK(at.preset->name == u8"Host Build");
+                              return String{};
+                          }));
+    REQUIRE(hooks.AddHook(u8"second", [&ran](const editor::ExportHookContext&) -> String
+                          {
+                              ran.PushBack(String(u8"second"));
+                              return String{};
+                          }));
+    CHECK_FALSE(hooks.AddHook(u8"empty", editor::ExportHook{}));
+    editor::ExportResult result;
+    REQUIRE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result, {}, true,
+                              nullptr, nullptr, nullptr, &hooks)
+                .IsOk());
+    REQUIRE(ran.Size() == 2u);
+    CHECK(ran[0] == u8"first");
+    CHECK(ran[1] == u8"second");
+
+    REQUIRE(hooks.AddHook(u8"breaks", [](const editor::ExportHookContext&) -> String { return String(u8"no signing key"); }));
+    editor::ExportResult failed;
+    CHECK_FALSE(editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &failed, {}, true,
+                                  nullptr, nullptr, nullptr, &hooks)
+                    .IsOk());
+    CHECK(failed.refusal == u8"export hook breaks: no signing key");
+
+    project.Reset();
+    NukeTree(projectDir.AsView());
+    NukeTree(toolDir.AsView());
+    NukeTree(outRoot.AsView());
 }

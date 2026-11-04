@@ -347,8 +347,11 @@ int main(int argc, char** argv)
     engine::RegisterAllScriptFacades();
     // The plugins the project enables that this tool links, their Engine, Pipeline and Tooling parts
     // (their builders join the export's cook).
+    // Their export hooks run once each preset's dist is staged.
+    editor::ExportPluginServices exportHooks(AppRoot());
     editor::ToolPlugins plugins(AppRoot(), foundation::runtime::HostRole::Export, *project,
-                                foundation::runtime::LinkedPluginList(), pipeline::PipelineRegistries{&builders});
+                                foundation::runtime::LinkedPluginList(), pipeline::PipelineRegistries{&builders},
+                                [&exportHooks](foundation::runtime::PluginHost& host) { (void)exportHooks.Attach(host); });
 
     // Component reflection (with its data-version gates) for every domain, through the scene
     // composition root, before any scene stream deserializes. One shared list keeps this host
@@ -406,9 +409,15 @@ int main(int argc, char** argv)
 
     editor::ExportResult result;
     if (!editor::ExportOne(*project, *preset, registry, builders, outRoot.AsView(),
-                           dataRoot.AsView(), rebuild, &result, {}, true, &sceneStreams, &scanner)
+                           dataRoot.AsView(), rebuild, &result, {}, true, &sceneStreams, &scanner, nullptr,
+                           &exportHooks)
              .IsOk())
     {
+        if (!result.refusal.IsEmpty())
+        {
+            std::fprintf(stderr, "Tools.Export: export refused: %s\n", Cs(result.refusal.AsView()));
+            return 1;
+        }
         std::fprintf(stderr, "Tools.Export: export failed (see log)\n");
         return 1;
     }
@@ -416,6 +425,7 @@ int main(int argc, char** argv)
         "exported '%s' -> %s\n  cook: %zu cooked, %zu scene(s), %zu packed | staged %zu file(s)\n",
         Cs(preset->name.AsView()), Cs(result.outputDir.AsView()), result.content.cooked,
         result.content.scenesStaged, result.content.filesPacked, result.filesStaged);
+    std::printf("  player: %s\n", Cs(result.playerReason.AsView()));
     if (!result.engineVersionWarning.IsEmpty())
     {
         std::printf("  warning: %s\n", Cs(result.engineVersionWarning.AsView()));

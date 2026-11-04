@@ -419,7 +419,12 @@ when none); `export_preset_set` creates, changes or removes one by `name` - anot
 target, say, with its own render size or window. Its platform and config must be ones a template
 here has; its templateId need not, since presets travel with the project and templates do not.
 A project's custom shaders ship as bytecode in the dist's shader pack, their HLSL left out unless
-the preset's `includeShaderSource` is set.
+the preset's `includeShaderSource` is set. The result's `player` says which player the dist runs and
+why: the template's when it carries every plugin the project enables on the preset's platform, or one
+built for the project (its own packages, a plugin the template lacks or carries older), which needs
+the engine checkout and takes a while. Each enabled plugin's deploy files for the platform ship beside
+the player. The export is refused, with the reason, when an entry is enabled on a platform its plugin
+does not support or names a plugin no package holds.
 
 ## Per-tool gotchas
 

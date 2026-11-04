@@ -296,3 +296,33 @@ TEST_CASE("plugins: through the standalone MCP host, an agent creates and cooks 
     (void)RemoveDirectoryRecursive(dir);
     (void)RemoveDirectoryRecursive(plain);
 }
+
+TEST_CASE("plugins: the exporter loads the package's Tooling part, whose export hook writes into the dist and leaves with it")
+{
+    const StringView dir = u8"scratch_plugins_export";
+    const StringView dist = u8"scratch_plugins_export_dist";
+    MakeProject(dir, u8"Export Notes");
+    (void)RemoveDirectoryRecursive(dist);
+    REQUIRE(CreateDirectories(dist));
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir);
+    REQUIRE(project);
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    editor::ExportPluginServices hooks(DefaultAllocator());
+    {
+        editor::ToolPlugins plugins(DefaultAllocator(), runtime::HostRole::Export, *project, runtime::LinkedPluginList(),
+                                    pipeline::PipelineRegistries{&builders},
+                                    [&hooks](runtime::PluginHost& host) { (void)hooks.Attach(host); });
+        CHECK(plugins.Host().IsLoaded(kNativeSample));
+        REQUIRE(hooks.Count() == 1u);
+        editor::ExportPreset preset;
+        preset.name = String(u8"Host Build");
+        CHECK(hooks.Run(editor::ExportHookContext{project.Get(), &preset, dist}).IsEmpty());
+        Result<Array<byte>> written = ReadFile(PathJoin(dist, u8"nativesample-notes.txt").AsView());
+        REQUIRE(written.HasValue());
+        CHECK(StringView(reinterpret_cast<const utf8char*>(written.Value().Data()), written.Value().Size()) == StringView(u8"0\n"));
+    }
+    CHECK(hooks.Count() == 0u); // gone with its plugin
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir);
+    (void)RemoveDirectoryRecursive(dist);
+}

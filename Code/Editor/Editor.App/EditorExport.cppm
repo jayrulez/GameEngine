@@ -217,11 +217,12 @@ export namespace editor::app
             const String dataRoot = m_services.dataRoot;
             const String outRoot = Absolutize(PathJoin(project->Directory(), u8"Dist").AsView());
             const String title(all ? StringView(u8"Export All") : StringView(u8"Export"));
+            const editor::ExportPluginServices* hooks = m_services.context->ExportHooks(); // the project's plugins'
             EditorExport* self = this;
             (void)m_services.tasks->Submit(
                 title.AsView(),
                 [project, builders, toolDir, templatesRoot, dataRoot, presetName, all, outRoot, sceneStreams, reachableRoots,
-                 presetsPtr](TaskContext& ctx) -> Status
+                 presetsPtr, hooks](TaskContext& ctx) -> Status
                 {
                     foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), editor::EditorRootAllocator());
                     foundation::vfs::NativeFileSystem rootFs(templatesRoot.AsView(), editor::EditorRootAllocator());
@@ -237,14 +238,14 @@ export namespace editor::app
                     {
                         const Span<const editor::ExportPreset> span(presets.presets.Data(), presets.presets.Size());
                         return editor::ExportAll(*project, span, registry, *builders, outRoot.AsView(), dataRoot.AsView(), /*rebuild*/ false,
-                                                 onProgress, /*cook*/ false, sceneStreams, /*scanner*/ nullptr, reachableRoots);
+                                                 onProgress, /*cook*/ false, sceneStreams, /*scanner*/ nullptr, reachableRoots, hooks);
                     }
                     const editor::ExportPreset* preset = presets.Find(presetName.AsView());
                     if (preset == nullptr)
                         return Status{ErrorCode::NotFound};
                     editor::ExportResult result;
                     return editor::ExportOne(*project, *preset, registry, *builders, outRoot.AsView(), dataRoot.AsView(), /*rebuild*/ false,
-                                             &result, onProgress, /*cook*/ false, sceneStreams, /*scanner*/ nullptr, reachableRoots);
+                                             &result, onProgress, /*cook*/ false, sceneStreams, /*scanner*/ nullptr, reachableRoots, hooks);
                 },
                 [self, outRoot](Status s) // main thread
                 {

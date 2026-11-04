@@ -186,14 +186,18 @@ export namespace editor::mcp
                 s->project = o->project.Get();
                 // The plugins this project enables that this host links, with their parts for MCP.
                 McpPluginServices* tools = plugins.tools;
+                editor::ExportPluginServices* exportHooks = plugins.exportHooks;
                 o->plugins = MakeUnique<editor::ToolPlugins>(
                     editor::EditorRootAllocator(), editor::EditorRootAllocator(), foundation::runtime::HostRole::Mcp,
                     *o->project, plugins.linked, plugins.registries,
-                    [tools](foundation::runtime::PluginHost& host)
+                    [tools, exportHooks](foundation::runtime::PluginHost& host)
                     {
                         if (tools != nullptr)
                             (void)tools->Attach(host);
+                        if (exportHooks != nullptr)
+                            (void)exportHooks->Attach(host);
                     });
+                s->exportHooks = exportHooks;
                 s->plugins = &o->plugins->Host();
                 return out;
             });

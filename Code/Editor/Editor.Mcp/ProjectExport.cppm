@@ -59,9 +59,14 @@ export namespace editor::mcp
         ExportOutcome outcome;
         if (!editor::ExportOne(*session.project, request.preset, templates, builders,
                                request.outRoot.AsView(), dataRoot, request.rebuild,
-                               &outcome.result, {}, /*cook=*/true, &sceneStreams, &scanner)
+                               &outcome.result, {}, /*cook=*/true, &sceneStreams, &scanner, nullptr,
+                               session.exportHooks)
                  .IsOk())
         {
+            if (!outcome.result.refusal.IsEmpty())
+            {
+                return Err(Format(u8"export of preset '{}' refused: {}", request.preset.name.AsView(), outcome.result.refusal));
+            }
             return Err(Format(u8"export of preset '{}' failed - read log_read (category "
                               u8"Export/Cook) for the failing step",
                               request.preset.name.AsView()));
@@ -158,6 +163,7 @@ export namespace editor::mcp
                         JsonValue::MakeNumber(static_cast<f64>(result.content.filesPacked)));
                 out.Set(u8"filesStaged",
                         JsonValue::MakeNumber(static_cast<f64>(result.filesStaged)));
+                out.Set(u8"player", JsonValue::MakeString(result.playerReason)); // the template's or a built one, and why
                 if (!result.engineVersionWarning.IsEmpty())
                 {
                     out.Set(u8"warning", JsonValue::MakeString(result.engineVersionWarning));

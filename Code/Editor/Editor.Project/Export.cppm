@@ -34,6 +34,7 @@ import :project;
 import :export_preset;
 import :export_roots;
 import :export_template;
+import :export_hooks; // ExportPluginServices (what a plugin's Tooling part runs after staging)
 
 using namespace foundation::core;
 using namespace pipeline;
@@ -115,6 +116,23 @@ export namespace editor
 
     namespace detail
     {
+        // Which player a preset's dist runs: the template's when it carries every plugin the project
+        // enables on the preset's platform at a version at least the one known here and the project
+        // enables none of its own packages there, else one built for the project (`reason` says why).
+        // `refusal` is set when the export cannot go ahead: an entry enabled on a platform its plugin
+        // does not support, or a plugin in no package the export can find (the project's, the
+        // template's, the engine checkout's). `enabled` is the plugins enabled there. Defined in
+        // ExportImpl.cpp.
+        struct PlayerChoice
+        {
+            bool build = false;
+            foundation::core::String reason;
+            foundation::core::String refusal;
+            foundation::core::Array<foundation::core::String> enabled;
+        };
+        [[nodiscard]] PlayerChoice ChoosePlayer(const EditorProject& project, const ExportTemplate& tmpl,
+                                                foundation::core::StringView platform);
+
         // The ship build's Bin suffix, "-Ship-<sanitized project name>". It is per project so two
         // games' ship outputs never collide in the checkout's Bin, as the -Shared and -ASAN
         // suffixes keep their builds apart.
@@ -611,6 +629,8 @@ export namespace editor
                                      // still runs; callers may surface this to the user.
         PruningReport pruning; // closure-pruning report (roots and reasons, kept and dropped
                                // counts); pruned=false for an export that packs everything
+        String playerReason; // which player the dist runs (the template's, or one built), and why
+        String refusal;      // why the project's plugins stopped the export (empty when they did not)
     };
 
     /// Builds the project's own packages for development: a persistent per-project shared-engine
@@ -636,6 +656,8 @@ export namespace editor
     // `dataRoot` is the engine data root (the caller's resolved one): the engine shaders are cooked
     // from <dataRoot>/Shaders into the dist's own Data/Engine/Shaders/shaders.dpak (and
     // Data/.dataroot), so the player finds them with the same discovery walk every executable uses.
+    // `hooks`, the export hooks the project's plugins added (null: none), run once the dist is
+    // staged; one that fails fails the export, its reason in ExportResult::refusal.
     [[nodiscard]] Status ExportOne(EditorProject& project, const ExportPreset& preset,
                                    const TemplateRegistry& templates, BuilderRegistry& builders,
                                    StringView outRoot, StringView dataRoot, bool rebuild,
@@ -643,7 +665,8 @@ export namespace editor
                                    const ExportProgress& onProgress = {}, bool cook = true,
                                    const HashMap<Guid, Array<byte>>* sceneStreams = nullptr,
                                    const SceneReferenceScanner* scanner = nullptr,
-                                   const Array<Guid>* precomputedReachableRoots = nullptr);
+                                   const Array<Guid>* precomputedReachableRoots = nullptr,
+                                   const ExportPluginServices* hooks = nullptr);
 
     /// Produces every preset's dist under `outRoot` (a failing preset is logged and skipped; the
     /// others continue). Returns Ok only when all presets succeeded.
@@ -653,5 +676,6 @@ export namespace editor
                                    const ExportProgress& onProgress = {}, bool cook = true,
                                    const HashMap<Guid, Array<byte>>* sceneStreams = nullptr,
                                    const SceneReferenceScanner* scanner = nullptr,
-                                   const Array<Guid>* precomputedReachableRoots = nullptr);
+                                   const Array<Guid>* precomputedReachableRoots = nullptr,
+                                   const ExportPluginServices* hooks = nullptr);
 }

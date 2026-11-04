@@ -86,6 +86,7 @@ namespace editor::app
         };
         services.linkedPlugins = m_config.linkedPlugins;
         services.pluginTools = &m_mcpPluginTools;
+        services.exportHooks = &m_exportHooks;
         EditorApplication* self = this;
         services.seedNewProject = [self](editor::EditorContext& context, editor::EditorProject& project)
         {

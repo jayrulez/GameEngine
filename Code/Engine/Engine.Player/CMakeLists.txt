@@ -67,7 +67,7 @@ if(EMSCRIPTEN)
 
     # The project's web player: its packages compiled in (the root CMakeLists links them through
     # util_add_project_plugins, once they are added).
-    if(ENGINE_PROJECT_PLUGINS)
+    if(ENGINE_PROJECT_PLUGINS OR ENGINE_GAME_PLAYER)
         add_executable(Engine.GamePlayer WebMain.cpp "${_engine_logo_src}")
         target_link_libraries(Engine.GamePlayer PRIVATE ${_web_player_libs})
         target_link_options(Engine.GamePlayer PRIVATE
@@ -133,7 +133,7 @@ else()
     # The project's player, when a project's packages are added to this build (ENGINE_PROJECT_PLUGINS,
     # which the exporter sets and which works by hand too): the same launcher, with the packages
     # linked through the generated registry, which the root CMakeLists adds once they are added.
-    if(ENGINE_PROJECT_PLUGINS)
+    if(ENGINE_PROJECT_PLUGINS OR ENGINE_GAME_PLAYER)
         add_executable(Engine.GamePlayer Main.cpp)
         target_link_libraries(Engine.GamePlayer PRIVATE Engine.Player.Main Foundation::Policy)
         util_copy_runtime_deps(Engine.GamePlayer EXTRA ${BUILDSYSTEM_WGPU_LIB} ${BUILDSYSTEM_NOTICES_FILE})

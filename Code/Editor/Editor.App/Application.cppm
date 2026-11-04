@@ -301,6 +301,7 @@ export namespace editor::app
         // The MCP tools the project's plugins add through their Tooling parts: attached to each
         // project's plugin host by the session, and serving the MCP host's server while it runs.
         editor::mcp::McpPluginServices m_mcpPluginTools{m_editorAllocator};
+        editor::ExportPluginServices m_exportHooks{m_editorAllocator}; // the project's plugins' export hooks
         UniquePtr<EditorMcpService> m_mcp;
         EditorSession m_session; // the open project; declared after the services it uses, so it is destroyed before them
 

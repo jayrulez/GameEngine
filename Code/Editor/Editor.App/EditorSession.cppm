@@ -63,6 +63,8 @@ export namespace editor::app
             Span<const foundation::runtime::LinkedPlugin> linkedPlugins;
             /// What the project's plugins' Tooling parts add their MCP tools through (null: none).
             editor::mcp::McpPluginServices* pluginTools = nullptr;
+            /// What the project's plugins' Tooling parts add their export hooks through (null: none).
+            editor::ExportPluginServices* exportHooks = nullptr;
             /// Called when the project's plugin host changed (made at open, remade at a reload, gone
             /// at close), so what holds it follows (the MCP host's session).
             Function<void(foundation::runtime::PluginHost*)> pluginsChanged;
@@ -193,6 +195,9 @@ export namespace editor::app
             (void)m_pipelinePlugins->Attach(*plugins);
             if (m_services.pluginTools != nullptr)
                 (void)m_services.pluginTools->Attach(*plugins);
+            if (m_services.exportHooks != nullptr)
+                (void)m_services.exportHooks->Attach(*plugins);
+            context.SetExportHooks(m_services.exportHooks);
             engine::project::AddProjectPackages(*plugins, project.Directory(), project.Settings(), m_allocator,
                                                 [this, &project](StringView library) { return StageLibrary(project, library); });
             (void)engine::project::LoadProjectPlugins(*plugins, m_services.linkedPlugins, project.Settings());

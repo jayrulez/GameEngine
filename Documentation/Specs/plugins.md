@@ -379,8 +379,13 @@ editor, the player and export still read `nativeModule`):
     editor attaches the service over its own to each project's host. Test: through the standalone
     MCP host, a project that enables a plugin creates its asset with its creator and cooks it with
     its builder, and a project that does not has neither.
-  - **X4c**: the `Tooling` contributions (MCP tools, served by both MCP hosts, added and removed
-    with their plugin).
+  - **X4c** (built 2026-11-04): the `Tooling` contributions through `McpPluginServices`: a
+    plugin's MCP tools join every server the service serves (the standalone host's, there before
+    the project opens, and the editor's, started after its plugins load) and leave each with their
+    plugin; none takes a name a server holds. `McpServer` gains tool removal, which ends a call in
+    flight to the tool. Export hooks, the other Tooling contribution, come with export in X6.
+    Test: a plugin's tool is served by a server there before it loads and one attached after, and
+    leaves both.
   Tests run each host's load step against a linked four-part fixture; the real tools link no
     fixture.
 - **X5 - native code is a plugin.** NativeSample becomes a package (`Plugin.xml`,

@@ -16,6 +16,7 @@ import foundation.runtime;
 using namespace foundation::core;
 using namespace foundation::runtime;
 
+#ifndef __EMSCRIPTEN__ // the load test is not built for the web, below
 namespace
 {
     // Loads `ids` as a project's entries naming no platforms and no settings.
@@ -31,6 +32,7 @@ namespace
         return host.Load(Span<const EnabledPlugin>(entries.Data(), entries.Size()));
     }
 }
+#endif
 
 #ifndef PLUGIN_ROLES_FILE
 #error "Runtime.Tests must define PLUGIN_ROLES_FILE (see Runtime.Tests/CMakeLists.txt)"
@@ -38,7 +40,11 @@ namespace
 
 extern "C" int ProbeBaseEngineLoads();
 extern "C" int ProbeEngineLoads();
+#ifndef __EMSCRIPTEN__
+// A web build declares only a plugin's Engine part (no tool runs there), so the probe's Pipeline part
+// is built everywhere else.
 extern "C" int ProbePipelineLoads();
+#endif
 
 namespace
 {
@@ -68,16 +74,23 @@ TEST_CASE("plugin registry: the build lists the named plugin and its dependencie
 
     REQUIRE(base->partCount == 1u);
     CHECK(base->parts[0]()->kind == PluginPartKind::Engine);
-    // probe has an Editor part too, which a cook does not load, so the build did not link it.
+    // probe has an Editor part too, which a cook does not load, so the build did not link it; a web
+    // build declares only the Engine part.
+#ifdef __EMSCRIPTEN__
+    REQUIRE(probe->partCount == 1u);
+    CHECK(probe->parts[0]()->kind == PluginPartKind::Engine);
+#else
     REQUIRE(probe->partCount == 2u);
     CHECK(probe->parts[0]()->kind == PluginPartKind::Engine);
     CHECK(probe->parts[1]()->kind == PluginPartKind::Pipeline);
+#endif
     for (usize i = 0; i < probe->partCount; ++i)
     {
         CHECK(StringView(probe->parts[i]()->pluginId) == StringView(u8"probe"));
     }
 }
 
+#ifndef __EMSCRIPTEN__ // a cook loads the Pipeline part, which a web build does not have (no cook runs there)
 TEST_CASE("plugin registry: the host reads the embedded manifests and loads the parts through their entries")
 {
     SubsystemManager subsystems(DefaultAllocator());
@@ -101,6 +114,7 @@ TEST_CASE("plugin registry: the host reads the embedded manifests and loads the 
     CHECK(ProbePipelineLoads() == 0);
     CHECK(ProbeBaseEngineLoads() == 0);
 }
+#endif
 
 TEST_CASE("plugin registry: the build's role table is the one RoleLoads gives")
 {

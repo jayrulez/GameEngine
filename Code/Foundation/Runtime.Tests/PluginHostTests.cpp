@@ -1024,3 +1024,30 @@ TEST_CASE("plugin host: a part offering two types under one id is refused, namin
     }
     CHECK(GlobalTypeRegistry().FindById(collidefirst::Settings::StaticType().id) == nullptr);
 }
+
+// The host says which loaded plugin registered a type (what a script's facade belongs to), lists a
+// plugin's types, and knows none once it unloads; the engine's types belong to no plugin.
+TEST_CASE("plugin host: a type's owner is the plugin whose load registered it")
+{
+    Linked linked;
+    AddCollidingPlugins(linked);
+    SubsystemManager subsystems(DefaultAllocator());
+    PluginHost host(DefaultAllocator(), subsystems, HostRole::Player, u8"0.1.0");
+    REQUIRE(host.AddLinked(linked.List()).IsOk());
+    const StringView enabled[] = {kFirst};
+    REQUIRE(LoadIds(host, Span<const StringView>(enabled, 1)).loaded.Size() == 1u);
+    const TypeId settings = collidefirst::Settings::StaticType().id;
+    CHECK(host.OwnerOf(settings) == StringView(kFirst));
+    CHECK(host.OwnerOf(ISerializable::StaticType().id).IsEmpty());
+    Array<TypeId> types;
+    host.TypesOf(kFirst, types);
+    REQUIRE(types.Size() == 1u);
+    CHECK(types[0] == settings);
+    REQUIRE(host.Loaded().Size() == 1u);
+    CHECK(host.Loaded()[0] == StringView(kFirst));
+    host.Unload();
+    CHECK(host.OwnerOf(settings).IsEmpty());
+    types.Clear();
+    host.TypesOf(kFirst, types);
+    CHECK(types.IsEmpty());
+}

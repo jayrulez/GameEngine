@@ -172,6 +172,19 @@ export namespace foundation::runtime
         // What the last Load did (empty before one, and after Unload).
         [[nodiscard]] const PluginLoadReport& Report() const noexcept { return m_report; }
 
+        // The plugins loaded, in load order.
+        [[nodiscard]] core::Span<const core::String> Loaded() const noexcept
+        {
+            return core::Span<const core::String>(m_loaded.Data(), m_loaded.Size());
+        }
+
+        // The loaded plugin whose load registered type `id`, or empty for a type none did (the
+        // engine's). What a script's facade belongs to.
+        [[nodiscard]] core::StringView OwnerOf(core::TypeId id) const noexcept { return m_loader.OwnerOf(id); }
+
+        // Appends to `out` the types a loaded plugin registered (none for one not loaded).
+        void TypesOf(core::StringView id, core::Array<core::TypeId>& out) const { m_loader.TypesOf(id, out); }
+
         [[nodiscard]] bool IsLoaded(core::StringView id) const noexcept
         {
             for (const core::String& loaded : m_loaded)

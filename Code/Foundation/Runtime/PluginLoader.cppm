@@ -91,6 +91,39 @@ export namespace foundation::runtime
 
         [[nodiscard]] core::usize Count() const noexcept { return m_entries.Size(); }
 
+        // The plugin whose parts' loads registered type `id` (the type registry's record), or empty
+        // for a type no loaded part registered (the engine's).
+        [[nodiscard]] core::StringView OwnerOf(core::TypeId id) const noexcept
+        {
+            for (const Entry& entry : m_entries)
+            {
+                for (core::TypeId registered : entry.registeredTypes)
+                {
+                    if (registered == id)
+                    {
+                        return entry.context->PluginId();
+                    }
+                }
+            }
+            return {};
+        }
+
+        // Appends to `out` every type the parts of plugin `pluginId` registered.
+        void TypesOf(core::StringView pluginId, core::Array<core::TypeId>& out) const
+        {
+            for (const Entry& entry : m_entries)
+            {
+                if (entry.context->PluginId() != pluginId)
+                {
+                    continue;
+                }
+                for (core::TypeId registered : entry.registeredTypes)
+                {
+                    out.PushBack(registered);
+                }
+            }
+        }
+
         // Unloads everything in reverse load order: each part's unload, then the reversal of what
         // it registered (a registry entry or factory pointing into a closed library would be a
         // dangling read), then the libraries close.

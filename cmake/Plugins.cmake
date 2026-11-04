@@ -122,6 +122,7 @@ function(util_add_plugin dir)
     set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_NAME "${_name}")
     set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_DEPENDS "${_plugin_DEPENDS}")
     set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_MANIFEST "${_manifest}")
+    set_property(GLOBAL PROPERTY UTIL_PLUGIN_${_plugin_ID}_DIR "${_dir}")
 
     # What util_add_plugin_part reads in each part's folder.
     set(PLUGIN_ID "${_plugin_ID}")
@@ -129,6 +130,11 @@ function(util_add_plugin dir)
     set(PLUGIN_DEPENDS "${_plugin_DEPENDS}")
     set(PLUGIN_PREVIOUS_PART "")
     foreach(_kind IN LISTS UTIL_PLUGIN_PART_KINDS)
+        # A web build is a player alone: no editor or tool runs there, so it declares only the
+        # Engine part (the others link editor libraries a web build does not have).
+        if(EMSCRIPTEN AND NOT _kind STREQUAL "Engine")
+            continue()
+        endif()
         if(_kind IN_LIST _plugin_PARTS)
             set(PLUGIN_PART_KIND "${_kind}")
             set(PLUGIN_PART "${_name}.${_kind}")
@@ -209,7 +215,8 @@ endmacro()
 # Links into <target> the parts a host of <role> loads (UTIL_PLUGIN_ROLE_<role>_KINDS) of each
 # named plugin and of every plugin they depend on, and generates the binary's registry: the
 # LinkedPlugins function foundation.runtime declares, listing each plugin's manifest text and its
-# linked parts' entry points. Referencing the entries is what pulls each part's archive into a
+# linked parts' entry points, and writes <target>.plugins beside the binary (each plugin's id and
+# package folder). Referencing the entries is what pulls each part's archive into a
 # static link, with no whole-archive or forced references. Linked is not enabled: the plugin host
 # loads only what the project enables.
 function(util_link_plugins target)
@@ -247,7 +254,10 @@ function(util_link_plugins target)
     set(_tables "")
     set(_rows "")
     set(_count 0)
+    set(_plugins_list "")
     foreach(_id IN LISTS _ordered)
+        get_property(_package_dir GLOBAL PROPERTY UTIL_PLUGIN_${_id}_DIR)
+        string(APPEND _plugins_list "${_id}|${_package_dir}\n")
         get_property(_manifest GLOBAL PROPERTY UTIL_PLUGIN_${_id}_MANIFEST)
         file(READ "${_manifest}" _xml)
         set(_entries "")
@@ -294,4 +304,7 @@ extern \"C\" const foundation::runtime::LinkedPlugin* LinkedPlugins(foundation::
 }
 " @ONLY)
     target_sources(${target} PRIVATE "${_source}")
+    # Beside the binary, the plugins it links, one `id|package folder` line each: what an export
+    # template records it carries, and where an export finds each one's deploy files.
+    file(GENERATE OUTPUT "$<TARGET_FILE_DIR:${target}>/${target}.plugins" CONTENT "${_plugins_list}")
 endfunction()

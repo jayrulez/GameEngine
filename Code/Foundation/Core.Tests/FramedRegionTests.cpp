@@ -6,6 +6,7 @@
 // bytes verbatim. The settings passthrough of unknown sections builds on this. XML is
 // self-describing, so its BeginFramedRegion/EndFramedRegion are no-ops (covered in the XML tests).
 #include <doctest/doctest.h>
+#include <initializer_list>
 #include "Core/Prelude.h"
 import foundation.core;
 
@@ -105,6 +106,46 @@ TEST_CASE("framed-region (binary): RawRemainder captures + re-emits identically"
         CHECK(ReadU32(ar) == 0x1234u);
         ar.EndFramedRegion();
     }
+}
+
+namespace
+{
+    // A Serialize body as every one is written: it holds the interface alone.
+    void KeepUnread(ISerializer& ar, Array<u8>& unread, u32& after)
+    {
+        ar.BeginFramedRegion();
+        (void)ar.RawRemainder(unread);
+        ar.EndFramedRegion();
+        ar.Scalar(&after, ScalarKind::UInt32);
+    }
+}
+
+TEST_CASE("framed-region (binary): a body holding only the interface frames what it keeps unread")
+{
+    Array<u8> unread;
+    for (u8 b : {u8{7}, u8{8}, u8{9}})
+    {
+        unread.PushBack(b);
+    }
+    u32 after = 999;
+    MemoryStream stream;
+    {
+        BinarySerializer ar(stream, SerializeMode::Write);
+        KeepUnread(ar, unread, after);
+        CHECK(ar.IsOk());
+    }
+    REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
+    Array<u8> read;
+    u32 readAfter = 0;
+    {
+        BinarySerializer ar(stream, SerializeMode::Read);
+        KeepUnread(ar, read, readAfter);
+        CHECK(ar.IsOk());
+    }
+    REQUIRE(read.Size() == 3u); // the frame says where the unread bytes end
+    CHECK(read[0] == 7u);
+    CHECK(read[2] == 9u);
+    CHECK(readAfter == 999u);
 }
 
 TEST_CASE("framed-region (binary): nested regions")

@@ -116,8 +116,8 @@ export namespace foundation::core
         // boundaries and no-op. The default is a no-op, so positional backends that never frame are
         // unaffected; a store that wants skippable sections (Settings) frames every section between
         // these. Regions may nest.
-        virtual void BeginFramedRegion() {}
-        virtual void EndFramedRegion() {}
+        void BeginFramedRegion() override {}
+        void EndFramedRegion() override {}
 
         // Capture (read) or re-inject (write) the current framed region's remaining content as raw bytes,
         // for a section whose type the build cannot instantiate. Read consumes the rest of the region

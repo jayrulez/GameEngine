@@ -117,11 +117,14 @@ export namespace foundation::core
         // the defaults keep bare mocks working.
         virtual void FailPayload(ErrorCode code) noexcept { (void)code; }
 
-        // Unknown-section passthrough (see Serializer for the contract): capture (read) or
-        // re-inject (write) the current region's remaining content verbatim, so a payload whose
-        // type this build cannot instantiate survives a round-trip. Declared on the interface
-        // so consumers holding an ISerializer& (scene records) can preserve unknown types;
-        // unsupported by default; Serializer's backends override.
+        // Unknown-section passthrough (see Serializer for the contract): bracket a self-delimiting
+        // region, and capture (read) or re-inject (write) its remaining content verbatim, so a
+        // payload whose type this build cannot instantiate survives a round-trip. Declared on the
+        // interface so every Serialize body, which holds an ISerializer& (a scene's records),
+        // can preserve unknown types; no frames and unsupported by default; Serializer's
+        // backends override.
+        virtual void BeginFramedRegion() {}
+        virtual void EndFramedRegion() {}
         virtual bool RawRemainder(Array<u8>& blob)
         {
             (void)blob;

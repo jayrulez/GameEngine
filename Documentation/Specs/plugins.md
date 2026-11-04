@@ -363,14 +363,26 @@ editor, the player and export still read `nativeModule`):
   tools are tested over a fixture host. A wasm build's platform tag becomes "Web", the tag
   export and the manifests use. Tests: round trip of an unknown entry, typed settings read and
   written, per-platform enablement.
-- **X4 - every host by role.** The player, editor, Cook, Export and Mcp load through
-  `PluginHost` with their roles; the `Pipeline` and `Tooling` contributions; the shared tool
-  builds load a project package's parts. Tests: a plugin's asset type cooks through
-  `Tools.Cook` and is created through the standalone MCP host; its MCP tool is served by both MCP
-  hosts.
+- **X4 - every host by role**, in three layers (user ruling, 2026-11-04). The hosts link one
+  list of plugins (`UTIL_HOST_PLUGINS`, the engine's official ones; Imgui, the framework samples'
+  debug UI, is in none), and loading a project package's parts from shared libraries moves to X5,
+  where project packages first exist and are built.
+  - **X4a** (built 2026-11-04): the player at startup, the editor at each project open (through
+    the embedded app, which owns the process's plugin host and replaces it per project), and
+    Cook, Export and Mcp over a subsystem manager of their own (`ToolPlugins`; Mcp at each
+    `project_open`), each loading the parts its role takes; an Editor part is given the editor's
+    context. Tests: each tool's role loads exactly its parts; a project's plugins load with it in
+    the editor and unload as it closes; the app's host is replaced.
+  - **X4b**: the `Pipeline` contributions (builders, importers, creators), recorded and reversed,
+    the registries gaining removal.
+  - **X4c**: the `Tooling` contributions (MCP tools, served by both MCP hosts, added and removed
+    with their plugin).
+  Tests run each host's load step against a linked four-part fixture; the real tools link no
+    fixture.
 - **X5 - native code is a plugin.** NativeSample becomes a package (`Plugin.xml`,
   `NativeSample.Engine`); the project data version bumps, migrating `nativeModule` into the
-  game's entry; the scaffold generates the manifest; Build and Reload Native Module act
+  game's entry; the editor and the shared tool builds load a project package's parts from shared
+  libraries; the scaffold generates the manifest; Build and Reload Native Module act
   on the project's packages. `IRuntimePlugin` and `CreatePlugin` are deleted at every call site
   (the editor's native module, the player, the ship and web stubs, the scaffold, NativeSample).
   Tests: the scaffold's output, the migration of an old project.

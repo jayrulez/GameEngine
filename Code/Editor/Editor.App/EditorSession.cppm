@@ -198,6 +198,8 @@ export namespace editor::app
             if (m_services.exportHooks != nullptr)
                 (void)m_services.exportHooks->Attach(*plugins);
             context.SetExportHooks(m_services.exportHooks);
+            // One folder per load, so a package's parts land together and find each other there.
+            ++m_stageGeneration;
             engine::project::AddProjectPackages(*plugins, project.Directory(), project.Settings(), m_allocator,
                                                 [this, &project](StringView library) { return StageLibrary(project, library); });
             (void)engine::project::LoadProjectPlugins(*plugins, m_services.linkedPlugins, project.Settings());
@@ -249,8 +251,17 @@ export namespace editor::app
         }
 
         /// A copy of a package's built library to load (Windows holds a loaded library open against
-        /// the next build's write, and a reload must map a fresh path): numbered, under the project's
-        /// cache. Empty (logged) when it cannot be read or written.
+        /// the next build's write, and a reload must map a fresh path): under a numbered folder in
+        /// the project's cache. Empty (logged) when it cannot be read or written.
+        ///
+        /// The folder is numbered, not the file. A package's parts import each other by filename,
+        /// and a renamed copy does not answer to the name in a dependent's import table: the
+        /// loader would go looking for `NativeSample.Pipeline.dll` while the staged copy sat there
+        /// as `2-NativeSample.Pipeline.dll`, find whatever stood beside the executable, and load a
+        /// second one - or, where nothing stood there, fail to load the dependent at all. Keeping
+        /// the filenames and giving each reload its own folder answers both: the name matches, and
+        /// the folder is the fresh path the next build needs. It is the directory the loader
+        /// searches first, through LOAD_WITH_ALTERED_SEARCH_PATH (sys::LibraryOpen).
         [[nodiscard]] String StageLibrary(const editor::EditorProject& project, StringView library)
         {
             Result<Array<byte>> bytes = ReadFile(library, m_allocator);
@@ -265,9 +276,11 @@ export namespace editor::app
                           library);
                 return String{};
             }
-            const String hotDir = PathJoin(project.Directory(), Format(u8"{}/plugins-hot", engine::project::kProjectCacheDir).AsView());
+            const String hotDir =
+                PathJoin(project.Directory(),
+                         Format(u8"{}/plugins-hot/{}", engine::project::kProjectCacheDir, m_stageGeneration).AsView());
             (void)CreateDirectories(hotDir.AsView());
-            const String staged = Format(u8"{}/{}-{}", hotDir, ++m_stagedLibraries, PathFilename(library));
+            const String staged = PathJoin(hotDir.AsView(), PathFilename(library));
             if (!WriteFile(staged.AsView(), Span<const byte>{bytes.Value().Data(), bytes.Value().Size()}).IsOk())
             {
                 LOG_ERROR(u8"Editor", u8"plugin library '{}' cannot be staged at '{}'", library, staged);
@@ -514,6 +527,6 @@ export namespace editor::app
         // What the projects' Pipeline parts add to the editor's registries, attached to each
         // project's plugin host, which goes before it.
         UniquePtr<pipeline::PipelinePluginServices> m_pipelinePlugins;
-        u32 m_stagedLibraries = 0; // numbers the staged copies of the packages' libraries
+        u32 m_stageGeneration = 0; // numbers the folders the packages' libraries are staged in
     };
 }

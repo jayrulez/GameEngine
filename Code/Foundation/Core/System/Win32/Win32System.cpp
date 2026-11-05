@@ -634,7 +634,20 @@ namespace foundation::core::sys
 
     LibraryHandle LibraryOpen(const char* path) noexcept
     {
-        return reinterpret_cast<LibraryHandle>(LoadLibraryA(path));
+        // LOAD_WITH_ALTERED_SEARCH_PATH resolves what this module imports from the directory it
+        // sits in, rather than from the one the .exe sits in. A plugin's parts import each other
+        // by filename, and the editor stages them away from the executable for hot reload, so the
+        // default order finds a stale copy beside the .exe or nothing at all.
+        //
+        // Only with an absolute path: the flag's behaviour on a relative one is undefined, so a
+        // caller passing a bare name keeps the plain load and the ordinary search.
+        const bool absolute = path != nullptr && ((path[0] != '\0' && path[1] == ':') ||
+                                                  (path[0] == '\\' && path[1] == '\\'));
+        if (!absolute)
+        {
+            return reinterpret_cast<LibraryHandle>(LoadLibraryA(path));
+        }
+        return reinterpret_cast<LibraryHandle>(LoadLibraryExA(path, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH));
     }
 
     void* LibrarySymbol(LibraryHandle handle, const char* name) noexcept

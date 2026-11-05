@@ -459,7 +459,7 @@ export namespace editor::app
                     continue;
                 void* address = property.address(instance);
                 const gui::Variant value = m_bag->GetValue(name, 0);
-                const TypeInfo& type = *property.type;
+                const TypeInfo& valueType = *property.type;
                 if (engine::project::IsAssetSetting(property))
                 {
                     Guid id;
@@ -482,13 +482,13 @@ export namespace editor::app
                             ids.PushBack(id);
                     }
                 }
-                else if (IsEnum(type))
-                    WriteEnumValue(address, type, value.AsInt());
-                else if (&type == &TypeOf<String>())
+                else if (IsEnum(valueType))
+                    WriteEnumValue(address, valueType, value.AsInt());
+                else if (&valueType == &TypeOf<String>())
                     *static_cast<String*>(address) = String(value.AsString());
-                else if (&type == &TypeOf<bool>())
+                else if (&valueType == &TypeOf<bool>())
                     *static_cast<bool*>(address) = value.AsBool();
-                else if (&type == &TypeOf<u32>())
+                else if (&valueType == &TypeOf<u32>())
                     *static_cast<u32*>(address) = static_cast<u32>(Max<i64>(0, value.AsInt()));
             }
         }

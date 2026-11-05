@@ -65,7 +65,7 @@ export namespace editor
 
     /// RecentProjectsSettings::kMaxEntries, at namespace scope for another library to read (MSVC exports no class's
     /// static constexpr member from a shared library).
-    inline constexpr ENGINE_EXPORT_DATA usize kRecentProjectsSettingsMaxEntries = 20;
+    inline constexpr usize kRecentProjectsSettingsMaxEntries = 20;
 
     // The registry section (user-level settings store), most recent first.
     class RecentProjectsSettings final : public ISerializable

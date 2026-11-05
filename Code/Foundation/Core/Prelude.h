@@ -170,6 +170,11 @@
 //   - Const integral members are not exempt. `static constexpr u32 kSize = 128;` still needs
 //     it once another library odr-uses it (binds it to a const& parameter, takes its
 //     address): the definition lives only in the owning library's TU.
+//   - Never on a namespace-scope inline variable, the usual way to publish a class's constant
+//     for another library to read. An inline variable already gets a COMDAT in every TU that
+//     odr-uses it, and the dllexport suppresses that copy without making the consumer import
+//     one, so taking its address yields the constant's own value rather than an address. It
+//     links clean and faults when read.
 //
 // The test is COMPILER_MSVC, not PLATFORM_WINDOWS, because the two compilers need opposite
 // things:

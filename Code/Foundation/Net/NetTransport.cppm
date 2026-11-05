@@ -128,7 +128,7 @@ export namespace foundation::net
 
     /// LoopbackLink::kRemotePeer, at namespace scope for another library to read (MSVC exports no class's
     /// static constexpr member from a shared library).
-    inline constexpr ENGINE_EXPORT_DATA PeerId kLoopbackLinkRemotePeer = 1;
+    inline constexpr PeerId kLoopbackLinkRemotePeer = 1;
 
     // A deterministic in-memory link connecting two endpoints (A and B) with injectable sim conditions.
     // The manual clock (Advance, or either endpoint's Update) and the seeded rng make delivery

@@ -167,7 +167,7 @@ export namespace editor
 
     /// ThumbnailService::kThumbnailSize, at namespace scope so another library can read it (MSVC does
     /// not export a class's static constexpr member from a shared library).
-    inline constexpr ENGINE_EXPORT_DATA u32 kThumbnailServiceThumbnailSize = 128;
+    inline constexpr u32 kThumbnailServiceThumbnailSize = 128;
 
     /// The thumbnail service, one per open project: the application calls Configure on project
     /// open and Reset on close.

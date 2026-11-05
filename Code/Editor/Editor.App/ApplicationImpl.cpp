@@ -39,6 +39,7 @@ using namespace foundation::core;
 
 // The build identity compiled into Runtime.Client: the version About shows. Resolved at the final link.
 extern "C" const char* BuildStamp();
+extern "C" unsigned BuildNumber(); // defined in Runtime.Client: the build number CI stamped, 0 locally
 
 namespace editor::app
 {
@@ -1176,15 +1177,24 @@ namespace editor::app
             m_context.BuildLane());
     }
 
-    // Shows the version in a message box over the editor.
+    // Shows this build's identity in a message box over the editor, with a button that copies it.
     void EditorApplication::ShowAbout()
     {
         foundation::gui::SceneRoot* root = m_window.Root();
         if (root == nullptr)
             return;
-        auto about = MakeRef<foundation::gui::MessageBox>(m_editorAllocator);
-        about->Configure(u8"About AssiduousEngine", Format(u8"Version {}", StringView(reinterpret_cast<const char8_t*>(BuildStamp()))).AsView(),
-                         foundation::gui::MessageBox::Buttons::Ok);
+        const String identity =
+            engine::project::BuildIdentity(StringView(reinterpret_cast<const char8_t*>(BuildStamp())), BuildNumber());
+        EditorApplication* self = this;
+        RefPtr<foundation::gui::MessageBox> about = MakeAboutBox(
+            m_editorAllocator, identity.AsView(),
+            [self](StringView line)
+            {
+                foundation::gui::SceneRoot* r = self->m_window.Root();
+                foundation::gui::EventDispatcher* dispatcher = r != nullptr ? r->GetEventDispatcher() : nullptr;
+                (void)self->m_context.CopyText(dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr, line,
+                                               u8"the version");
+            });
         about->OpenModal(*root);
     }
 

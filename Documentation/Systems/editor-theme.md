@@ -28,7 +28,7 @@ motion) go through the GUI's media queries, `prefers-color-scheme` and `prefers-
 ## Overriding the theme
 
 Write `overrides.css` in the `theme` folder of the user's data folder
-(`~/.local/share/gameengine/theme/overrides.css` on Linux). The editor makes the folder when it
+(`~/.local/share/assiduousengine/theme/overrides.css` on Linux). The editor makes the folder when it
 opens, sweeps it about once a second, and applies the sheet again when the file is added, changed
 or removed; the Console says when it applied. The file is ordinary CSS, applied last:
 

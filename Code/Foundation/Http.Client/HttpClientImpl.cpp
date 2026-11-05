@@ -485,7 +485,7 @@ namespace foundation::http
                 for (const HttpHeader& h : headers)
                     userAgent = userAgent || EqualsIgnoreCase(h.name.AsView(), u8"User-Agent");
                 if (!userAgent)
-                    Append(out, u8"User-Agent: AssiduousEngine\r\n");
+                    Append(out, u8"User-Agent: " HTTP_USER_AGENT "\r\n");
                 Append(out, u8"Accept-Encoding: identity\r\nConnection: close\r\n");
                 if (!body.IsEmpty() || EqualsIgnoreCase(method, u8"POST") || EqualsIgnoreCase(method, u8"PUT") || EqualsIgnoreCase(method, u8"PATCH"))
                     Append(out, Format(u8"Content-Length: {}\r\n", body.Size()).AsView());

@@ -14,7 +14,7 @@ ENGINE = os.environ.get("GAMEENGINE_ROOT",
                         os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../..")))
 TOOLS_MCP = ENGINE + "/Bin/Debug/Linux64-Clang/Tools.Mcp"
 PORT = int(os.environ.get("MCP_PORT", "7405"))
-TOKEN = open(os.path.expanduser(os.environ.get("MCP_TOKEN_DIR", "~/.local/share/gameengine") + "/mcp-token")).read().strip()
+TOKEN = open(os.path.expanduser(os.environ.get("MCP_TOKEN_DIR", "~/.local/share/assiduousengine") + "/mcp-token")).read().strip()
 TIMEOUT = float(os.environ.get("MCP_TIMEOUT", "1800"))
 
 

@@ -44,6 +44,8 @@ export namespace engine::project
     // reads: kEngineVersionString with the label (0.1.0-beta). Compatibility checks compare
     // kEngineVersionString alone.
     inline constexpr StringView kEngineVersionLabel = ENGINE_VERSION_LABEL;
+    // The engine's name as a person reads it (ENGINE_PRODUCT_NAME in the root CMakeLists).
+    inline constexpr StringView kEngineProductName = ENGINE_PRODUCT_NAME;
     inline constexpr StringView kEngineVersionDisplay = ENGINE_VERSION_DISPLAY;
 
     /// How a build names itself to a person: the version, then the build number CI stamped on it
@@ -60,7 +62,7 @@ export namespace engine::project
     // The GitHub repository (owner/name) whose releases carry what this engine downloads for its
     // own version, such as the sample games: ENGINE_RELEASE_REPOSITORY in the root CMakeLists.
 #ifndef ENGINE_RELEASE_REPOSITORY
-#define ENGINE_RELEASE_REPOSITORY u8"jayrulez/GameEngine"
+#define ENGINE_RELEASE_REPOSITORY u8"AssiduousEngine/AssiduousEngine"
 #endif
     inline constexpr StringView kEngineReleaseRepository = ENGINE_RELEASE_REPOSITORY;
 

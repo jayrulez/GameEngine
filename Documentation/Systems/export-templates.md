@@ -28,7 +28,7 @@ The PUBLISHED desktop templates (the release downloads for Linux and Windows) ar
 builds the engine once and a crash in a game shipped on them can be resolved. The player is optimised
 all the same; its debug info is split off before packaging (the Linux template's player is stripped,
 the Windows PDB never enters the template) into a `-symbols` archive published beside the template.
-Their ids say so (`gameengine-linux64-relwithdebinfo-<version>`), and a preset asking for Release
+Their ids say so (`assiduousengine-linux64-relwithdebinfo-<version>`), and a preset asking for Release
 finds them by the platform fallback below.
 
 The host implicit template inherits the running tool's config (develop the editor in Debug -> the
@@ -37,7 +37,7 @@ config axis makes this a non-special-case (the host template carries whatever co
 
 ## Identity + resolution
 
-Identity = `platform x config x engineVersion` (e.g. `gameengine-win64-release-0.1.0`); `compiler` is
+Identity = `platform x config x engineVersion` (e.g. `assiduousengine-win64-release-0.1.0`); `compiler` is
 METADATA for traceability, not a selector; `arch` folds into the platform tag. A preset selects
 `(platform, config)` (config defaulting to Release), resolved by `TemplateRegistry::FindBy(platform,
 config)` with an explicit `templateId` winning and a platform-only fallback (nearest config, preferring

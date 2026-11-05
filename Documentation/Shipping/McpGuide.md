@@ -1,6 +1,6 @@
 # Working through the MCP server
 
-The engine's MCP server (`engine-mcp`, the `Tools.Mcp` binary) is the headless authoring
+The engine's MCP server (`assiduousengine-mcp`, the `Tools.Mcp` binary) is the headless authoring
 surface: newline-delimited JSON-RPC over stdio, the full project/asset/scene/script
 workflow with the editor closed. This is the operating manual for any agent connected to
 it - it is itself served as `docs://McpGuide.md`, so you can re-read it over the wire.
@@ -8,7 +8,7 @@ it - it is itself served as `docs://McpGuide.md`, so you can re-read it over the
 ## Two hosts, one surface
 
 The headless host above is `Tools.Mcp`. The EDITOR serves the same engine tools over HTTP
-(`engine-editor-mcp`) for the project it has open - the live one, one content database, one
+(`assiduousengine-editor-mcp`) for the project it has open - the live one, one content database, one
 writer - so an agent can work on what the user is looking at. Tell them apart by
 `host_info.serverName` and `host_info.host.kind`. What differs: the stdio host has
 `project_create` / `project_open` (the editor's project is the editor's), and the editor's
@@ -360,7 +360,7 @@ profiler overlay (frame times, the longest scopes and passes, the counters) in i
 so in its `--screenshot` (F3 toggles it).
 
 **Screenshots**: four ways in, by what the picture is of. Each writes a PNG, by default under
-`<user-data>/screenshots` (`~/.local/share/gameengine/screenshots` on Linux), and answers its path;
+`<user-data>/screenshots` (`~/.local/share/assiduousengine/screenshots` on Linux), and answers its path;
 read the file before trusting it, and leave the judgement of how it looks to the user.
 - *The game (PIE)*, for a game's README, a store page or a playtest: `pie_start`, then
   `pie_screenshot`, or `pie_run` with `screenshots` at run times (named

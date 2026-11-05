@@ -7,7 +7,7 @@
 		<object>
 			<string name="name">Linux64 Desktop</string>
 			<string name="platform">Linux64</string>
-			<string name="templateId">gameengine-steamdeck-release-0.1.0</string>
+			<string name="templateId">assiduousengine-steamdeck-release-0.1.0</string>
 			<string name="playerName">ShaderGallery</string>
 			<string name="outputSubdir">Linux64</string>
 			<array name="additionalFiles" count="1">
@@ -32,7 +32,7 @@
 		<object>
 			<string name="name">Web</string>
 			<string name="platform">Web</string>
-			<string name="templateId">gameengine-web-release-0.1.0</string>
+			<string name="templateId">assiduousengine-web-release-0.1.0</string>
 			<string name="playerName">index</string>
 			<string name="outputSubdir">Web</string>
 			<array name="additionalFiles" count="1">
@@ -57,7 +57,7 @@
 		<object>
 			<string name="name">Windows Desktop</string>
 			<string name="platform">Win64</string>
-			<string name="templateId">gameengine-win64-relwithdebinfo-0.1.0</string>
+			<string name="templateId">assiduousengine-win64-relwithdebinfo-0.1.0</string>
 			<string name="playerName">ShaderGallery</string>
 			<string name="outputSubdir">Windows64</string>
 			<array name="additionalFiles" count="1">

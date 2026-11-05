@@ -10,6 +10,13 @@ project(GameEngine
     DESCRIPTION "Game engine"
     LANGUAGES CXX C ASM) # C: SheenBidi (the bidi algorithm) builds as C
 
+# The engine's name as a person reads it (window titles, the About box, the HTTP user agent, the
+# name reported to Vulkan), and as a machine does (the user data folder, the export templates' id
+# prefix, the MCP servers' names): set here once, never written in the code. Every target gets both
+# (ENGINE_PRODUCT_NAME and ENGINE_ID, through the policy target's definitions below).
+set(ENGINE_PRODUCT_NAME "AssiduousEngine")
+set(ENGINE_ID "assiduousengine")
+
 # The release's pre-release label ("beta"; empty for a final release). The version a person reads
 # (the About box, the startup log, the release tag and its archives) is project(VERSION) with it,
 # 0.1.0-beta; every compatibility check (plugins, export templates, project files) compares
@@ -61,7 +68,7 @@ set(ENGINE_PROJECT_PLUGINS "" CACHE STRING "A project's plugin package folders, 
 option(ENGINE_GAME_PLAYER "Build Engine.GamePlayer, the project's player, without packages of its own" OFF)
 # The GitHub repository (owner/name) whose releases carry what an editor downloads for its own
 # version, such as the sample games: release v<project VERSION> of it. Stamped into engine.project.
-set(ENGINE_RELEASE_REPOSITORY "jayrulez/GameEngine" CACHE STRING "GitHub owner/name whose releases carry the editor's downloads (the sample games)")
+set(ENGINE_RELEASE_REPOSITORY "AssiduousEngine/AssiduousEngine" CACHE STRING "GitHub owner/name whose releases carry the editor's downloads (the sample games)")
 if(ENGINE_SHARED_LIBS AND EMSCRIPTEN)
     # Web is always a single self-contained binary: browsers have no runtime plugin
     # loading, Emscripten dynamic linking gives up whole-program optimization and bloats
@@ -190,8 +197,8 @@ endif()
 # follows. Dotted, matching the target names.
 set(BUILTIN_PLAYER_BASENAME         "Engine.Player")
 set(BUILDSYSTEM_SHADERPACKCOOK_BASENAME "Tools.ShaderPack")
-set(USER_DATA_DIR_NAME_VALUE        "gameengine")  # OS user-data folder (settings/projects/templates)
-set(TEMPLATE_ID_PREFIX_VALUE        "gameengine")  # export-template id prefix (<prefix>-<platform>-<config>-<ver>)
+set(USER_DATA_DIR_NAME_VALUE        "${ENGINE_ID}")  # OS user-data folder (settings/projects/templates)
+set(TEMPLATE_ID_PREFIX_VALUE        "${ENGINE_ID}")  # export-template id prefix (<prefix>-<platform>-<config>-<ver>)
 
 # Where the desktop build put its executables, as seen from a cross build (wasm). The web
 # build shells out to native cook tools by path, and cannot use $<TARGET_FILE:> because those
@@ -253,7 +260,9 @@ target_compile_definitions(policy INTERFACE
     # `#if OPTION_HAS_PLUGIN_IMGUI`.
     OPTION_HAS_PLUGIN_IMGUI=$<BOOL:${OPTION_PLUGIN_IMGUI}>
     USER_DATA_DIR_NAME=u8\"${USER_DATA_DIR_NAME_VALUE}\"
-    TEMPLATE_ID_PREFIX=u8\"${TEMPLATE_ID_PREFIX_VALUE}\")
+    TEMPLATE_ID_PREFIX=u8\"${TEMPLATE_ID_PREFIX_VALUE}\"
+    ENGINE_PRODUCT_NAME=u8\"${ENGINE_PRODUCT_NAME}\"
+    ENGINE_ID=u8\"${ENGINE_ID}\")
 
 target_link_options(policy INTERFACE
     # Shipping: strip symbol tables at link, so the binary's size is what a dist ships.

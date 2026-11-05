@@ -85,8 +85,8 @@ echo "   copy dist/SteamDeck/Editor and dist/SteamDeck/Player to the Deck and ru
 if [[ "${TEMPLATE:-1}" != "0" ]]; then
     BIN="Bin/Release/Linux64-Clang-SteamDeck"
     VERSION="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\+\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"
-    PREFIX="$(sed -n 's/^set(TEMPLATE_ID_PREFIX_VALUE[[:space:]]*"\([^"]*\)".*/\1/p' CMakeLists.txt | head -1)"
-    [[ -n "$VERSION" && -n "$PREFIX" ]] || { echo "!! no project VERSION or template id prefix in CMakeLists.txt" >&2; exit 1; }
+    PREFIX="$(sed -n 's/^set(ENGINE_ID[[:space:]]*"\([^"]*\)".*/\1/p' CMakeLists.txt | head -1)"
+    [[ -n "$VERSION" && -n "$PREFIX" ]] || { echo "!! no project VERSION or ENGINE_ID (the template id prefix) in CMakeLists.txt" >&2; exit 1; }
     echo
     echo "== export template: Steam Deck $VERSION =="
     "$BIN/Tools.Export" --template create "$BIN" --install \

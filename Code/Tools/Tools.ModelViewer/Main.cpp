@@ -271,7 +271,7 @@ namespace
     // Serves the commands as the MCP server's tools, along with the guide.
     void ServeCommands(foundation::mcp::McpServer& server, modelviewer::LibrarySession& library)
     {
-        server.SetServerInfo(String(u8"model-viewer"), String(reinterpret_cast<const char8_t*>(BuildStamp())));
+        server.SetServerInfo(String(ENGINE_ID u8"-model-viewer"), String(reinterpret_cast<const char8_t*>(BuildStamp())));
         modelviewer::RegisterCommandTools(server, library.Commands());
         const String executable = ExecutablePath();
         const String starts[] = {String(PathParent(executable.AsView())), GetCurrentDirectory()};

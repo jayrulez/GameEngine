@@ -3,6 +3,9 @@
 # PlainStream for http:// and a TlsStream for https://, the TLS backend handed in).
 
 util_add_engine_library(Http.Client ALIAS Foundation::Http.Client)
+# The User-Agent a request sends unless it names its own: the engine's name and version, from the
+# root CMakeLists (scoped here, so a version bump rebuilds only this library).
+target_compile_definitions(Http.Client PRIVATE HTTP_USER_AGENT=u8\"${ENGINE_PRODUCT_NAME}/${ENGINE_VERSION_DISPLAY}\")
 target_link_libraries(Http.Client PUBLIC Foundation::Core Foundation::Http Foundation::Net Foundation::Net.Tls Foundation::Policy)
 
 target_sources(Http.Client

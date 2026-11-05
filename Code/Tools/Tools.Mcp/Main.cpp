@@ -108,7 +108,7 @@ int main(int argc, char** argv)
     editor::ExportPluginServices exportHooks{foundation::core::DefaultAllocator()}; // and their export hooks
 
     McpServer server;
-    server.SetServerInfo(u8"engine-mcp", String(engine::project::kEngineVersionDisplay));
+    server.SetServerInfo(ENGINE_ID u8"-mcp", String(engine::project::kEngineVersionDisplay));
 
 
     // The session every tool works through. This host owns the project it opens: project_open

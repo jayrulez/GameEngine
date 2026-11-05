@@ -20,7 +20,7 @@
 # debug info is split off before packaging: the template's player is stripped (an export copies it
 # as it is, so every game would carry it otherwise) and Engine.Player.debug goes to
 # <OUT>/linux64-release-symbols, to keep with the build. The template's config, and so its id, is
-# RelWithDebInfo (gameengine-linux64-relwithdebinfo-<version>).
+# RelWithDebInfo (assiduousengine-linux64-relwithdebinfo-<version>).
 #
 # Windows is not built here (no toolchain on Linux); use scripts/build-export-templates.ps1 on a
 # Windows agent for the Win64 template.
@@ -53,7 +53,7 @@ WEB_BIN="Bin/Release/Emscripten-Clang-Shipping" # the preset's output suffix (-S
 WEB_PROFILE_BUILD="build/wasm-release"  # the wasm-release preset: emscripten, Release, profiler in
 WEB_PROFILE_BIN="Bin/Release/Emscripten-Clang"
 VERSION="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\+\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"
-PREFIX="$(sed -n 's/^set(TEMPLATE_ID_PREFIX_VALUE[[:space:]]*"\([^"]*\)".*/\1/p' CMakeLists.txt | head -1)"
+PREFIX="$(sed -n 's/^set(ENGINE_ID[[:space:]]*"\([^"]*\)".*/\1/p' CMakeLists.txt | head -1)"
 
 # The native exporter packages every platform's bundle (it runs on the host, pointing at the
 # target's Bin dir, including the wasm one, which it synthesizes into a "Web" template).
@@ -144,7 +144,7 @@ build_web() {
         cmake --preset wasm-release
     fi
     cmake --build "$WEB_PROFILE_BUILD" --target Engine.Player -j"$JOBS"
-    [[ -n "$VERSION" && -n "$PREFIX" ]] || { echo "!! no project VERSION or template id prefix in CMakeLists.txt" >&2; return 1; }
+    [[ -n "$VERSION" && -n "$PREFIX" ]] || { echo "!! no project VERSION or ENGINE_ID (the template id prefix) in CMakeLists.txt" >&2; return 1; }
     create_template "$WEB_PROFILE_BIN" "web-profile" \
         --id "$PREFIX-web-profile-$VERSION" \
         --name "Web Profile $VERSION" \

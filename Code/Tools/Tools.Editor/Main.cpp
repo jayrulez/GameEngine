@@ -367,7 +367,7 @@ int main(int argc, char** argv)
     LOG_INFO(u8"Editor", u8"starting (project: {})", config.projectDirectory);
 
     shell::WindowSettings ws;
-    ws.title = u8"AssiduousEngine";
+    ws.title = engine::project::kEngineProductName;
     ws.width = 1600;
     ws.height = 900;
     // Hidden until the editor is ready: the splash shows until then (startupFinished).

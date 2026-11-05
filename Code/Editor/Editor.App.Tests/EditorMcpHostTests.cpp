@@ -186,7 +186,7 @@ TEST_CASE("editor-mcp-host: serves the engine surface over the live project on l
     // host_info: this host's identity and the live project.
     REQUIRE(outcome.info.IsObject());
     JsonValue info = Payload(outcome.info);
-    CHECK(info.Get(u8"serverName").AsString() == StringView(u8"engine-editor-mcp"));
+    CHECK(info.Get(u8"serverName").AsString() == StringView(ENGINE_ID u8"-editor-mcp"));
     CHECK(info.Get(u8"buildStamp").AsString() == StringView(u8"test-stamp"));
     CHECK(info.Get(u8"host").Get(u8"kind").AsString() == StringView(u8"editor"));
     CHECK(info.Get(u8"host").Get(u8"projectOpen").AsBool());

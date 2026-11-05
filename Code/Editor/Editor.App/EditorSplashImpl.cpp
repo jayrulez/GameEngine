@@ -10,6 +10,7 @@ module editor.app;
 
 import foundation.core;
 import foundation.shell;
+import engine.project; // kEngineProductName (the window title)
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.image;
@@ -176,7 +177,7 @@ namespace editor::app
             return {};
         }
         shell::WindowSettings settings;
-        settings.title = u8"AssiduousEngine";
+        settings.title = engine::project::kEngineProductName;
         settings.width = EditorSplash::kWidth;
         settings.height = EditorSplash::kHeight;
         settings.resizable = false;

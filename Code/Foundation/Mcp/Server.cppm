@@ -212,8 +212,8 @@ export namespace foundation::mcp
         Array<Tool> m_tools;
         Array<Resource> m_resources;
         Array<ResourceProvider> m_resourceProviders;
-        String m_serverName = String(u8"engine-mcp");
-        String m_serverVersion = String(u8"0.1.0");
+        String m_serverName = String(ENGINE_ID u8"-mcp"); // a host names itself with SetServerInfo
+        String m_serverVersion;
         Function<void(StringView, bool)> m_toolObserver;
 
         /// A call in flight, known by the transport's id, or by its line when it gave none.

@@ -16,7 +16,7 @@ connected agent: read `docs://McpGuide.md` via `resources/read` right after conn
 - Build: `cmake --build build/clang --target Tools.Mcp -j4` (binary:
   `Bin/Debug/Linux64-Clang/Tools.Mcp`).
 - Wire: `claude mcp add engine -- <repo>/Bin/Debug/Linux64-Clang/Tools.Mcp` (stdio; the
-  server identifies as `engine-mcp`).
+  server identifies as `assiduousengine-mcp`).
 - Run it from inside the checkout (or with cwd in it): the `docs://` resources and
   `known_issues` resolve `Documentation/Shipping/` by walking up from the executable,
   then the cwd.
@@ -25,14 +25,14 @@ connected agent: read `docs://McpGuide.md` via `resources/read` right after conn
 ## The editor host (the same surface, the LIVE project)
 
 The editor serves the same engine tools over HTTP for the project it has open (server name
-`engine-editor-mcp`; `host_info.host.kind` = `editor`), so an agent works on what the user is
+`assiduousengine-editor-mcp`; `host_info.host.kind` = `editor`), so an agent works on what the user is
 looking at - one content database, one writer. Enable it in Preferences (MCP: enabled, port,
 token), or for one run: `Tools.Editor <project> --mcp [--mcp-port <n>]`. The default port is
 7405; the token is minted on first enable and written to `<user-data>/mcp-token`
-(`~/.local/share/gameengine/mcp-token` on Linux).
+(`~/.local/share/assiduousengine/mcp-token` on Linux).
 
 - Wire: `claude mcp add --transport http engine-editor http://127.0.0.1:7405/mcp --header
-  "Authorization: Bearer $(cat ~/.local/share/gameengine/mcp-token)"`.
+  "Authorization: Bearer $(cat ~/.local/share/assiduousengine/mcp-token)"`.
 - The host lives with the project: it starts when a project opens and stops when it closes.
   Calls are answered once per frame on the editor's main thread; a tool that waits on the
   editor (a cook) keeps the call open until it finishes.

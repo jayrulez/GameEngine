@@ -33,8 +33,8 @@ namespace editor::app
                                  editor::mcp::IProjectOperations& operations, String buildStamp)
         : m_allocator(&allocator), m_http(allocator, m_server), m_session(&session)
     {
-        // Distinct from the stdio host's "engine-mcp": an agent talking to both tells them apart.
-        m_server.SetServerInfo(u8"engine-editor-mcp", String(engine::project::kEngineVersionDisplay));
+        // Distinct from the stdio host's "<id>-mcp": an agent talking to both tells them apart.
+        m_server.SetServerInfo(ENGINE_ID u8"-editor-mcp", String(engine::project::kEngineVersionDisplay));
         editor::mcp::RegisterEngineTools(m_server, *m_session, builders, importers, creators, logBuffer,
                                          paths,
                                          operations);

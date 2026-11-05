@@ -17,7 +17,7 @@ Tools.Export), then run
 which reads the build's runtime-libs manifest, copies the player + sidecars, writes template.xml.
 The player is optimised; its PDB (not part of the template) goes to <Out>\win64-release-symbols, to
 keep with the build. The template's config, and so its id, is RelWithDebInfo
-(gameengine-win64-relwithdebinfo-<version>).
+(assiduousengine-win64-relwithdebinfo-<version>).
 
   Usage:   pwsh scripts/build-export-templates.ps1 [-Out <dir>] [-Jobs <n>] [-Compiler MSVC|Clang]
            -Out <dir>   write a self-contained bundle under <dir> (for zip/distribution);

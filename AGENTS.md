@@ -95,6 +95,6 @@ assets.
 ## Steam Deck
 
 `scripts/build-steamdeck.sh` builds a player in an Ubuntu 22.04 container (glibc 2.35, below
-SteamOS) and installs it as the `gameengine-steamdeck-release-<version>` export template. It
+SteamOS) and installs it as the `assiduousengine-steamdeck-release-<version>` export template. It
 needs podman or docker, mounts the live tree (do not edit it while the build runs), and
 nothing else building beside it.

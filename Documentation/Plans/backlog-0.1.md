@@ -196,6 +196,18 @@
 
 ## Engine
 
+- **The two spellings of a constant another library reads** (2026-11-05, from the MSVC optimized
+  shared build): a class's `static constexpr` member is not exported from a shared library, so the
+  codebase republishes several at namespace scope. Three carried `ENGINE_EXPORT_DATA`, which breaks
+  exactly what they exist for: an inline variable already gets a COMDAT wherever it is odr-used, the
+  dllexport suppresses that copy without making the consumer import one, and taking the constant's
+  address then yields its own value - it links clean and faults when read (a `CHECK` binding a
+  `const&` to `kRecentProjectsSettingsMaxEntries` crashed `Editor.Core.Tests`). Those three are
+  fixed and `Prelude.h` says so. Six class statics still carry the macro, which is the documented
+  correct use, but `McpActivity` dropped it from its class static too, so there are now two patterns
+  in the tree. Audit the six for which are odr-used by address across a library boundary, settle on
+  one pattern, and say which in `Prelude.h`.
+
 - **Export pruning misses assets a scene hands its scripts** (user 2026-11-02, from the UAT
   check): a behaviour's asset-valued property set in a scene (an override of asset kind, a guid)
   is not followed by the reachability scan (`SceneReferenceScanner`), so a pruned export drops what
@@ -365,6 +377,15 @@ alone (`StyleValue.cppm`, ParseFilters): a list naming any other function does n
 
 The release itself and the work around it: builds and packaging, the samples, the docs, the
 website and the flagship game.
+
+- **The clang lane has no optimized shared build** (2026-11-05): optimized and shared together is
+  where a call inlines across a DLL boundary, and the Windows MSVC lane added for it caught three
+  bugs the Debug lanes could not see (a `std::strong_ordering` constant left inside Core.dll, a
+  dllexport'd inline variable whose address read back as its own value, and a reciprocal the
+  optimizer could not prove was guarded). `clang-reldbg-shared` now has a test preset but no CI job,
+  so the same gap is still open on the clang side - and clang's answers differ by design (it emits
+  its own COMDAT per TU where cl emits one in the owning module). Add the lane, or decide the
+  distribution build covers it and say why here.
 
 - **`--screenshot` in the framework samples** (user 2026-11-02, from the UAT check): the samples
   built on `SampleApp` (VGSandbox, the RHI samples, WebTriangle) take the `--screenshot` flags, but

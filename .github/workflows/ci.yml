@@ -355,7 +355,50 @@ jobs:
       # finds them next to the exe with no PATH setup; import libs live in that dir's lib/.
       - name: Test
         run: ctest --preset msvc-shared --output-on-failure --timeout 300 --no-tests=error
-  
+
+  # Optimized and shared together, which no other lane covers: the shared lanes above are
+  # Debug, and the RelWithDebInfo shared tree the distribution job builds compiles only the
+  # tools. That gap hides a whole class of bug, because at /Ob0 a call stays inside the DLL
+  # that defines it and nothing crosses the boundary. Inlined into a consumer it does, and
+  # then anything the DLL holds but does not export breaks: std::strong_ordering's named
+  # constants, a dllexport'd inline variable whose address resolves to its own value, a
+  # divide the optimizer cannot prove is guarded.
+  windows-msvc-reldbg-shared:
+    name: Windows / MSVC / RelWithDebInfo / shared libraries
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '4' # lower to 2 if the modules build OOMs on the 16 GB runner
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ilammy/msvc-dev-cmd@v1 # puts cl + the Windows SDK on PATH for the later steps
+      - name: Install Ninja
+        run: choco install ninja -y # the msvc-reldbg-shared preset uses the Ninja generator (C++20 modules)
+      # Same reason as the other Windows lanes: without the SDK, find_package(Vulkan) fails, the
+      # root CMakeLists skips Foundation::RHI.Vulkan, and the build carries no Vulkan backend.
+      - name: Install the Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          # choco sets VULKAN_SDK as a MACHINE variable, which later steps in this job do not
+          # inherit - publish it through GITHUB_ENV, falling back to the newest install on disk.
+          $sdk = $env:VULKAN_SDK
+          if (-not $sdk -or -not (Test-Path $sdk)) {
+            $sdk = (Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $sdk) { throw "Vulkan SDK not present after install" }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "VULKAN_SDK=$sdk"
+      - name: Configure
+        run: cmake --preset msvc-reldbg-shared
+      - name: Build
+        run: cmake --build --preset msvc-reldbg-shared
+      # Executables and their engine DLLs share Bin/RelWithDebInfo/Win64-MSVC-Shared, so the
+      # loader finds them next to the exe with no PATH setup; import libs live in that dir's lib/.
+      - name: Test
+        run: ctest --preset msvc-reldbg-shared --output-on-failure --timeout 300 --no-tests=error
+
   # Debug builds are intentionally kept for build/test coverage, but their build
   # directories are not uploaded because they are very large (1.4-2.2 GB).
   # Instead, CI produces the packaged editor + deployment templates (RelWithDebInfo, symbols split off) using

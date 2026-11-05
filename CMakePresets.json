@@ -306,6 +306,13 @@
       }
     },
     {
+      "name": "clang-reldbg-shared",
+      "configurePreset": "clang-reldbg-shared",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "gcc",
       "configurePreset": "gcc",
       "output": {
@@ -329,6 +336,13 @@
     {
       "name": "msvc-reldbg",
       "configurePreset": "msvc-reldbg",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "msvc-reldbg-shared",
+      "configurePreset": "msvc-reldbg-shared",
       "output": {
         "outputOnFailure": true
       }

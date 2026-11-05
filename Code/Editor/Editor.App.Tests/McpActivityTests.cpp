@@ -125,9 +125,9 @@ TEST_CASE("mcp activity: the entries are capped, the oldest trimmed")
 {
     McpActivity activity(DefaultAllocator());
     JsonValue none = JsonValue::MakeObject();
-    for (u64 i = 1; i <= McpActivity::kMaxEntries + 5; ++i)
+    for (u64 i = 1; i <= editor::app::kMcpActivityMaxEntries + 5; ++i)
         activity.Record(Report(i, ToolCallPhase::Finished, u8"host_info", none, ToolAnnotations::ReadOnly()), static_cast<i64>(i));
-    CHECK(activity.Size() == McpActivity::kMaxEntries);
+    CHECK(activity.Size() == editor::app::kMcpActivityMaxEntries);
     CHECK(activity.At(0).at == 6);
     CHECK(activity.FindById(activity.At(0).id) == &activity.At(0));
 }

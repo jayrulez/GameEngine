@@ -543,9 +543,9 @@ jobs:
         run: pwsh scripts/build-editor-dist.ps1 -Out dist/Editor-Win64
       # Only when the build failed: what the linker made of Editor.App's import library, which the
       # editor libraries linking against it have called corrupt (LNK1127) in this shared
-      # RelWithDebInfo build: its size, what lib and dumpbin say of it, the .def it was made from
-      # (its longest names, any byte outside printable ASCII), and an import library made from the
-      # same .def by lib.exe alone, to tell the .def from the link.
+      # RelWithDebInfo build. It answers: where reading the archive stops (the last members dumpbin
+      # lists), whether an import library made from the same .def by lib.exe alone reads (a bad .def
+      # or a bad link), how the two compare in size and members, and the link's own options.
       - name: Diagnose the Editor.App import library
         if: failure()
         shell: pwsh
@@ -553,25 +553,29 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $lib = 'Bin/RelWithDebInfo/Win64-MSVC-Shared/lib/Editor.App.lib'
           $def = 'build/msvc-reldbg-shared/Code/Editor/Editor.App/Editor.App_exports.def'
-          if (Test-Path $lib) { Get-Item $lib | Format-List FullName, Length, LastWriteTime } else { "no $lib" }
-          '--- lib /list (last lines)'
-          lib /nologo /list $lib 2>&1 | Select-Object -Last 15
-          '--- dumpbin /headers: errors and warnings'
-          dumpbin /nologo /headers $lib 2>&1 | Select-String -Pattern 'error|corrupt|warning|invalid' | Select-Object -First 20
-          '--- dumpbin /linkermember:1 (first lines)'
-          dumpbin /nologo /linkermember:1 $lib 2>&1 | Select-Object -First 25
+          $fromDef = "$env:RUNNER_TEMP/EditorAppFromDef.lib"
+          function Members($path) { (lib /nologo /list $path 2>&1 | Measure-Object -Line).Lines }
+          if (-not (Test-Path $lib)) { "no $lib"; exit 0 }
+          "--- the link's library: $((Get-Item $lib).Length) bytes"
+          '--- lib /list on it: the first and last lines'
+          $list = lib /nologo /list $lib 2>&1
+          $list | Select-Object -First 3
+          $list | Select-Object -Last 3
+          '--- dumpbin /archivemembers on it: the last members read'
+          dumpbin /nologo /archivemembers $lib 2>&1 | Select-String -Pattern 'Archive member name|corrupt|fatal' |
+            Select-Object -Last 8
           if (Test-Path $def) {
-            $lines = Get-Content $def
-            "--- the .def: $($lines.Count) lines; the five longest:"
-            $lines | Sort-Object Length -Descending | Select-Object -First 5 |
-              ForEach-Object { "$($_.Length): $($_.Substring(0, [Math]::Min(300, $_.Length)))" }
-            '--- lines with a byte outside printable ASCII:'
-            $lines | Where-Object { $_ -match '[^\x20-\x7E]' } | Select-Object -First 10
-            '--- an import library from the same .def, by lib.exe alone:'
-            lib /nologo /machine:x64 /def:$def /out:$env:RUNNER_TEMP/EditorAppFromDef.lib 2>&1 | Select-Object -Last 10
-            dumpbin /nologo /headers $env:RUNNER_TEMP/EditorAppFromDef.lib 2>&1 |
-              Select-String -Pattern 'error|corrupt|warning|invalid' | Select-Object -First 10
+            '--- an import library from the same .def, by lib.exe alone'
+            lib /nologo /machine:x64 /def:$def /out:$fromDef 2>&1 | Select-String -NotMatch 'LNK4102' | Select-Object -Last 5
+            if (Test-Path $fromDef) {
+              "size $((Get-Item $fromDef).Length) bytes; lib /list reads $(Members $fromDef) lines; the last:"
+              lib /nologo /list $fromDef 2>&1 | Select-Object -Last 3
+            }
           } else { "no $def" }
+          Get-ChildItem build/msvc-reldbg-shared -Recurse -Filter 'Editor.App*.rsp' | Select-Object -First 3 | ForEach-Object {
+            "--- $($_.FullName): its options"
+            (Get-Content $_.FullName -Raw) -split '\s+' | Where-Object { $_ -match '^/' } | Select-Object -Unique
+          }
           Get-PSDrive D | Format-List Used, Free
           exit 0
       # Fail LOUDLY if the Vulkan backend did not make it into the artifact. find_package(Vulkan)

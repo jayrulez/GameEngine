@@ -187,11 +187,16 @@ export namespace foundation::gui
 
     /// A property's row, indented by its depth. It holds a group's chevron, the property's name (with
     /// its description as the tooltip), the split, and its editor (none for a group). A row whose
-    /// info has a Note shows it after its editor, which then leaves the note its own width.
+    /// info has a Note shows it after its editor, which then leaves the note its own width. A row is
+    /// one line high, the row's min-height when its sheet gives one (the density's), or as tall as
+    /// a multi-line editor measures, its name in the first line.
     class PropertyRowContent : public UIWidget
     {
         RTTI_OBJECT(PropertyRowContent, UIWidget)
     public:
+        /// A line's height when no sheet gives the row a min-height.
+        static constexpr f32 kLine = 24.0f;
+
         PropertyRowContent(PropertyGrid& grid, core::RefPtr<PropertyEditor> editor);
         void Show(const PropertyRow& row);
         [[nodiscard]] core::StringView GetPath() const noexcept { return m_path.AsView(); }
@@ -219,6 +224,7 @@ export namespace foundation::gui
 
     protected:
         void OnLayout() override;
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override;
         // Draws the changed marker: a bar at the row's inline start, in `::marker`'s colour.
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
@@ -255,6 +261,10 @@ export namespace foundation::gui
         i32 m_depth = 0;
         bool m_movable = false; // an element its list lets move, so its grip shows
         bool m_changed = false;
+
+        // A line's height: the row's min-height from its sheet, or kLine without one.
+        [[nodiscard]] f32 Line() const;
+        [[nodiscard]] bool Multiline() const { return m_editor && m_editor->IsMultiline(); }
     };
 
     class PropertyGrid : public ItemView, public IPropertySourceClient, public IPropertyEditHost
@@ -781,6 +791,28 @@ namespace foundation::gui
         if (placed)
             RequestLayout();
     }
+    inline f32 PropertyRowContent::Line() const
+    {
+        const Node* row = GetParent();
+        if (row == nullptr)
+            return kLine;
+        const core::Optional<f32> min = row->GetLayoutStyle().MinHeight.Resolve(-1.0f);
+        return min.HasValue() && min.Value() > 0.0f ? min.Value() : kLine;
+    }
+    inline core::Float2 PropertyRowContent::MeasureContent(core::Float2 available)
+    {
+        // Only a multi-line editor is measured; any other row is a line, whatever its editor's own
+        // height, so measuring the rows in view costs nothing on each refresh.
+        f32 height = Line();
+        if (Multiline() && available.x > 0.0f)
+        {
+            const f32 split = core::Floor(available.x * m_grid.GetLabelRatio());
+            const f32 room = core::Max(0.0f, available.x - split - 2.0f);
+            const LayoutConstraints within{core::Float2{room, 0.0f}, core::Float2{room, kUnbounded}};
+            height = core::Max(height, m_editor->Measure(within).y + 2.0f);
+        }
+        return core::Float2{available.x, height};
+    }
     inline void PropertyRowContent::OnLayout()
     {
         const Rect box = GetContentBounds();
@@ -788,11 +820,14 @@ namespace foundation::gui
         const f32 split = core::Floor(box.width * m_grid.GetLabelRatio());
         const f32 indent = static_cast<f32>(m_depth) * m_grid.GetIndentWidth();
         const f32 arrow = m_grid.GetArrowSize();
-        m_arrow->Arrange(MirroredIn(Rect{box.x + indent, box.y, arrow, box.height}, box, rtl));
+        // The name, chevron, grip, note and summary sit in the first line; only a multi-line
+        // editor takes the row's whole height.
+        const f32 line = Multiline() ? core::Min(box.height, Line()) : box.height;
+        m_arrow->Arrange(MirroredIn(Rect{box.x + indent, box.y, arrow, line}, box, rtl));
         if (m_movable) // the grip sits in the indent before the element
-            m_grip->Arrange(MirroredIn(Rect{box.x + core::Max(0.0f, indent - kGrip), box.y, kGrip, box.height}, box, rtl));
+            m_grip->Arrange(MirroredIn(Rect{box.x + core::Max(0.0f, indent - kGrip), box.y, kGrip, line}, box, rtl));
         const f32 textX = indent + arrow + 2.0f;
-        m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), box.height}, box, rtl));
+        m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), line}, box, rtl));
         if (m_editor)
         {
             const f32 room = core::Max(0.0f, box.width - split - 2.0f);
@@ -808,10 +843,10 @@ namespace foundation::gui
             }
             m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, width, height}, box, rtl));
             if (m_note->IsDisplayed())
-                m_note->Arrange(MirroredIn(Rect{box.x + split + 2.0f + width + 8.0f, box.y, core::Max(0.0f, room - width - 8.0f), box.height}, box, rtl));
+                m_note->Arrange(MirroredIn(Rect{box.x + split + 2.0f + width + 8.0f, box.y, core::Max(0.0f, room - width - 8.0f), line}, box, rtl));
         }
         if (m_summary->IsDisplayed())
-            m_summary->Arrange(MirroredIn(Rect{box.x + split + 4.0f, box.y, core::Max(0.0f, box.width - split - 8.0f), box.height}, box, rtl));
+            m_summary->Arrange(MirroredIn(Rect{box.x + split + 4.0f, box.y, core::Max(0.0f, box.width - split - 8.0f), line}, box, rtl));
         m_split->Arrange(MirroredIn(Rect{box.x + split - 3.0f, box.y, 6.0f, box.height}, box, rtl));
     }
 
@@ -854,7 +889,10 @@ namespace foundation::gui
           m_toggled(MemoryAllocator())
     {
         SetTag(core::StringView(u8"propertygrid"));
-        SetRowHeight(24.0f);
+        // Rows are measured, so a multi-line editor (a grid of values) gets its height and a row
+        // takes its sheet's min-height (the density's); one line is the estimate until then.
+        SetRowHeight(0.0f);
+        SetEstimatedRowHeight(PropertyRowContent::kLine);
         RegisterDefaultPropertyEditors(m_editors);
         m_editorGeneration = m_editors.GetGeneration();
         SetRowFactory(MakeFactory());

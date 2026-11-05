@@ -63,6 +63,10 @@ export namespace foundation::gui
         /// alone as the values refresh, because a typed value belongs to the edit until Return or
         /// losing focus commits it.
         [[nodiscard]] virtual bool IsTyping() const { return false; }
+        /// Returns whether it shows more than one line (a grid of values). Its row is then as tall
+        /// as the editor measures, with the name and the chevron in the row's first line; any other
+        /// editor fills its row's one line.
+        [[nodiscard]] virtual bool IsMultiline() const { return false; }
 
     protected:
         [[nodiscard]] IPropertyEditHost* GetHost() const noexcept { return m_host; }

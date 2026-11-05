@@ -389,6 +389,55 @@ TEST_CASE("property grid: the wheel over an editor scrolls the grid and never ch
     CHECK(bed.grid->GetScrollOffset().y > 0.0f);
 }
 
+namespace
+{
+    // An editor two lines high, as a grid of values is.
+    class TwoLineEditor final : public PropertyEditor
+    {
+    public:
+        TwoLineEditor()
+        {
+            EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(50.0f); });
+        }
+        [[nodiscard]] bool IsMultiline() const override { return true; }
+
+    protected:
+        void OnBind(const PropertyInfo&, const PropertyValue&) override {}
+    };
+}
+
+TEST_CASE("property grid: a multi-line editor's row is as tall as the editor, its name in the first line; other rows are a line")
+{
+    Bed bed;
+    bed.grid->GetEditors().RegisterHint(SV(u8"two-lines"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<TwoLineEditor>(a); });
+    bed.Add(u8"before", PropertyKind::Float, Variant(1.0));
+    bed.Add(u8"grid", PropertyKind::Group).Hint = core::String(u8"two-lines");
+    bed.Add(u8"after", PropertyKind::Float, Variant(2.0));
+    bed.Show();
+    PropertyEditor* tall = bed.grid->FindEditor(SV(u8"grid"));
+    PropertyEditor* before = bed.grid->FindEditor(SV(u8"before"));
+    PropertyEditor* after = bed.grid->FindEditor(SV(u8"after"));
+    REQUIRE(tall != nullptr);
+    REQUIRE(before != nullptr);
+    REQUIRE(after != nullptr);
+    auto* row = core::Cast<PropertyRowContent>(tall->GetParent());
+    REQUIRE(row != nullptr);
+    CHECK(row->GetSize().y == doctest::Approx(52.0f)); // the editor and its 1px above and below
+    CHECK(tall->GetSize().y == doctest::Approx(50.0f));
+    CHECK(row->GetLabel()->GetSize().y == doctest::Approx(PropertyRowContent::kLine));
+    CHECK(before->GetParent()->GetSize().y == doctest::Approx(PropertyRowContent::kLine));
+    // The next row starts below it, not over its second line.
+    const Rect grid = row->GetScreenBounds();
+    CHECK(after->GetParent()->GetScreenBounds().y == doctest::Approx(grid.y + grid.height));
+
+    // Read again (as every refresh does), it keeps its height.
+    bed.grid->Refresh();
+    bed.Frame();
+    tall = bed.grid->FindEditor(SV(u8"grid"));
+    REQUIRE(tall != nullptr);
+    CHECK(tall->GetParent()->GetSize().y == doctest::Approx(52.0f));
+}
+
 TEST_CASE("property grid: an application's editor for a hint, a hint none takes, and markup makes a grid")
 {
     Bed bed;

@@ -104,7 +104,10 @@ export namespace foundation::core
     [[nodiscard]] inline Float3x3 Inverse(const Float3x3& m) noexcept
     {
         const f32 det = Determinant(m);
-        if (NearlyZero(det))
+        // The exact-zero test is redundant with NearlyZero. MSVC's divide-by-zero analysis
+        // follows equality tests but not the epsilon compare, and warns (C4723) on the
+        // reciprocal below when a caller inverts a compile-time singular matrix.
+        if (det == 0.0f || NearlyZero(det))
         {
             return Float3x3::Identity();
         }

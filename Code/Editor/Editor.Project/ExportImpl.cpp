@@ -872,6 +872,100 @@ namespace editor
             return path.Size() == 2 && (path.Data()[0] == 'c' || path.Data()[0] == 'C') &&
                    (path.Data()[1] == 'l' || path.Data()[1] == 'L');
         }
+
+        // vcvars64.bat belonging to the pinned compiler. BUILDSYSTEM_CXX_COMPILER is
+        // <vs>/VC/Tools/MSVC/<version>/bin/Host<arch>/<arch>/cl.exe, so <vs>/VC - which holds
+        // Auxiliary/Build - is seven directories up: x64, Host<arch>, bin, <version>, MSVC, Tools,
+        // VC. Deriving it from that path rather than searching (vswhere, Program Files) is the
+        // point: a machine carrying several Visual Studios has several vcvars, and the plugin has
+        // to be built by the one that built this editor.
+        [[nodiscard]] String MsvcVcvarsPath()
+        {
+            StringView dir(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CXX_COMPILER));
+            for (int i = 0; i < 7; ++i)
+            {
+                dir = PathParent(dir);
+            }
+            return PathJoin(dir, u8"Auxiliary/Build/vcvars64.bat");
+        }
+
+        // Puts the MSVC build environment in this process when it is not already there, so cl.exe
+        // can find its headers and libraries. An environment that is already set wins: a Developer
+        // Command Prompt, or a CI job that ran vcvars itself, keeps the toolchain it chose.
+        //
+        // vcvars64.bat only prints and sets; its effect has to be read back out of a shell that ran
+        // it, which is what `set` after it does. It goes through a batch file rather than
+        // `cmd /c "call ... && set"` because cmd parses its own command line and does not read the
+        // backslash-escaped quotes a generic argument quoter produces around a path with spaces -
+        // and "C:\Program Files" always has one. The batch file quotes the path itself, once.
+        //
+        // Success is judged by VCToolsInstallDir appearing, not by an exit code: the code belongs
+        // to `set`, which succeeds whether or not vcvars did.
+        [[nodiscard]] bool EnsureMsvcEnvironment()
+        {
+            if (GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
+            {
+                return true;
+            }
+            const String vcvars = MsvcVcvarsPath();
+            if (!FileExists(vcvars.AsView()))
+            {
+                LOG_ERROR(u8"Export",
+                          u8"the MSVC build environment is not set, and the script that would set "
+                          u8"it is missing: '{}'. Launch the editor from a Developer Command "
+                          u8"Prompt, or repair the Visual Studio install that built this editor",
+                          vcvars);
+                return false;
+            }
+            const String script = PathJoin(GetTempDirectory().AsView(), u8"assiduous-vcvars-dump.cmd");
+            const String body = Format(u8"@echo off\r\ncall \"{}\" >nul\r\nset\r\n", vcvars);
+            if (!WriteFile(script.AsView(),
+                           Span<const byte>(reinterpret_cast<const byte*>(body.AsView().Data()),
+                                            body.AsView().Size()))
+                     .IsOk())
+            {
+                LOG_ERROR(u8"Export", u8"could not write the script '{}' that reads the MSVC environment", script);
+                return false;
+            }
+            const Optional<String> comspec = GetEnvironmentVariable(u8"ComSpec");
+            const String shell = comspec.HasValue() ? comspec.Value() : String(u8"C:/Windows/System32/cmd.exe");
+            const StringView args[] = {u8"/c", script.AsView()};
+            const ProcessResult dumped = RunProcess(shell.AsView(), Span<const StringView>(args, 2));
+            (void)FileDelete(script.AsView());
+            if (!dumped.Ran())
+            {
+                LOG_ERROR(u8"Export", u8"could not run '{}' to read the MSVC environment back", shell);
+                return false;
+            }
+            // One NAME=VALUE per line; a line without '=' (a stray banner) is skipped.
+            const StringView text = dumped.output.AsView();
+            usize start = 0;
+            for (usize i = 0; i <= text.Size(); ++i)
+            {
+                if (i < text.Size() && text[i] != u8'\n')
+                {
+                    continue;
+                }
+                const StringView line = Trim(text.SubStr(start, i - start));
+                start = i + 1;
+                const usize eq = line.Find(u8'=');
+                if (eq == StringView::kNotFound || eq == 0)
+                {
+                    continue;
+                }
+                (void)SetEnvironmentVariable(line.SubStr(0, eq),
+                                             line.SubStr(eq + 1, line.Size() - eq - 1));
+            }
+            if (!GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
+            {
+                LOG_ERROR(u8"Export",
+                          u8"'{}' ran but did not set VCToolsInstallDir - its output was:\n{}", vcvars,
+                          dumped.output);
+                return false;
+            }
+            LOG_INFO(u8"Export", u8"MSVC build environment taken from '{}'", vcvars);
+            return true;
+        }
 #endif // PLATFORM_WINDOWS (both callers are Windows-only; unused elsewhere it fails -Werror)
 
         // The project's package folders as ENGINE_PROJECT_PLUGINS takes them, ;-separated (empty:
@@ -1148,25 +1242,14 @@ namespace editor
                     emsdk.Value());
             }
 #if PLATFORM_WINDOWS
-            // When the pinned toolchain is MSVC cl.exe, the desktop ship build requires the Visual
-            // Studio developer environment in this process, and it is required explicitly rather
-            // than synthesized. RunProcess takes an executable path with no shell, so the
-            // alternative would be discovering vcvarsall.bat and running the whole configure and
-            // build through `cmd.exe /c "vcvarsall && cmake ..."`, which means guessing the VS
-            // install, adding a second quoting layer around every argument, and getting an exit
-            // code that can come from either command. Requiring a Developer Command Prompt is the
-            // same contract the web build already has with EMSDK, and it fails here with one clear
-            // message instead of a compiler error 200 lines into a build. A clang or clang-cl
-            // editor skips this, since clang finds MSVC itself.
-            if (!web && ShipCompilerIsMsvcCl() &&
-                !GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
+            // cl.exe reads its headers and libraries out of the environment, so the desktop ship
+            // build needs vcvars in this process. It is a menu action, and an editor is started
+            // from a shortcut rather than a shell, so EnsureMsvcEnvironment sets it from the
+            // compiler that built this editor instead of asking for a Developer Command Prompt. A
+            // clang or clang-cl editor skips this, since clang finds MSVC itself.
+            if (!web && ShipCompilerIsMsvcCl() && !EnsureMsvcEnvironment())
             {
-                LOG_ERROR(u8"Export",
-                          u8"native ship export with MSVC needs the Visual Studio build "
-                          u8"environment: VCToolsInstallDir is not set - launch the editor/CLI "
-                          u8"from a Developer Command Prompt (or a shell that has run "
-                          u8"vcvars64.bat)");
-                return Status{ErrorCode::NotFound};
+                return Status{ErrorCode::NotFound}; // EnsureMsvcEnvironment says why
             }
 #endif
             if (!DirectoryExists(PathJoin(engineRoot, u8"Code").AsView()))
@@ -1288,13 +1371,9 @@ namespace editor
 #if PLATFORM_WINDOWS
         // The same contract as the ship build, with the same narrow gate: only cl.exe needs vcvars
         // set in this process; clang and clang-cl find MSVC on their own.
-        if (ShipCompilerIsMsvcCl() && !GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
+        if (ShipCompilerIsMsvcCl() && !EnsureMsvcEnvironment())
         {
-            LOG_ERROR(u8"Export",
-                      u8"the project plugins' build with MSVC needs the Visual Studio build environment: "
-                      u8"VCToolsInstallDir is not set - launch the editor/CLI from a "
-                      u8"Developer Command Prompt (or a shell that has run vcvars64.bat)");
-            return Status{ErrorCode::NotFound};
+            return Status{ErrorCode::NotFound}; // EnsureMsvcEnvironment says why
         }
 #endif
         const String suffix =

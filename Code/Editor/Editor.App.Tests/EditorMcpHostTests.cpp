@@ -279,6 +279,24 @@ TEST_CASE("editor-mcp-host: with no project the host serves the manager; the eng
         app::EditorMcpService disabled(DefaultAllocator(), make(false));
         CHECK_FALSE(disabled.EnsureRunning());
         CHECK_FALSE(disabled.IsRunning());
+        // The user's Start (the MCP panel's) runs it whatever the preference says; their Stop holds,
+        // over the manager and every project, until they start it again or the preferences change.
+        REQUIRE(disabled.StartByUser(nullptr));
+        CHECK(disabled.Port() != 0);
+        CHECK(disabled.ConnectCommand().AsView().Contains(Format(u8"http://127.0.0.1:{}/mcp", disabled.Port()).AsView()));
+        disabled.StopByUser();
+        CHECK_FALSE(disabled.IsRunning());
+        CHECK(disabled.IsStopHeld());
+        CHECK(disabled.Port() == 0);
+        CHECK(disabled.ConnectCommand().IsEmpty());
+        CHECK_FALSE(disabled.EnsureRunning());
+        disabled.Restart(nullptr); // the preferences changed, and they say off
+        CHECK_FALSE(disabled.IsStopHeld());
+        CHECK_FALSE(disabled.IsRunning());
+        // The activity kept the host's own events.
+        REQUIRE(disabled.Activity().Size() == 2u);
+        CHECK(disabled.Activity().At(0).tool.AsView().StartsWith(u8"Listening on 127.0.0.1:"));
+        CHECK(disabled.Activity().At(1).tool == u8"Stopped");
     }
 
     app::EditorMcpService service(DefaultAllocator(), make(true));
@@ -303,6 +321,9 @@ TEST_CASE("editor-mcp-host: with no project the host serves the manager; the eng
     Thread client(
         [&]
         {
+            (void)Call(port, u8"sekrit",
+                       u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\","
+                       u8"\"clientInfo\":{\"name\":\"test-agent\",\"version\":\"1.0\"}}}");
             got.info = call(u8"host_info", u8"{}");
             got.assets = call(u8"asset_list", u8"{}");
             got.page = call(u8"page_open", u8"{\"guid\":\"00000000-0000-0000-0000-000000000001\"}");
@@ -333,7 +354,26 @@ TEST_CASE("editor-mcp-host: with no project the host serves the manager; the eng
     CHECK_FALSE(refused(got.log));
 
     CHECK(FileExists(PathJoin(userData.AsView(), u8"mcp-token").AsView()));
-    service.Stop();
+
+    // The activity: the host listening, the client, then each call in order with its outcome.
+    const app::McpActivity& activity = service.Activity();
+    CHECK(service.Client().name == u8"test-agent");
+    Array<String> seen;
+    for (usize i = 0; i < activity.Size(); ++i)
+        seen.PushBack(activity.At(i).IsCall() ? Format(u8"{}:{}", activity.At(i).tool,
+                                                       activity.At(i).outcome == app::McpActivity::Outcome::Failed ? u8"failed" : u8"done")
+                                              : activity.At(i).tool);
+    REQUIRE(seen.Size() == 8u);
+    CHECK(seen[0].AsView().StartsWith(u8"Listening on 127.0.0.1:"));
+    CHECK(seen[1] == u8"test-agent 1.0 connected");
+    CHECK(seen[2] == u8"host_info:done");
+    CHECK(seen[3] == u8"asset_list:failed");
+    CHECK(seen[7] == u8"log_read:done");
+    CHECK(activity.At(4).arguments == u8"{\"guid\":\"00000000-0000-0000-0000-000000000001\"}");
+
+    // The user's Stop holds even over --mcp.
+    service.StopByUser();
+    CHECK_FALSE(service.EnsureRunning());
     (void)RemoveDirectoryRecursive(userData.AsView());
 }
 

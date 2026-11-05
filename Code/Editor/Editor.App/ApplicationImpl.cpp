@@ -552,10 +552,8 @@ namespace editor::app
             services.mcpChanged = [self]()
             {
                 // The MCP host follows the saved settings, over the open project or the manager.
-                if (!self->m_mcp)
-                    return;
-                self->m_mcp->Stop();
-                (void)self->m_mcp->Start(self->m_session.Project());
+                if (self->m_mcp)
+                    self->m_mcp->Restart(self->m_session.Project());
             };
             services.showLook = [self](const EditorLook& look) { self->m_window.SetLook(look); };
             services.persist = [self]() { return editor::SaveEditorSettingsToUserData(self->m_editorSettings).IsOk(); };

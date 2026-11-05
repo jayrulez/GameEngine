@@ -58,6 +58,7 @@ export import :export_service;
 export import :asset_creation;
 export import :layout;
 export import :session;
+export import :mcp_activity;
 export import :mcp_service;
 export import :app_actions;
 export import :application;

@@ -378,6 +378,17 @@ alone (`StyleValue.cppm`, ParseFilters): a list naming any other function does n
 The release itself and the work around it: builds and packaging, the samples, the docs, the
 website and the flagship game.
 
+- **Resource.Tests fails when the suites run in parallel** (2026-11-05): `ctest -j8` failed
+  `AsyncResourceTests` with 4 of 4 loads still pending and `finalizeCalls == 0`, and again in the
+  burst-report case with 3 pending; run on its own it passes every time. Each suite builds a
+  `TaskPool` of `DefaultWorkerCount()` (cores - 2) workers, so eight at once ask for roughly eight
+  times the machine, and the async loads are not scheduled in time. What makes it a failure rather
+  than slowness is that both waits are bounded by iterations - `while (PendingCount() > 0 && pumps
+  < 10000)` - so ten thousand pumps with nothing to do pass in moments and the loop gives up while
+  the work is still queued. Bound them by wall-clock instead, or have the suite's pool take a
+  worker count that does not assume it owns the machine. CI runs ctest serially and does not hit
+  it; anyone running the suites in parallel does.
+
 - **The clang lane has no optimized shared build** (2026-11-05): optimized and shared together is
   where a call inlines across a DLL boundary, and the Windows MSVC lane added for it caught three
   bugs the Debug lanes could not see (a `std::strong_ordering` constant left inside Core.dll, a

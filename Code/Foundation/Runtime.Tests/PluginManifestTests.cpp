@@ -67,6 +67,22 @@ namespace
         manifest.parts.PushBack(PluginManifestPart{String(u8"Engine")});
     }
 
+    // The text without its carriage returns. A Windows checkout gives the fixtures CRLF line
+    // endings, and the files the configure writes may carry them too; the line ending is not what
+    // these tests pin.
+    [[nodiscard]] String WithoutCarriageReturns(StringView text)
+    {
+        String out;
+        for (usize i = 0; i < text.Size(); ++i)
+        {
+            if (text[i] != u8'\r')
+            {
+                out.Append(text.SubStr(i, 1));
+            }
+        }
+        return out;
+    }
+
     [[nodiscard]] String Join(const Array<String>& values)
     {
         String joined;
@@ -95,7 +111,8 @@ namespace
         Array<ReadByCMake> out;
         const Result<Array<byte>> bytes = ReadFile(Narrow(PLUGIN_MANIFESTS_READ));
         REQUIRE(bytes.HasValue());
-        const StringView text{reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()};
+        const String record = WithoutCarriageReturns(StringView{reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()});
+        const StringView text = record.AsView();
         usize start = 0;
         while (start < text.Size())
         {
@@ -174,7 +191,8 @@ TEST_CASE("plugin manifest: the writer's output is the fixture the build reads, 
     const StringView expected{reinterpret_cast<const utf8char*>(fixture.Value().Data()), fixture.Value().Size()};
     const StringView written{reinterpret_cast<const utf8char*>(buffer.Bytes().Data()), buffer.Bytes().Size()};
     // A hand-written manifest ends in a newline and the writer's does not; nothing else may differ.
-    CHECK(TrimEnd(written) == TrimEnd(expected));
+    const String fixtureText = WithoutCarriageReturns(expected);
+    CHECK(TrimEnd(written) == TrimEnd(fixtureText.AsView()));
 }
 
 TEST_CASE("plugin manifest: a package's Plugin.xml is loaded from its folder, NotFound without one")

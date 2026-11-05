@@ -120,7 +120,17 @@ TEST_CASE("plugin registry: the build's role table is the one RoleLoads gives")
 {
     const Result<Array<byte>> bytes = ReadFile(StringView{reinterpret_cast<const utf8char*>(PLUGIN_ROLES_FILE)});
     REQUIRE(bytes.HasValue());
-    const StringView text{reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()};
+    // Without carriage returns: the line ending of the file the configure wrote is not what this pins.
+    String table;
+    for (usize i = 0; i < bytes.Value().Size(); ++i)
+    {
+        const utf8char c = static_cast<utf8char>(bytes.Value()[i]);
+        if (c != u8'\r')
+        {
+            table.Append(StringView(&c, 1));
+        }
+    }
+    const StringView text = table.AsView();
     for (HostRole role : kHostRoles)
     {
         String expected(HostRoleName(role));

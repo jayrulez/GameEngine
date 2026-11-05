@@ -23,7 +23,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <cstdio>  // std::rename
-#include <cstdlib> // std::getenv
+#include <cstdlib> // std::getenv, setenv
 #include <cstring> // std::strlen, std::memcpy
 
 namespace foundation::core::sys
@@ -80,6 +80,11 @@ namespace foundation::core::sys
     {
         const long size = sysconf(_SC_PAGESIZE);
         return (size > 0) ? static_cast<std::size_t>(size) : 4096u;
+    }
+
+    bool SetEnvironmentVariable(const char* name, const char* value) noexcept
+    {
+        return ::setenv(name, value, 1) == 0; // 1: overwrite an existing value
     }
 
     std::size_t GetEnvironmentVariable(const char* name, char* out, std::size_t outSize) noexcept

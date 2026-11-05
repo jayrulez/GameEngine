@@ -49,6 +49,11 @@ namespace foundation::core::sys
     // >= outSize signals truncation), or 0 when the variable is unset.
     std::size_t GetEnvironmentVariable(const char* name, char* out, std::size_t outSize) noexcept;
 
+    // Set environment variable `name` to `value` for this process and the children it spawns after.
+    // False when the platform refused it. It does not reach a parent shell, and a child already
+    // running keeps the environment it started with.
+    bool SetEnvironmentVariable(const char* name, const char* value) noexcept;
+
     // Platform user-data base directory (no app name appended): $XDG_DATA_HOME or ~/.local/share
     // (Linux), %LOCALAPPDATA% (Windows), ~/Library/Application Support (macOS). Same truncation /
     // return contract as GetEnvironmentVariable; 0 when it cannot be resolved. The :system module

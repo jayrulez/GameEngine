@@ -23,6 +23,7 @@
 #undef CreateDirectory
 #undef RemoveDirectory
 #undef GetEnvironmentVariable // windows.h maps it to ...A; we define our own and call ...A directly
+#undef SetEnvironmentVariable // ditto (SetEnvironmentVariableA)
 #undef GetCurrentDirectory    // ditto (GetCurrentDirectoryA)
 
 namespace foundation::core::sys
@@ -90,6 +91,11 @@ namespace foundation::core::sys
             return 0;
         }
         return (n >= outSize) ? static_cast<std::size_t>(n - 1) : static_cast<std::size_t>(n);
+    }
+
+    bool SetEnvironmentVariable(const char* name, const char* value) noexcept
+    {
+        return ::SetEnvironmentVariableA(name, value) != 0;
     }
 
     void PersistUserData() noexcept {} // files are durable once written

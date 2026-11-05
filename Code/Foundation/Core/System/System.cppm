@@ -339,6 +339,18 @@ export namespace foundation::core
         return String(StringView(reinterpret_cast<const utf8char*>(buffer), got));
     }
 
+    // Sets environment variable `name` for this process, and so for the children it spawns after.
+    // False when the platform refused it. It cannot reach the shell that launched this process, and
+    // a child already running keeps the environment it started with. Used to hand a tool the
+    // variables it reads (the editor giving cl.exe its INCLUDE and LIB); it is process-global
+    // state, so set it before the threads that spawn those children, not alongside them.
+    inline bool SetEnvironmentVariable(StringView name, StringView value)
+    {
+        detail::NullTerminated n(name);
+        detail::NullTerminated v(value);
+        return sys::SetEnvironmentVariable(n.CStr(), v.CStr());
+    }
+
     // --- User data directory ----------------------------------------------
 
     // User-data directory for `appName`: the platform base directory (resolved per platform in the

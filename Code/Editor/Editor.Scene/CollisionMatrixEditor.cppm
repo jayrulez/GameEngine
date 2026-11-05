@@ -49,6 +49,9 @@ export namespace editor
                                   { return MakeRef<CollisionMatrixEditor>(allocator); }, true);
         }
 
+        /// A row per group under the headers, so its grid row is as tall as they are.
+        [[nodiscard]] bool IsMultiline() const override { return true; }
+
         /// How many groups it shows.
         [[nodiscard]] usize Count() const noexcept { return m_names.Size(); }
         /// The box for the pair (`row`, `column`), `column` <= `row`; null: none.
@@ -160,6 +163,7 @@ export namespace editor
                 RefPtr<foundation::gui::Label> number = MakeRef<foundation::gui::Label>(MemoryAllocator());
                 number->AddClass(u8"collision-matrix-column");
                 number->SetText(Format(u8"{}", column).AsView());
+                number->SetTextAlignment(foundation::gui::TextHAlign::Center, foundation::gui::TextVAlign::Middle); // over its boxes
                 number->SetTooltip(m_names[column].AsView());
                 cell(*number, kCell);
                 header->AddChild(number.Get());
@@ -171,6 +175,7 @@ export namespace editor
                 RefPtr<foundation::gui::Label> name = MakeRef<foundation::gui::Label>(MemoryAllocator());
                 name->AddClass(u8"collision-matrix-name");
                 name->SetText(Format(u8"{} {}", r, m_names[r]).AsView());
+                name->SetTextAlignment(foundation::gui::TextHAlign::Start, foundation::gui::TextVAlign::Middle);
                 cell(*name, kNameWidth);
                 line->AddChild(name.Get());
                 for (usize column = 0; column <= r; ++column)

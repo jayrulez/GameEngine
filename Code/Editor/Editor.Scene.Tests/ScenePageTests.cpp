@@ -1300,6 +1300,14 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     auto* matrix = Cast<CollisionMatrixEditor>(inspector->Grid()->FindEditor(matrixPath.AsView()));
     REQUIRE(matrix != nullptr);
     CHECK(matrix->Count() == 2u);
+    // Its grid row is as tall as the headers and a line per group, so the last line's boxes lie in
+    // the row, not over the rows below it.
+    REQUIRE(matrix->GetParent() != nullptr);
+    const gui::Rect matrixRow = matrix->GetParent()->GetScreenBounds();
+    CHECK(matrixRow.height >= 3.0f * CollisionMatrixEditor::kCell);
+    REQUIRE(matrix->Box(1, 1) != nullptr);
+    const gui::Rect lastBox = matrix->Box(1, 1)->GetScreenBounds();
+    CHECK(lastBox.y + lastBox.height <= matrixRow.y + matrixRow.height + 0.5f);
     REQUIRE(matrix->Box(1, 0) != nullptr);
     CHECK(matrix->Box(0, 1) == nullptr); // above the diagonal: the same pair as (1, 0)
     CHECK(matrix->Box(1, 0)->IsChecked());
@@ -1333,6 +1341,13 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     remove.Index = 1;
     CHECK(groups->EditList(u8"groups", remove));
     CHECK(groups->GetValue(u8"groups", 0).AsInt() == 1);
+    // With one group fewer, the row is a line shorter.
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    auto* shorter = Cast<CollisionMatrixEditor>(inspector->Grid()->FindEditor(matrixPath.AsView()));
+    REQUIRE(shorter != nullptr);
+    CHECK(shorter->Count() == 1u);
+    CHECK(shorter->GetParent()->GetScreenBounds().height < matrixRow.height - CollisionMatrixEditor::kCell * 0.5f);
     remove.Index = 0;
     CHECK_FALSE(groups->EditList(u8"groups", remove)); // Default stays
     page->Commands().Undo(); // the remove

@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read # default; the publishing jobs escalate to write individually
 
+env:
+  # The build number the binaries show beside their version (the root CMakeLists reads it).
+  ENGINE_BUILD_NUMBER: ${{ github.run_number }}
+
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -35,15 +39,18 @@ jobs:
             echo "::error::Refusing to release: ${GITHUB_REF_NAME} is not on the 'release' branch. Cut the tag on 'release'."
             exit 1
           fi
-      # The tag must match project(VERSION) in CMakeLists - the single source of truth the binary
-      # reports and the dist archives are named with. Catches a tag pushed without the version bump.
-      - name: Reject a tag that does not match project(VERSION)
+      # The tag must match project(VERSION) with ENGINE_VERSION_LABEL in CMakeLists (v0.1.0-beta, or
+      # v0.1.0 with no label): what the binary reports and the dist archives are named with. Catches a
+      # tag pushed without the version bump.
+      - name: Reject a tag that does not match project(VERSION) and its label
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
+          LABEL="$(grep -oP '^set\(ENGINE_VERSION_LABEL\s+"\K[^"]*' CMakeLists.txt | head -1)"
+          VERSION="${VERSION}${LABEL:+-$LABEL}" # the version with its label: 0.1.0-beta
           if [ "${GITHUB_REF_NAME}" = "v${VERSION}" ]; then
-            echo "ok: tag ${GITHUB_REF_NAME} matches project(VERSION) ${VERSION}"
+            echo "ok: tag ${GITHUB_REF_NAME} matches the version ${VERSION}"
           else
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match project(VERSION) v${VERSION}. Bump project(VERSION) in CMakeLists and tag v${VERSION}."
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the version v${VERSION} (project(VERSION) and ENGINE_VERSION_LABEL in CMakeLists). Set them and tag v${VERSION}."
             exit 1
           fi
 
@@ -99,12 +106,15 @@ jobs:
       - name: Build deployment template (Linux runtime)
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
+          LABEL="$(grep -oP '^set\(ENGINE_VERSION_LABEL\s+"\K[^"]*' CMakeLists.txt | head -1)"
+          VERSION="${VERSION}${LABEL:+-$LABEL}" # the version with its label: 0.1.0-beta
           CXX_COMPILER=clang++-21 C_COMPILER=clang-21 OUT=dist/templates scripts/build-export-templates.sh linux
           tar -czf "dist/DeploymentTemplate-${VERSION}-Linux64.tar.gz" -C dist/templates linux64-release
           tar -czf "dist/DeploymentTemplate-${VERSION}-Linux64-symbols.tar.gz" -C dist/templates linux64-release-symbols
       - name: Publish to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }} # a labelled version (v0.1.0-beta) is a pre-release
           # Version-stamped names from build-editor-dist.sh + the template step (e.g.
           # Editor-0.1.0-Linux64.tar.gz); glob so the workflow tracks the version automatically.
           # The -symbols archives are the split debug info of the two downloads: a crash report
@@ -183,12 +193,14 @@ jobs:
         run: |
           $cmake = Get-Content CMakeLists.txt -Raw
           $Version = if ($cmake -match 'project\(\s*GameEngine\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') { $Matches[1] } else { "0.0.0" }
+          if ($cmake -match 'set\(ENGINE_VERSION_LABEL\s+"([^"]+)"\)') { $Version = "$Version-$($Matches[1])" } # the version with its label
           pwsh scripts/build-export-templates.ps1 -Out dist/templates
           Compress-Archive -Path dist/templates/win64-release -DestinationPath "dist/DeploymentTemplate-$Version-Win64.zip"
           Compress-Archive -Path dist/templates/win64-release-symbols -DestinationPath "dist/DeploymentTemplate-$Version-Win64-symbols.zip"
       - name: Publish to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }} # a labelled version (v0.1.0-beta) is a pre-release
           files: |
             dist/Editor-*-Win64.zip
             dist/Editor-*-Win64-symbols.zip
@@ -255,11 +267,14 @@ jobs:
       - name: Build web deployment template
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
+          LABEL="$(grep -oP '^set\(ENGINE_VERSION_LABEL\s+"\K[^"]*' CMakeLists.txt | head -1)"
+          VERSION="${VERSION}${LABEL:+-$LABEL}" # the version with its label: 0.1.0-beta
           OUT=dist/templates CXX_COMPILER=clang++-21 C_COMPILER=clang-21 scripts/build-export-templates.sh web
           tar -czf "dist/DeploymentTemplate-${VERSION}-Web.tar.gz" -C dist/templates web-release
       - name: Publish to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }} # a labelled version (v0.1.0-beta) is a pre-release
           files: dist/DeploymentTemplate-*-Web.tar.gz
           fail_on_unmatched_files: true
 
@@ -278,10 +293,13 @@ jobs:
       - name: Pack the samples
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
+          LABEL="$(grep -oP '^set\(ENGINE_VERSION_LABEL\s+"\K[^"]*' CMakeLists.txt | head -1)"
+          VERSION="${VERSION}${LABEL:+-$LABEL}" # the version with its label: 0.1.0-beta
           python3 scripts/pack-samples.py "${VERSION}" dist/samples
       - name: Publish to the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-') }} # a labelled version (v0.1.0-beta) is a pre-release
           files: |
             dist/samples/samples.json
             dist/samples/sample-*.zip

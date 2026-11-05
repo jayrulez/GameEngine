@@ -50,6 +50,8 @@ TOOLS=(Tools.Editor Tools.Cook Tools.Export Tools.Mcp) # what the dist runs
 # (Editor-Linux64); the version is inserted before the platform suffix.
 VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
 VERSION="${VERSION:-0.0.0}"
+LABEL="$(sed -n 's/^set(ENGINE_VERSION_LABEL[[:space:]]*"\([^"]*\)").*/\1/p' CMakeLists.txt | head -1)"
+VERSION="${VERSION}${LABEL:+-$LABEL}" # the version with its label (ENGINE_VERSION_LABEL): 0.1.0-beta
 RAW="${OUT:-dist/Editor-Linux64}"
 RAW_DIR="$(dirname "$RAW")"
 RAW_NAME="$(basename "$RAW")"                # e.g. Editor-Linux64

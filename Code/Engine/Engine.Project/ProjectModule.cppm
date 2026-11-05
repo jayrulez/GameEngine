@@ -40,6 +40,22 @@ export namespace engine::project
     inline constexpr u32 kEngineVersionMinor = ENGINE_VERSION_MINOR;
     inline constexpr u32 kEngineVersionPatch = ENGINE_VERSION_PATCH;
     inline constexpr StringView kEngineVersionString = ENGINE_VERSION_STRING;
+    // The release's pre-release label ("beta"; empty for a final release), and the version a person
+    // reads: kEngineVersionString with the label (0.1.0-beta). Compatibility checks compare
+    // kEngineVersionString alone.
+    inline constexpr StringView kEngineVersionLabel = ENGINE_VERSION_LABEL;
+    inline constexpr StringView kEngineVersionDisplay = ENGINE_VERSION_DISPLAY;
+
+    /// How a build names itself to a person: the version, then the build number CI stamped on it
+    /// (`buildNumber`, 0 for a local build) and `stamp` (the git hash, dirty or not, and when it was
+    /// built: BuildStamp()). "0.1.0-beta (build 412, 2b685ef30 @ 2026-11-04 15:03)", or "0.1.0-beta
+    /// (local build, 2b685ef30-dirty.95ccb0c3 @ 2026-11-04 15:03)". The About box shows it and copies
+    /// it, and the startup log line writes it, so a report names the exact build.
+    [[nodiscard]] inline String BuildIdentity(StringView stamp, u32 buildNumber)
+    {
+        return buildNumber == 0 ? Format(u8"{} (local build, {})", kEngineVersionDisplay, stamp)
+                                : Format(u8"{} (build {}, {})", kEngineVersionDisplay, buildNumber, stamp);
+    }
 
     // The GitHub repository (owner/name) whose releases carry what this engine downloads for its
     // own version, such as the sample games: ENGINE_RELEASE_REPOSITORY in the root CMakeLists.
@@ -49,11 +65,11 @@ export namespace engine::project
     inline constexpr StringView kEngineReleaseRepository = ENGINE_RELEASE_REPOSITORY;
 
     /// Where `file` attached to this engine's own release is downloaded from: release
-    /// v<version> of the release repository. A build between releases names a release that may
-    /// not exist yet.
+    /// v<version> of the release repository, the version with its label (the release's tag,
+    /// v0.1.0-beta). A build between releases names a release that may not exist yet.
     [[nodiscard]] inline String EngineReleaseDownloadUrl(StringView file)
     {
-        return Format(u8"https://github.com/{}/releases/download/v{}/{}", kEngineReleaseRepository, kEngineVersionString, file);
+        return Format(u8"https://github.com/{}/releases/download/v{}/{}", kEngineReleaseRepository, kEngineVersionDisplay, file);
     }
 
     inline constexpr StringView kProjectManifestFile = u8"Project.xml";

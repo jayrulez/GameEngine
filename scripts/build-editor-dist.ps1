@@ -55,6 +55,7 @@ Set-Location $Root
 # self-identifies (Editor-0.1.0-Win64). $Out is the LABEL; the version goes before the platform.
 $cmake = Get-Content "CMakeLists.txt" -Raw
 $Version = if ($cmake -match 'project\(\s*GameEngine\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') { $Matches[1] } else { "0.0.0" }
+if ($cmake -match 'set\(ENGINE_VERSION_LABEL\s+"([^"]+)"\)') { $Version = "$Version-$($Matches[1])" } # the version with its label: 0.1.0-beta
 $rawDir  = Split-Path -Parent $Out
 $rawName = Split-Path -Leaf   $Out           # e.g. Editor-Win64
 $prefix  = $rawName.Substring(0, $rawName.LastIndexOf('-'))

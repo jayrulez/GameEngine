@@ -14,6 +14,7 @@
 
 #include <cstdio>
 
+import engine.project; // kEngineVersionDisplay (the version the server reports)
 import foundation.core;
 import foundation.vfs; // ResolveDataRoot (--data-root, or the Data/.dataroot walk)
 import foundation.shaders.system; // kShaderFolder (shader_validate's include path)
@@ -107,7 +108,7 @@ int main(int argc, char** argv)
     editor::ExportPluginServices exportHooks{foundation::core::DefaultAllocator()}; // and their export hooks
 
     McpServer server;
-    server.SetServerInfo(u8"engine-mcp", u8"0.1.0");
+    server.SetServerInfo(u8"engine-mcp", String(engine::project::kEngineVersionDisplay));
 
 
     // The session every tool works through. This host owns the project it opens: project_open

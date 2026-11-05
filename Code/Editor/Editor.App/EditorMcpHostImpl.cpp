@@ -8,6 +8,7 @@ module;
 
 module editor.app;
 
+import engine.project; // kEngineVersionDisplay (the version the server reports)
 import foundation.core;
 import foundation.json;
 import foundation.mcp;
@@ -33,7 +34,7 @@ namespace editor::app
         : m_allocator(&allocator), m_http(allocator, m_server), m_session(&session)
     {
         // Distinct from the stdio host's "engine-mcp": an agent talking to both tells them apart.
-        m_server.SetServerInfo(u8"engine-editor-mcp", u8"0.1.0");
+        m_server.SetServerInfo(u8"engine-editor-mcp", String(engine::project::kEngineVersionDisplay));
         editor::mcp::RegisterEngineTools(m_server, *m_session, builders, importers, creators, logBuffer,
                                          paths,
                                          operations);

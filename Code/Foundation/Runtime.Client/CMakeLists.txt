@@ -21,7 +21,7 @@ target_sources(Runtime.Client
 # It answers "which build is this", most usefully on web, where .wasm files cache hard.
 set(BUILDSYSTEM_BUILD_STAMP_CPP "${CMAKE_CURRENT_BINARY_DIR}/BuildStamp.cpp")
 execute_process(COMMAND ${CMAKE_COMMAND}
-    -DOUT=${BUILDSYSTEM_BUILD_STAMP_CPP} -DSRC_ROOT=${CMAKE_SOURCE_DIR}
+    -DOUT=${BUILDSYSTEM_BUILD_STAMP_CPP} -DSRC_ROOT=${CMAKE_SOURCE_DIR} -DBUILD_NUMBER=${ENGINE_BUILD_NUMBER}
     -P ${CMAKE_SOURCE_DIR}/cmake/GenerateBuildStamp.cmake) # exists at configure
 # Regenerate as a normal build edge keyed on git state (HEAD/index): the stamp changes
 # when a commit, checkout or stage changes it, and the edge is clean otherwise. An always-run
@@ -39,7 +39,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/.git/index")
 endif()
 add_custom_command(OUTPUT ${BUILDSYSTEM_BUILD_STAMP_CPP}
     COMMAND ${CMAKE_COMMAND}
-        -DOUT=${BUILDSYSTEM_BUILD_STAMP_CPP} -DSRC_ROOT=${CMAKE_SOURCE_DIR}
+        -DOUT=${BUILDSYSTEM_BUILD_STAMP_CPP} -DSRC_ROOT=${CMAKE_SOURCE_DIR} -DBUILD_NUMBER=${ENGINE_BUILD_NUMBER}
         -P ${CMAKE_SOURCE_DIR}/cmake/GenerateBuildStamp.cmake
     DEPENDS ${CMAKE_SOURCE_DIR}/cmake/GenerateBuildStamp.cmake ${_stamp_git_deps}
     COMMENT "Refreshing build stamp")

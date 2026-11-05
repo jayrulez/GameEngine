@@ -106,6 +106,7 @@ using engine::player::PlayerApplication;
 using engine::player::PlayerOptions;
 
 extern "C" const char* BuildStamp();
+extern "C" unsigned BuildNumber(); // the build number CI stamped, 0 for a local build
 
 int engine::player::PlayerMain(int argc, char** argv)
 {
@@ -114,18 +115,17 @@ int engine::player::PlayerMain(int argc, char** argv)
     {
         if (std::strcmp(argv[i], "--version") == 0)
         {
-            std::printf("Player %.*s (build %s)\n",
-                        static_cast<int>(engine::project::kEngineVersionString.Size()),
-                        reinterpret_cast<const char*>(engine::project::kEngineVersionString.Data()),
-                        BuildStamp());
+            const String identity = engine::project::BuildIdentity(
+                StringView(reinterpret_cast<const char8_t*>(BuildStamp())), BuildNumber());
+            std::printf("Player %.*s\n", static_cast<int>(identity.Size()), reinterpret_cast<const char*>(identity.Data()));
             return 0;
         }
     }
 
     ConsoleSink consoleSink;
     GlobalLogger().AddSink(&consoleSink);
-    LOG_INFO(u8"Build", u8"Player {} (build {})", engine::project::kEngineVersionString,
-                      reinterpret_cast<const char8_t*>(BuildStamp()));
+    LOG_INFO(u8"Build", u8"Player {}",
+             engine::project::BuildIdentity(StringView(reinterpret_cast<const char8_t*>(BuildStamp())), BuildNumber()));
     GlobalLogger().SetMinLevel(LogLevel::Info);
 
     PlayerOptions options;

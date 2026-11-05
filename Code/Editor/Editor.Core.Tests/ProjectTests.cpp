@@ -272,13 +272,30 @@ TEST_CASE("project: manifest round-trips the startup-script asset guid under a v
 
 TEST_CASE("project: this engine's release downloads come from its own version's release")
 {
-    // The repository CMake stamps (ENGINE_RELEASE_REPOSITORY), at v<the engine's version>.
+    // The repository CMake stamps (ENGINE_RELEASE_REPOSITORY), at v<the version with its label>,
+    // the release's tag.
     CHECK(engine::project::kEngineReleaseRepository.ContainsIgnoreCase(u8"/")); // owner/name
     const String url = engine::project::EngineReleaseDownloadUrl(u8"samples.json");
     const String expected = Format(u8"https://github.com/{}/releases/download/v{}/samples.json", engine::project::kEngineReleaseRepository,
-                                   engine::project::kEngineVersionString);
+                                   engine::project::kEngineVersionDisplay);
     CHECK(url == expected);
     CHECK(url.AsView().StartsWith(u8"https://github.com/"));
+}
+
+// The version a person reads is the compared version with the release's label, if any; a build
+// names itself by it, its build number (or as a local build) and its stamp.
+TEST_CASE("project: the display version carries the label, and a build's identity its number or local")
+{
+    const StringView version = engine::project::kEngineVersionString;
+    const StringView label = engine::project::kEngineVersionLabel;
+    const String display = label.IsEmpty() ? String(version) : Format(u8"{}-{}", version, label);
+    CHECK(engine::project::kEngineVersionDisplay == display.AsView());
+    CHECK(engine::project::BuildIdentity(u8"abc1234 @ 2026-11-04 15:03", 412) ==
+          Format(u8"{} (build 412, abc1234 @ 2026-11-04 15:03)", display));
+    CHECK(engine::project::BuildIdentity(u8"abc1234-dirty.0f0f0f0f @ 2026-11-04 15:03", 0) ==
+          Format(u8"{} (local build, abc1234-dirty.0f0f0f0f @ 2026-11-04 15:03)", display));
+    // The compared version stays plain: a plugin manifest's check reads it.
+    CHECK(foundation::runtime::ParsePluginVersion(version).HasValue());
 }
 
 TEST_CASE("project: manifests carry the engine version stamp; a stale-version manifest is refused")

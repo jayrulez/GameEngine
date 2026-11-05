@@ -3,7 +3,10 @@ name: CI
 # Build + test on every master push / PR: Linux clang Debug, Linux clang Debug with
 # SHARED engine libraries (the .so lane), Linux gcc Debug (the house battery is BOTH
 # compilers), and Windows MSVC Debug (D3D12 + WebGPU coverage).
-# Release distribution lives in release.yml. Peak-memory notes: a single modules TU
+# The two "Release distribution" jobs build the editor dist and its platform's export template on
+# every master push too, kept as artifacts for a day: a rehearsal of release.yml (which runs on a
+# version tag, adds the Web template and the samples, and publishes the GitHub Release), so a
+# broken dist shows before a tag. Peak-memory notes: a single modules TU
 # can need several GB; the swapfile step is OOM insurance, and lavapipe (software
 # Vulkan) lets device-creating tests run headless.
 
@@ -18,6 +21,10 @@ on:
     branches: [master]
     paths-ignore: ['**/*.md', 'Documentation/**', 'comments-cleanup.md']
   workflow_dispatch: {}
+
+# The build number the binaries show beside their version (the root CMakeLists reads it).
+env:
+  ENGINE_BUILD_NUMBER: ${{ github.run_number }}
 
 # Supersede an in-flight run for the same ref (saves minutes on a private repo).
 concurrency:
@@ -472,6 +479,8 @@ jobs:
       - name: Package deployment template
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
+          LABEL="$(grep -oP '^set\(ENGINE_VERSION_LABEL\s+"\K[^"]*' CMakeLists.txt | head -1)"
+          VERSION="${VERSION}${LABEL:+-$LABEL}" # the version with its label: 0.1.0-beta
           tar -czf \
             "dist/DeploymentTemplate-${VERSION}-Linux64.tar.gz" \
             -C dist/templates \
@@ -558,6 +567,7 @@ jobs:
           } else {
             throw "Could not determine project version"
           }
+          if ($cmake -match 'set\(ENGINE_VERSION_LABEL\s+"([^"]+)"\)') { $Version = "$Version-$($Matches[1])" } # the version with its label
 
           pwsh scripts/build-export-templates.ps1 -Out dist/templates
 

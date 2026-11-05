@@ -183,6 +183,7 @@ extern const unsigned char g_embeddedEditorFont[];
 extern const unsigned long long g_embeddedEditorFontSize;
 
 extern "C" const char* BuildStamp();
+extern "C" unsigned BuildNumber(); // the build number CI stamped, 0 for a local build
 
 int main(int argc, char** argv)
 {
@@ -191,10 +192,9 @@ int main(int argc, char** argv)
     {
         if (std::strcmp(argv[i], "--version") == 0)
         {
-            std::printf("Editor %.*s (build %s)\n",
-                        static_cast<int>(engine::project::kEngineVersionString.Size()),
-                        reinterpret_cast<const char*>(engine::project::kEngineVersionString.Data()),
-                        BuildStamp());
+            const String identity = engine::project::BuildIdentity(
+                StringView(reinterpret_cast<const char8_t*>(BuildStamp())), BuildNumber());
+            std::printf("Editor %.*s\n", static_cast<int>(identity.Size()), reinterpret_cast<const char*>(identity.Data()));
             return 0;
         }
     }
@@ -205,8 +205,8 @@ int main(int argc, char** argv)
     ConsoleSink consoleSink;
     GlobalLogger().AddSink(&logBuffer);
     GlobalLogger().AddSink(&consoleSink);
-    LOG_INFO(u8"Build", u8"Editor {} (build {})", engine::project::kEngineVersionString,
-                      reinterpret_cast<const char8_t*>(BuildStamp()));
+    LOG_INFO(u8"Build", u8"Editor {}",
+             engine::project::BuildIdentity(StringView(reinterpret_cast<const char8_t*>(BuildStamp())), BuildNumber()));
     GlobalLogger().SetMinLevel(LogLevel::Debug); // the Console panel has a Debug filter toggle
 
     // Engine data first: everything below (fonts, baseline assets, the embedded runtime's

@@ -10,6 +10,23 @@ project(GameEngine
     DESCRIPTION "Game engine"
     LANGUAGES CXX C ASM) # C: SheenBidi (the bidi algorithm) builds as C
 
+# The release's pre-release label ("beta"; empty for a final release). The version a person reads
+# (the About box, the startup log, the release tag and its archives) is project(VERSION) with it,
+# 0.1.0-beta; every compatibility check (plugins, export templates, project files) compares
+# project(VERSION) alone, so a beta's plugins and projects work with the final release.
+set(ENGINE_VERSION_LABEL "beta")
+if(ENGINE_VERSION_LABEL STREQUAL "")
+    set(ENGINE_VERSION_DISPLAY "${PROJECT_VERSION}")
+else()
+    set(ENGINE_VERSION_DISPLAY "${PROJECT_VERSION}-${ENGINE_VERSION_LABEL}")
+endif()
+# The build number CI stamps on what it builds (its run number, from the ENGINE_BUILD_NUMBER
+# environment variable the workflows set), shown beside the version; 0 is a local build.
+set(ENGINE_BUILD_NUMBER 0 CACHE STRING "The build number shown beside the version (CI's run number; 0 is a local build)")
+if(DEFINED ENV{ENGINE_BUILD_NUMBER})
+    set(ENGINE_BUILD_NUMBER "$ENV{ENGINE_BUILD_NUMBER}" CACHE STRING "The build number shown beside the version (CI's run number; 0 is a local build)" FORCE)
+endif()
+
 # MSVC assembles with ml64, not cl, so the plain ASM language above does not apply to it
 # (hence "CMP194: MSVC is not an assembler for language ASM" at configure). AngelScript's x64
 # native-call trampoline is hand-written assembly and is the only consumer; without MASM its

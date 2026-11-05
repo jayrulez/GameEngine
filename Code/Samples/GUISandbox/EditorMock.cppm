@@ -150,6 +150,7 @@ export namespace sandbox
             Define(u8"mock.view-assets", u8"Assets");
             Define(u8"mock.view-console", u8"Console");
             Define(u8"mock.view-profiler", u8"Profiler");
+            Define(u8"mock.view-mcp", u8"MCP");
             Define(u8"mock.palette", u8"Command Palette...", u8"ctrl-shift-p");
             Define(u8"mock.side-by-side", u8"Pages Side by Side");
             Define(u8"mock.play", u8"Play", u8"f5", u8"Editor/Icons/play.svg");
@@ -202,6 +203,8 @@ export namespace sandbox
             (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowPicker(self->m_textures, u8"Editor/Mock/textures.xml"); });
             (void)m_root.OnCommand(u8"mock.asset-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_assetPicker, u8"Editor/Mock/asset-picker.xml"); });
             (void)m_root.OnCommand(u8"mock.entity-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_entityPicker, u8"Editor/Mock/entity-picker.xml"); });
+            // The status bar's MCP item brings the MCP panel to front, as View > MCP does.
+            (void)m_root.OnCommand(u8"mock.view-mcp", [self](gui::CommandEvent&) { self->ShowPage(u8"mcp"); });
             (void)m_root.OnCommand(u8"mock.side-by-side", [self](gui::CommandEvent&) { self->SetSideBySide(!self->m_sideBySide); });
             Define(u8"look.dark", u8"Dark");
             Define(u8"look.light", u8"Light");
@@ -331,6 +334,7 @@ export namespace sandbox
             sheet += m_host.Read(u8"Editor/Mock/kit.css").AsView(); // the kit page's own layout
             sheet += StringView(u8"\n");
             sheet += m_host.Read(u8"Editor/Mock/profiler.css").AsView(); // the profiler page's layout and its bars
+            sheet += m_host.Read(u8"Editor/Mock/mcp.css").AsView(); // the MCP panel and its status bar item
             sheet += inputs.AsView();
             m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"Editor/editor.css")));
             m_context.SetColorScheme(m_dark);
@@ -366,6 +370,9 @@ export namespace sandbox
             Register(u8"profiler", u8"Profiler", u8"Editor/Mock/profiler.xml");
             Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.xml");
             Register(u8"console", u8"Console", u8"Editor/Mock/console.xml");
+            // The MCP panel's two states, to compare: the host listening, and stopped.
+            Register(u8"mcp", u8"MCP", u8"Editor/Mock/mcp.xml");
+            Register(u8"mcp-stopped", u8"MCP: Stopped", u8"Editor/Mock/mcp-stopped.xml");
             Said(m_dock->Adopt(DefaultLayout(false)));
             m_dockArea = MakeRef<gui::DockArea>(m_allocator);
             m_dockArea->EditLayoutStyle([](gui::LayoutStyle& s) { s.Grow = 1.0f; });
@@ -398,6 +405,8 @@ export namespace sandbox
             Said(layout.Activate(u8"profiler"));
             Said(layout.InsertBeside(u8"assets", central, gui::DockSide::Bottom, 0.28f));
             Said(layout.InsertTab(u8"console", layout.StackOf(u8"assets")));
+            Said(layout.InsertTab(u8"mcp", layout.StackOf(u8"assets")));
+            Said(layout.InsertTab(u8"mcp-stopped", layout.StackOf(u8"assets")));
             Said(layout.Activate(u8"assets"));
             return layout;
         }

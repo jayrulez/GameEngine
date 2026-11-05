@@ -5,8 +5,9 @@
 //
 // EditorStatusBar: what the frame's status bar shows, through its items by id: the message
 // (`status-message`, the context's status line), the job at the end (`status-job`: its name, a
-// progress bar and its count, or a sweep when its length is unknown, as a cook's is) and the agent
-// (`status-agent`, shown while the MCP host listens). An item with nothing to show is hidden.
+// progress bar and its count, or a sweep when its length is unknown, as a cook's is; hidden when
+// none runs) and the MCP host (`status-agent`, always shown: a dot lit while it listens, its port or
+// "off", the tool of a call still running beside it; clicked, it shows the MCP panel).
 module;
 #include "Core/Prelude.h"
 
@@ -33,9 +34,11 @@ export namespace editor::app
             m_jobProgress = Cast<gui::ProgressBar>(Find(frame, u8"status-job-progress"));
             m_jobCount = Cast<gui::Label>(Find(frame, u8"status-job-count"));
             m_agentItem = Find(frame, u8"status-agent");
-            m_agent = Cast<gui::Label>(Find(frame, u8"status-agent-text"));
+            m_agent = Cast<gui::Button>(Find(frame, u8"status-agent-text"));
+            m_agentDot = Cast<gui::UIWidget>(Find(frame, u8"status-agent-dot"));
+            m_agentCall = Cast<gui::Label>(Find(frame, u8"status-agent-call"));
             ClearJob();
-            SetAgent({});
+            SetAgent(false, u8"MCP off", {}, u8"MCP: stopped. Show the MCP panel to start it");
         }
 
         void SetMessage(StringView text)
@@ -75,15 +78,39 @@ export namespace editor::app
         }
         [[nodiscard]] bool ShowsJob() const { return m_job != nullptr && m_job->IsDisplayed(); }
 
-        /// The agent's line ("MCP on 127.0.0.1:7405"); empty hides it.
-        void SetAgent(StringView text)
+        /// The MCP host's item: whether it listens (the dot lit), its text ("MCP 7405", "MCP off"),
+        /// the tool of a call still running (empty: none) and the item's tooltip.
+        void SetAgent(bool listening, StringView text, StringView runningCall, StringView tooltip)
         {
             if (m_agent != nullptr)
-                m_agent->SetText(text);
-            if (m_agentItem != nullptr)
-                m_agentItem->SetDisplayed(!text.IsEmpty());
+            {
+                if (m_agent->GetText() != text)
+                    m_agent->SetText(text);
+                if (m_agent->GetTooltipText() != tooltip)
+                    m_agent->SetTooltip(tooltip);
+            }
+            if (m_agentDot != nullptr && m_agentDot->HasClass(u8"on") != listening)
+                listening ? m_agentDot->AddClass(u8"on") : m_agentDot->RemoveClass(u8"on");
+            if (m_agentCall != nullptr)
+            {
+                if (m_agentCall->GetText() != runningCall)
+                    m_agentCall->SetText(runningCall);
+                m_agentCall->SetDisplayed(!runningCall.IsEmpty());
+            }
+        }
+        /// What a click on the MCP item does (shows the MCP panel).
+        void SetOnAgentClicked(Function<void()> clicked)
+        {
+            if (m_agent != nullptr)
+                m_agent->SetOnClick(Move(clicked));
         }
         [[nodiscard]] bool ShowsAgent() const { return m_agentItem != nullptr && m_agentItem->IsDisplayed(); }
+        [[nodiscard]] StringView AgentText() const { return m_agent != nullptr ? m_agent->GetText() : StringView{}; }
+        [[nodiscard]] bool AgentListening() const { return m_agentDot != nullptr && m_agentDot->HasClass(u8"on"); }
+        [[nodiscard]] StringView AgentCall() const
+        {
+            return m_agentCall != nullptr && m_agentCall->IsDisplayed() ? m_agentCall->GetText() : StringView{};
+        }
 
     private:
         static gui::Node* Find(gui::Node& node, StringView id)
@@ -102,6 +129,8 @@ export namespace editor::app
         gui::ProgressBar* m_jobProgress = nullptr;
         gui::Label* m_jobCount = nullptr;
         gui::Node* m_agentItem = nullptr;
-        gui::Label* m_agent = nullptr;
+        gui::Button* m_agent = nullptr;
+        gui::UIWidget* m_agentDot = nullptr;
+        gui::Label* m_agentCall = nullptr;
     };
 }

@@ -258,6 +258,7 @@ export namespace editor::app
         Function<void()> resetLayout;
         Function<void()> assets;  ///< brings the Assets panel back, or to the front
         Function<void()> console; ///< likewise the Console
+        Function<void()> mcp;     ///< likewise the MCP panel
         Function<void()> profiler;
         Function<bool()> profilerRecording;
         Function<void()> profilerRecord;
@@ -281,6 +282,13 @@ export namespace editor::app
             EditorActionDeclaration d = detail::Declare(u8"view.console", u8"Console", u8"Show the Console panel", u8"View/Console", 160);
             d.readOnly = true;
             detail::Add(actions, Move(d), Move(run.console));
+        }
+        if (run.mcp)
+        {
+            EditorActionDeclaration d =
+                detail::Declare(u8"view.mcp", u8"MCP", u8"Show the MCP panel: start or stop the host, see what agents did", u8"View/MCP", 170);
+            d.readOnly = true;
+            detail::Add(actions, Move(d), Move(run.mcp));
         }
         if (run.profiler)
         {

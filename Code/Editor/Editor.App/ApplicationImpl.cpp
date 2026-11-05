@@ -446,7 +446,46 @@ namespace editor::app
             m_profiler = MakeUnique<ProfilerPanel>(m_editorAllocator, m_editorAllocator, Move(seams), m_window.LoadMarkup(ProfilerPanel::kPath));
         }
         contents.profiler = [self]() { return self->m_profiler->Content(); };
+        {
+            McpPanelSeams seams;
+            seams.activity = [self]() { return self->m_mcp ? &self->m_mcp->Activity() : nullptr; };
+            seams.listening = [self]() { return self->m_mcp && self->m_mcp->IsRunning(); };
+            seams.port = [self]() { return self->m_mcp ? self->m_mcp->Port() : u16(0); };
+            seams.configuredPort = [self]() { return self->m_mcp ? self->m_mcp->ConfiguredPort() : 0u; };
+            seams.client = [self]()
+            {
+                if (!self->m_mcp || self->m_mcp->Client().name.IsEmpty())
+                    return String();
+                const foundation::mcp::McpClientInfo& client = self->m_mcp->Client();
+                return client.version.IsEmpty() ? client.name : Format(u8"{} {}", client.name, client.version);
+            };
+            seams.start = [self]() { return self->m_mcp && self->m_mcp->StartByUser(self->m_session.Project()); };
+            seams.stop = [self]()
+            {
+                if (self->m_mcp)
+                    self->m_mcp->StopByUser();
+            };
+            seams.connectCommand = [self]() { return self->m_mcp ? self->m_mcp->ConnectCommand() : String(); };
+            seams.startsWithProject = [self]() { return self->m_editorSettings.Section<editor::EditorMcpSettings>().enabled; };
+            seams.setStartsWithProject = [self](bool on)
+            {
+                self->m_editorSettings.Section<editor::EditorMcpSettings>().enabled = on;
+                if (!editor::SaveEditorSettingsToUserData(self->m_editorSettings).IsOk())
+                    self->m_context.Notify(editor::NoticeKind::Warning, u8"The MCP preference could not be saved.");
+            };
+            seams.copy = [self](StringView text, StringView what)
+            {
+                foundation::gui::SceneRoot* r = self->m_window.Root();
+                foundation::gui::EventDispatcher* dispatcher = r != nullptr ? r->GetEventDispatcher() : nullptr;
+                (void)self->m_context.CopyText(dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr, text, what);
+            };
+            seams.preferences = [self]() { self->OpenPreferences(); };
+            m_mcpPanel = MakeUnique<McpPanel>(m_editorAllocator, m_editorAllocator, Move(seams), m_window.LoadMarkup(McpPanel::kPath));
+        }
+        contents.mcp = [self]() { return self->m_mcpPanel->Content(); };
         m_dock.Open(*into, m_window.Host(), Move(contents));
+        if (EditorStatusBar* status = m_window.StatusBar())
+            status->SetOnAgentClicked([self]() { self->m_dock.Present(kPanelMcp); });
     }
 
     // Opens the pages in the dock; their dialogs open over the main window.
@@ -1102,6 +1141,7 @@ namespace editor::app
         view.resetLayout = [self]() { self->m_dock.ResetLayout(); };
         view.assets = [self]() { self->m_dock.Present(kPanelAssets); };
         view.console = [self]() { self->m_dock.Present(kPanelConsole); };
+        view.mcp = [self]() { self->m_dock.Present(kPanelMcp); };
         view.profiler = [self]() { self->m_dock.Present(kPanelProfiler); };
         view.profilerRecording = [self]() { return self->m_profiler && self->m_profiler->IsRecording(); };
         view.profilerRecord = [self]()
@@ -1258,6 +1298,11 @@ namespace editor::app
             PROFILE_SCOPE("Editor.Profiler");
             m_profiler->Update(); // take the frames recorded since the last update, while recording
         }
+        if (m_mcpPanel)
+        {
+            PROFILE_SCOPE("Editor.McpPanel");
+            m_mcpPanel->Update(); // the host's state and the calls agents made since
+        }
         if (m_assets)
         {
             PROFILE_SCOPE("Editor.Assets");
@@ -1298,7 +1343,7 @@ namespace editor::app
     }
 
     // Updates the status bar: the running job (its title, progress and step count), else a cook
-    // (of unknown length), and the agent indicator while the MCP host listens.
+    // (of unknown length), and the MCP item: its port or off, and the tool of a call still running.
     void EditorApplication::UpdateStatusBar()
     {
         EditorStatusBar* status = m_window.StatusBar();
@@ -1316,7 +1361,16 @@ namespace editor::app
         else if (status->ShowsJob())
             status->ClearJob();
         const EditorMcpHost* host = m_mcp ? m_mcp->Host() : nullptr;
-        status->SetAgent(host != nullptr && host->IsRunning() ? Format(u8"MCP on 127.0.0.1:{}", host->BoundPort()).AsView() : StringView{});
+        if (host != nullptr && host->IsRunning())
+        {
+            const McpActivity::Entry* running = m_mcp->Activity().RunningCall();
+            const String& client = m_mcp->Client().name;
+            status->SetAgent(true, Format(u8"MCP {}", host->BoundPort()).AsView(), running != nullptr ? running->tool.AsView() : StringView{},
+                             client.IsEmpty() ? Format(u8"MCP: listening on 127.0.0.1:{}. Show the MCP panel", host->BoundPort()).AsView()
+                                              : Format(u8"MCP: listening on 127.0.0.1:{}, {} connected. Show the MCP panel", host->BoundPort(), client).AsView());
+        }
+        else
+            status->SetAgent(false, u8"MCP off", {}, u8"MCP: stopped. Show the MCP panel to start it");
     }
 
     // Window screenshots: writes the last frame's captures, fails those for windows that are gone
@@ -1472,6 +1526,7 @@ namespace editor::app
         m_dock.Close(); // its floating windows, then the GUI, before the device goes away
         m_console.Reset();
         m_profiler.Reset();
+        m_mcpPanel.Reset();
         m_window.Close();
     }
 }

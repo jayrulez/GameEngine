@@ -48,6 +48,7 @@ target_sources(Editor.App
             NativeCodeDialog.cppm
             AboutBox.cppm
             McpActivity.cppm
+            McpPanel.cppm
             AssetObjectPage.cppm
             PreviewPane.cppm
             EditorStatusBar.cppm

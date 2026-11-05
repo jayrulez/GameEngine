@@ -64,7 +64,8 @@ Marked "(to check)" where the check was by reading, not running.
   AGENTS.md's list leaves it out); level 5 played through by the user.
 - **masquerade:** P6: installed on the Deck; P4's two-machine and browser playtest and P5's look and
   sound check are the user's.
-- **mcp-agent-access:** the Agent panel (a chat window in the editor); P2G, a game host in the
+- **mcp-agent-access:** the Agent panel's chat window in the editor (the calls and their outcomes are
+  the MCP panel's since 2026-11-04; parked questions for unattended calls still open); P2G, a game host in the
   player (`game_step`, `game_send_event`), largely met by the editor's PIE tools; P3: skills
   (`SkillAsset`, `skill_create`, prompts), progress over SSE, resource subscriptions.
 - **mesh-lod:** weight-aware simplification, per-instance LOD buckets, cross-fades, LOD-aware physics

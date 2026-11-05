@@ -51,6 +51,8 @@ import :project_home;
 import :project_manager_view;
 import :log_view;
 import :profiler_panel;
+import :mcp_panel;
+import :mcp_activity;
 import :assets_view;
 import :asset_operations;
 import :asset_import;
@@ -291,6 +293,7 @@ export namespace editor::app
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content
         UniquePtr<ProfilerPanel> m_profiler;     // the Profiler page's content
+        UniquePtr<McpPanel> m_mcpPanel;          // the MCP panel's content
         UniquePtr<AssetOperations> m_assetOps;   // rename, duplicate, delete, cook; shared by the browser and the MCP tools
         UniquePtr<AssetsView> m_assets;          // the Assets panel's content
         UniquePtr<AssetImport> m_assetImport;    // files into the project (a drop, Import...)

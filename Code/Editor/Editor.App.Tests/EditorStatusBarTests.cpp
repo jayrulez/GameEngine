@@ -3,8 +3,9 @@
 
 // Editor::App: EditorStatusBar over the editor's frame (Data/Editor/Shell.xml). Covers the message
 // line; the job with its name, progress and count, an indeterminate sweep when its length is
-// unknown, and hidden when none runs; the agent indicator, hidden while no agent is connected; and a
-// frame without these items, which the bar skips.
+// unknown, and hidden when none runs; the MCP item, always shown, lit while the host listens, naming a
+// call still running and showing the MCP panel when clicked; and a frame without these items, which
+// the bar skips.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -42,7 +43,7 @@ namespace
     }
 }
 
-TEST_CASE("editor status bar: the message, a job with its progress and count or a sweep, the agent; an item with nothing to say hidden")
+TEST_CASE("editor status bar: the message, a job with its progress and count or a sweep, the MCP item; a job hidden when none runs")
 {
     RefPtr<gui::Node> frame = LoadFrame();
     REQUIRE(frame.Get() != nullptr);
@@ -56,7 +57,9 @@ TEST_CASE("editor status bar: the message, a job with its progress and count or 
     REQUIRE(progress != nullptr);
     REQUIRE(count != nullptr);
     CHECK_FALSE(job->IsDisplayed()); // nothing running
-    CHECK_FALSE(agent->IsDisplayed());
+    CHECK(agent->IsDisplayed());     // the MCP item, off
+    CHECK(status.AgentText() == StringView(u8"MCP off"));
+    CHECK_FALSE(status.AgentListening());
 
     status.SetMessage(u8"Saved 'Level 1'.");
     CHECK(status.Message() == StringView(u8"Saved 'Level 1'."));
@@ -75,11 +78,23 @@ TEST_CASE("editor status bar: the message, a job with its progress and count or 
     CHECK_FALSE(status.ShowsJob());
     CHECK_FALSE(progress->IsIndeterminate());
 
-    status.SetAgent(u8"MCP on 127.0.0.1:7405");
+    status.SetAgent(true, u8"MCP 7405", u8"asset_cook", u8"MCP: listening on 127.0.0.1:7405");
     CHECK(status.ShowsAgent());
-    CHECK(Find<gui::Label>(*frame, u8"status-agent-text")->GetText() == StringView(u8"MCP on 127.0.0.1:7405"));
-    status.SetAgent({});
-    CHECK_FALSE(status.ShowsAgent());
+    CHECK(status.AgentListening());
+    CHECK(status.AgentText() == StringView(u8"MCP 7405"));
+    CHECK(status.AgentCall() == StringView(u8"asset_cook"));
+    status.SetAgent(true, u8"MCP 7405", {}, u8"MCP: listening on 127.0.0.1:7405");
+    CHECK(status.AgentCall().IsEmpty());
+    status.SetAgent(false, u8"MCP off", {}, u8"MCP: stopped");
+    CHECK(status.ShowsAgent());
+    CHECK_FALSE(status.AgentListening());
+
+    int clicks = 0;
+    status.SetOnAgentClicked([&clicks]() { ++clicks; });
+    auto* button = Find<gui::Button>(*frame, u8"status-agent-text");
+    REQUIRE(button != nullptr);
+    CHECK(button->HandleActivate());
+    CHECK(clicks == 1);
 }
 
 TEST_CASE("editor status bar: a frame without its items is skipped, not a fault")
@@ -88,7 +103,8 @@ TEST_CASE("editor status bar: a frame without its items is skipped, not a fault"
     EditorStatusBar status(*bare);
     status.SetMessage(u8"nothing to show it on");
     status.SetJob(u8"Cooking", -1.0f, {});
-    status.SetAgent(u8"MCP");
+    status.SetAgent(true, u8"MCP 7405", {}, {});
+    status.SetOnAgentClicked([]() {});
     CHECK(status.Message().IsEmpty());
     CHECK_FALSE(status.ShowsJob());
     CHECK_FALSE(status.ShowsAgent());

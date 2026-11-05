@@ -6,9 +6,10 @@
 // EditorDock: the editor's dock. A GUI.Docking controller with its area in the frame's
 // `frame-dock`, its floating panels in OS windows of their own where the GUI's host can open them
 // (else over the main window), and the panels every project shares: the Project panel (the open
-// project's page, or the welcome without one), Assets, Console and the Profiler (a tab in the page
-// area, absent from the default layout until shown). Their ids are the ones saved layouts and the
-// MCP layout tools use: `welcome` for the Project panel, `assets`, `console`, `profiler`.
+// project's page, or the welcome without one), Assets, Console, MCP (a tab beside the Console) and
+// the Profiler (a tab in the page area, absent from the default layout until shown). Their ids are
+// the ones saved layouts and the MCP layout tools use: `welcome` for the Project panel, `assets`,
+// `console`, `mcp`, `profiler`.
 module;
 #include "Core/Prelude.h"
 
@@ -28,6 +29,7 @@ export namespace editor::app
     inline constexpr StringView kPanelProject = u8"welcome";
     inline constexpr StringView kPanelAssets = u8"assets";
     inline constexpr StringView kPanelConsole = u8"console";
+    inline constexpr StringView kPanelMcp = u8"mcp";
     inline constexpr StringView kPanelProfiler = u8"profiler";
 
     class EditorDock
@@ -39,6 +41,7 @@ export namespace editor::app
             Function<RefPtr<gui::Node>()> welcome; ///< the Project panel without a project
             Function<RefPtr<gui::Node>()> assets;
             Function<RefPtr<gui::Node>()> console;
+            Function<RefPtr<gui::Node>()> mcp;
             Function<RefPtr<gui::Node>()> profiler;
         };
 
@@ -57,6 +60,7 @@ export namespace editor::app
             RegisterPanel(kPanelProject, u8"Project", false, [self]() { return self->Holder(); });
             RegisterPanel(kPanelAssets, u8"Assets", true, [self]() { return self->Make(self->m_contents.assets); });
             RegisterPanel(kPanelConsole, u8"Console", true, [self]() { return self->Make(self->m_contents.console); });
+            RegisterPanel(kPanelMcp, u8"MCP", true, [self]() { return self->Make(self->m_contents.mcp); });
             RegisterPanel(kPanelProfiler, u8"Profiler", true, [self]() { return self->Make(self->m_contents.profiler); });
             AdoptDefault();
             m_area = MakeRef<gui::DockArea>(m_allocator);
@@ -84,7 +88,8 @@ export namespace editor::app
         }
 
         /// The default layout: the Project panel in the central stack, under it a pane of Assets
-        /// and Console side by side (the document 70% of the height; Assets 65% of the pane).
+        /// and Console side by side (the document 70% of the height; Assets 65% of the pane), the
+        /// MCP panel a tab behind the Console.
         [[nodiscard]] static gui::DockLayout DefaultLayout()
         {
             gui::DockLayout layout;
@@ -92,6 +97,8 @@ export namespace editor::app
             (void)layout.InsertTab(kPanelProject, central);
             (void)layout.InsertBeside(kPanelAssets, central, gui::DockSide::Bottom, kPaneShare);
             (void)layout.InsertBeside(kPanelConsole, layout.StackOf(kPanelAssets), gui::DockSide::End, kConsoleShare);
+            (void)layout.InsertTab(kPanelMcp, layout.StackOf(kPanelConsole));
+            (void)layout.Activate(kPanelConsole);
             return layout;
         }
         /// Adopts the default layout again (View > Reset Layout).

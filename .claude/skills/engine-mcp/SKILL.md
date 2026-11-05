@@ -27,7 +27,8 @@ connected agent: read `docs://McpGuide.md` via `resources/read` right after conn
 The editor serves the same engine tools over HTTP for the project it has open (server name
 `assiduousengine-editor-mcp`; `host_info.host.kind` = `editor`), so an agent works on what the user is
 looking at - one content database, one writer. Enable it in Preferences (MCP: enabled, port,
-token), or for one run: `Tools.Editor <project> --mcp [--mcp-port <n>]`. The default port is
+token), start it from the MCP panel (the status bar's MCP item opens it; its Copy Connect Command
+gives the wiring line with the token), or for one run: `Tools.Editor <project> --mcp [--mcp-port <n>]`. The default port is
 7405; the token is minted on first enable and written to `<user-data>/mcp-token`
 (`~/.local/share/assiduousengine/mcp-token` on Linux).
 

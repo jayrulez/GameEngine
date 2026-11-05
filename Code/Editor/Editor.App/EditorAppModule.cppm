@@ -60,6 +60,7 @@ export import :layout;
 export import :session;
 export import :mcp_activity;
 export import :mcp_service;
+export import :mcp_panel;
 export import :app_actions;
 export import :application;
 export import :playback_actions;

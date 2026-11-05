@@ -67,6 +67,9 @@ TEST_CASE("editor dock: the shared panels by their ids, the Project panel centra
     CHECK_FALSE(project->Closable);
     CHECK_FALSE(bed.dock.Controller().Close(editor::app::kPanelProject).Ok());
     CHECK(bed.dock.Controller().Describe(editor::app::kPanelConsole)->Closable);
+    // The MCP panel a tab behind the Console, which stays in front.
+    CHECK(layout.StackOf(editor::app::kPanelMcp) == console);
+    CHECK(bed.dock.Controller().Describe(editor::app::kPanelMcp)->Closable);
 }
 
 TEST_CASE("editor dock: the Project panel shows the welcome, the open project's page while one is open, the welcome again after")

@@ -128,6 +128,7 @@ function(util_add_engine_library name)
                 COMMAND ${CMAKE_COMMAND}
                         -DDUMPBIN=${UTIL_DUMPBIN}
                         -DOBJECTS_FILE=${_uael_objs}
+                        -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
                         -DDEF_FILE=${_uael_def}
                         -P "${UTIL_CMAKE_DIR}/GenerateModuleDef.cmake"
                 VERBATIM

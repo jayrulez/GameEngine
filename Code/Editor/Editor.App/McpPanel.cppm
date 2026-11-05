@@ -8,7 +8,8 @@
 // Copy Connect Command (the command that wires Claude Code to the host, with its token) and
 // whether the host starts with each project (the MCP preference); then a chip per filter (All;
 // Edits, the calls whose tool creates, overwrites or deletes authored data; Failed), each with its
-// count, a search over a call's tool, summary and arguments, Clear and the preferences. Under it
+// count (Failed holds the calls refused before any tool ran too: an unknown tool, arguments the
+// schema refuses), a search over a call's tool, summary and arguments, Clear and the preferences. Under it
 // the activity (McpActivity), newest first: each call's time, outcome, tool, summary, an Edit badge
 // and how long it took, with the host's own events between; beside it the chosen call's arguments
 // and answer, read only, and Copy as JSON. It is refreshed once a frame from the activity.
@@ -228,9 +229,8 @@ export namespace editor::app
             call.Set(u8"arguments", ParsedOrText(entry->arguments.AsView()));
             call.Set(u8"outcome", foundation::json::JsonValue::MakeString(String(OutcomeName(entry->outcome))));
             call.Set(u8"milliseconds", foundation::json::JsonValue::MakeNumber(static_cast<f64>(static_cast<i64>(entry->elapsed.AsSeconds() * 1000.0 + 0.5))));
-            if (entry->outcome == McpActivity::Outcome::Done || entry->outcome == McpActivity::Outcome::Failed)
-                call.Set(entry->outcome == McpActivity::Outcome::Failed ? StringView(u8"error") : StringView(u8"result"),
-                         ParsedOrText(entry->result.AsView()));
+            if (entry->outcome == McpActivity::Outcome::Done || WentWrong(*entry))
+                call.Set(WentWrong(*entry) ? StringView(u8"error") : StringView(u8"result"), ParsedOrText(entry->result.AsView()));
             return call.ToString(true);
         }
         void CopySelectedCall()
@@ -315,8 +315,14 @@ export namespace editor::app
                 on ? widget->AddClass(name) : widget->RemoveClass(name);
         }
 
-        static constexpr StringView kOutcomeClasses[] = {u8"running", u8"done", u8"failed", u8"abandoned"};
-        static constexpr StringView kRowClasses[] = {u8"running", u8"done", u8"failed", u8"abandoned", u8"event"};
+        static constexpr StringView kOutcomeClasses[] = {u8"running", u8"done", u8"failed", u8"abandoned", u8"refused"};
+        static constexpr StringView kRowClasses[] = {u8"running", u8"done", u8"failed", u8"abandoned", u8"refused", u8"event"};
+
+        /// Failed, or refused before any tool ran: what the Failed filter shows.
+        [[nodiscard]] static bool WentWrong(const McpActivity::Entry& entry)
+        {
+            return entry.IsCall() && (entry.outcome == McpActivity::Outcome::Failed || entry.outcome == McpActivity::Outcome::Refused);
+        }
 
         [[nodiscard]] static StringView OutcomeName(McpActivity::Outcome outcome)
         {
@@ -328,6 +334,8 @@ export namespace editor::app
                 return u8"failed";
             case McpActivity::Outcome::Abandoned:
                 return u8"abandoned";
+            case McpActivity::Outcome::Refused:
+                return u8"refused";
             default:
                 return u8"done";
             }
@@ -348,7 +356,7 @@ export namespace editor::app
         {
             if (m_filter == Filter::Edits && !(entry.IsCall() && entry.changes))
                 return false;
-            if (m_filter == Filter::Failed && !(entry.IsCall() && entry.outcome == McpActivity::Outcome::Failed))
+            if (m_filter == Filter::Failed && !WentWrong(entry))
                 return false;
             if (m_search.IsEmpty())
                 return true;
@@ -369,7 +377,7 @@ export namespace editor::app
                     {
                         ++m_counts[static_cast<usize>(Filter::All)];
                         m_counts[static_cast<usize>(Filter::Edits)] += entry.changes ? 1 : 0;
-                        m_counts[static_cast<usize>(Filter::Failed)] += entry.outcome == McpActivity::Outcome::Failed ? 1 : 0;
+                        m_counts[static_cast<usize>(Filter::Failed)] += WentWrong(entry) ? 1 : 0;
                     }
                     if (Passes(entry))
                         m_shown.PushBack(i - 1);
@@ -462,12 +470,13 @@ export namespace editor::app
             SetText(Find<gui::Label>(u8"mcp-detail-tool"), entry->tool.AsView());
             if (auto* outcome = Find<gui::Label>(u8"mcp-detail-outcome"))
             {
-                static constexpr StringView kTexts[] = {u8"Running", u8"Done", u8"Failed", u8"Abandoned"};
+                static constexpr StringView kTexts[] = {u8"Running", u8"Done", u8"Failed", u8"Abandoned", u8"Refused"};
                 SetText(outcome, kTexts[static_cast<usize>(entry->outcome)]);
                 for (StringView name : kOutcomeClasses)
                     SetClass(outcome, name, name == OutcomeName(entry->outcome));
             }
-            const String when = entry->outcome == McpActivity::Outcome::Running ? TimeText(entry->at)
+            const String when = entry->outcome == McpActivity::Outcome::Running || entry->outcome == McpActivity::Outcome::Refused
+                                    ? TimeText(entry->at)
                                                                                  : Format(u8"{}, {}", TimeText(entry->at), TookText(entry->elapsed));
             SetText(Find<gui::Label>(u8"mcp-detail-when"), when.AsView());
             if (auto* arguments = Find<gui::TextArea>(u8"mcp-arguments"))
@@ -475,7 +484,7 @@ export namespace editor::app
                 arguments->SetText(Pretty(entry->arguments.AsView()).AsView());
                 arguments->SetCaret(0); // read from the top
             }
-            SetText(Find<gui::Label>(u8"mcp-result-title"), entry->outcome == McpActivity::Outcome::Failed ? StringView(u8"Error") : StringView(u8"Result"));
+            SetText(Find<gui::Label>(u8"mcp-result-title"), WentWrong(*entry) ? StringView(u8"Error") : StringView(u8"Result"));
             if (auto* result = Find<gui::TextArea>(u8"mcp-result"))
                 result->SetText(entry->outcome == McpActivity::Outcome::Running     ? StringView(u8"(still running)")
                                 : entry->outcome == McpActivity::Outcome::Abandoned ? StringView(u8"(no answer: the caller left or the host stopped)")
@@ -532,8 +541,9 @@ export namespace editor::app
                 SetText(badge, u8"Edit");
                 SetClass(badge, u8"edit", true);
             }
-            SetText(Cast<gui::Label>(row->GetChildAt(5)), !call ? StringView{}
+            SetText(Cast<gui::Label>(row->GetChildAt(5)), !call                                              ? StringView{}
                                                           : entry->outcome == McpActivity::Outcome::Running ? StringView(u8"running")
+                                                          : entry->outcome == McpActivity::Outcome::Refused ? StringView(u8"refused")
                                                                                                             : TookText(entry->elapsed).AsView());
         }
 

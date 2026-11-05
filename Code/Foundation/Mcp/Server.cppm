@@ -154,12 +154,13 @@ export namespace foundation::mcp
         Started,   ///< the tool answered NotFinished the first time: it keeps running across pumps
         Finished,  ///< the tool answered
         Abandoned, ///< it ended unanswered: its caller went away, or its tool was unregistered
+        Refused,   ///< no tool ran: the call named no tool or an unknown one, or its arguments did not fit the schema
     };
 
     /// One step of a tools/call, as the tool observer hears it. A call that answers at once is
     /// heard once, Finished; one that answers NotFinished is heard Started, then Finished or
-    /// Abandoned. Schema refusals, unknown tools and the other methods run no tool and are not
-    /// heard.
+    /// Abandoned; one refused before any tool ran (an unknown tool, arguments the schema refuses)
+    /// is heard once, Refused, with the refusal as its result. The other methods are not heard.
     struct ToolCallReport
     {
         u64 serial = 0; ///< the server's number for the call, the same in each of its reports
@@ -167,8 +168,8 @@ export namespace foundation::mcp
         StringView tool;
         const JsonValue* arguments = nullptr; ///< the validated arguments; never null
         ToolAnnotations annotations;          ///< the tool's
-        bool isError = false;                 ///< Finished: the tool failed
-        StringView result;                    ///< Finished: the answer's text, its JSON or the error message
+        bool isError = false;                 ///< Finished: the tool failed; Refused: always
+        StringView result;                    ///< Finished: the answer's text, its JSON or the error message; Refused: why
         Duration elapsed;                     ///< from the call's first entry to this report
     };
 
@@ -448,6 +449,23 @@ export namespace foundation::mcp
             report.elapsed = entry.clock.Elapsed();
             m_toolObserver(report);
         }
+        /// Answers a tools/call refused before any tool ran (-32602), and tells the observer.
+        [[nodiscard]] LineOutcome Refuse(const JsonValue& id, StringView tool, const JsonValue& args, ToolAnnotations annotations, String why)
+        {
+            if (m_toolObserver)
+            {
+                ToolCallReport report;
+                report.serial = m_nextSerial++;
+                report.phase = ToolCallPhase::Refused;
+                report.tool = tool;
+                report.arguments = &args;
+                report.annotations = annotations;
+                report.isError = true;
+                report.result = why.AsView();
+                m_toolObserver(report);
+            }
+            return detail::Answered(detail::MakeError(id, RpcError::InvalidParams, Move(why)));
+        }
         /// Tells the observer of a call that ended unanswered (only one heard Started before).
         void ReportAbandoned(const CallEntry& entry)
         {
@@ -557,28 +575,28 @@ export namespace foundation::mcp
             if (method == StringView(u8"tools/call"))
             {
                 const JsonValue nameVal = params.Get(u8"name");
-                if (!nameVal.IsString())
-                {
-                    return detail::Answered(detail::MakeError(id, RpcError::InvalidParams,
-                                             String(u8"tools/call requires a string 'name'")));
-                }
-                const Tool* tool = FindTool(nameVal.AsString().AsView());
-                if (tool == nullptr)
-                {
-                    return detail::Answered(detail::MakeError(id, RpcError::InvalidParams,
-                                             Format(u8"unknown tool '{}'", nameVal.AsString().AsView())));
-                }
                 JsonValue args = params.Get(u8"arguments");
                 if (args.IsNull())
                 {
                     args = JsonValue::MakeObject();
                 }
+                if (!nameVal.IsString())
+                {
+                    return Refuse(id, StringView{}, args, ToolAnnotations::ReadOnly(),
+                                  String(u8"tools/call requires a string 'name'"));
+                }
+                const String name = nameVal.AsString();
+                const Tool* tool = FindTool(name.AsView());
+                if (tool == nullptr)
+                {
+                    return Refuse(id, name.AsView(), args, ToolAnnotations::ReadOnly(),
+                                  Format(u8"unknown tool '{}'", name.AsView()));
+                }
                 Optional<String> schemaError = ValidateArgs(args, tool->inputSchema);
                 if (schemaError.HasValue())
                 {
-                    return detail::Answered(detail::MakeError(
-                        id, RpcError::InvalidParams,
-                        Format(u8"{}: {}", tool->name.AsView(), schemaError.Value().AsView())));
+                    return Refuse(id, tool->name.AsView(), args, tool->annotations,
+                                  Format(u8"{}: {}", tool->name.AsView(), schemaError.Value().AsView()));
                 }
                 // Run the tool. A tool that is not finished is asked again next pump (same
                 // line, same args). Both finished outcomes are successful JSON-RPC responses;

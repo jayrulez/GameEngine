@@ -103,12 +103,12 @@ namespace
         [[nodiscard]] StringView Text(StringView id) { return Find<gui::Label>(id)->GetText(); }
 
         void Call(u64 serial, StringView tool, StringView arguments, ToolAnnotations annotations, bool isError, StringView result, i64 at,
-                  f64 seconds = 0.002)
+                  f64 seconds = 0.002, ToolCallPhase phase = ToolCallPhase::Finished)
         {
             const JsonValue args = foundation::json::Parse(arguments).value;
             ToolCallReport report;
             report.serial = serial;
-            report.phase = ToolCallPhase::Finished;
+            report.phase = phase;
             report.tool = tool;
             report.arguments = &args;
             report.annotations = annotations;
@@ -170,15 +170,18 @@ TEST_CASE("mcp panel: the calls newest first with the host's events, the filters
     bed.Call(1, u8"scene_read", u8"{\"path\":\"Content/Scenes/Level1.scene\"}", ToolAnnotations::ReadOnly(), false, u8"{}", 101);
     bed.Call(2, u8"component_set", u8"{\"entity\":\"Lamp 3\",\"value\":4.5}", ToolAnnotations::Overwrites(), false, u8"{\"after\":4.5}", 102);
     bed.Call(3, u8"script_validate", u8"{\"path\":\"Scripts/Player.luau\"}", ToolAnnotations::ReadOnly(), true, u8"'speed' is not a member", 103);
+    bed.Call(4, u8"scene_write", u8"{}", ToolAnnotations::Overwrites(), true, u8"scene_write: missing required field 'source'", 104, 0.0,
+             ToolCallPhase::Refused);
     bed.panel->Update();
 
-    REQUIRE(bed.panel->ShownCount() == 4u);
-    CHECK(bed.panel->ShownEntry(0)->tool == u8"script_validate"); // newest first
-    CHECK(bed.panel->ShownEntry(3)->tool == u8"Listening on 127.0.0.1:7405");
+    REQUIRE(bed.panel->ShownCount() == 5u);
+    CHECK(bed.panel->ShownEntry(0)->tool == u8"scene_write"); // newest first
+    CHECK(bed.panel->ShownEntry(1)->tool == u8"script_validate");
+    CHECK(bed.panel->ShownEntry(4)->tool == u8"Listening on 127.0.0.1:7405");
     CHECK_FALSE(bed.Find<gui::Label>(u8"mcp-empty")->IsDisplayed());
-    CHECK(bed.Find<gui::Button>(u8"mcp-all")->GetText() == StringView(u8"All  3")); // calls, not events
-    CHECK(bed.Find<gui::Button>(u8"mcp-edits")->GetText() == StringView(u8"Edits  1"));
-    CHECK(bed.Find<gui::Button>(u8"mcp-failed")->GetText() == StringView(u8"Failed  1"));
+    CHECK(bed.Find<gui::Button>(u8"mcp-all")->GetText() == StringView(u8"All  4")); // calls, not events
+    CHECK(bed.Find<gui::Button>(u8"mcp-edits")->GetText() == StringView(u8"Edits  1")); // a refused write is no edit
+    CHECK(bed.Find<gui::Button>(u8"mcp-failed")->GetText() == StringView(u8"Failed  2")); // a failure and a refusal
 
     bed.Click(u8"mcp-edits");
     CHECK(bed.panel->GetFilter() == McpPanel::Filter::Edits);
@@ -187,8 +190,13 @@ TEST_CASE("mcp panel: the calls newest first with the host's events, the filters
     CHECK(bed.Find<gui::Button>(u8"mcp-edits")->HasClass(u8"checked"));
     CHECK_FALSE(bed.Find<gui::Button>(u8"mcp-all")->HasClass(u8"checked"));
     bed.Click(u8"mcp-failed");
-    REQUIRE(bed.panel->ShownCount() == 1u);
-    CHECK(bed.panel->ShownEntry(0)->tool == u8"script_validate");
+    REQUIRE(bed.panel->ShownCount() == 2u);
+    CHECK(bed.panel->ShownEntry(0)->tool == u8"scene_write");
+    CHECK(bed.panel->ShownEntry(1)->tool == u8"script_validate");
+    bed.panel->Select(0); // the refusal: its reason under Error
+    CHECK(bed.Text(u8"mcp-detail-outcome") == StringView(u8"Refused"));
+    CHECK(bed.Text(u8"mcp-result-title") == StringView(u8"Error"));
+    CHECK(bed.Find<gui::TextArea>(u8"mcp-result")->GetText() == StringView(u8"scene_write: missing required field 'source'"));
     bed.Click(u8"mcp-all");
 
     // The search reads a call's tool, its summary and its arguments.

@@ -41,6 +41,7 @@ export namespace editor::app
             Done,
             Failed,
             Abandoned, ///< its caller went away, or the host stopped, before it answered
+            Refused,   ///< no tool ran: an unknown tool, or arguments its schema refuses
         };
 
         struct Entry
@@ -73,7 +74,7 @@ export namespace editor::app
                 added.kind = Kind::Call;
                 added.tool = String(report.tool);
                 added.arguments = report.arguments != nullptr ? report.arguments->ToString() : String(u8"{}");
-                added.changes = report.annotations.ChangesAuthoredData();
+                added.changes = report.phase != foundation::mcp::ToolCallPhase::Refused && report.annotations.ChangesAuthoredData();
                 added.at = at - static_cast<i64>(report.elapsed.AsSeconds());
                 entry = &Add(Move(added));
                 m_inFlight.PushBack(InFlight{entry->id, report.serial});
@@ -90,6 +91,10 @@ export namespace editor::app
                 break;
             case foundation::mcp::ToolCallPhase::Abandoned:
                 entry->outcome = Outcome::Abandoned;
+                break;
+            case foundation::mcp::ToolCallPhase::Refused:
+                entry->outcome = Outcome::Refused;
+                entry->result = String(report.result);
                 break;
             }
             ForgetRunning(entry->id);
@@ -150,14 +155,14 @@ export namespace editor::app
         /// Changes with every record, so a view knows when to refresh.
         [[nodiscard]] u64 Revision() const noexcept { return m_revision; }
 
-        /// One line saying what a call was about, for its row: a failure's first line of error, else
+        /// One line saying what a call was about, for its row: a failure's or a refusal's first line, else
         /// its arguments as `name: value` pairs (strings bare, the rest as JSON), cut at `maxLength`.
         [[nodiscard]] static String Summary(const Entry& entry, usize maxLength = 160)
         {
             String text;
             if (!entry.IsCall())
                 text = entry.tool;
-            else if (entry.outcome == Outcome::Failed)
+            else if (entry.outcome == Outcome::Failed || entry.outcome == Outcome::Refused)
             {
                 const StringView error = entry.result.AsView();
                 const usize end = error.Find(StringView(u8"\n"));

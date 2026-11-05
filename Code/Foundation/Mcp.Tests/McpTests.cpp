@@ -427,8 +427,8 @@ TEST_CASE("mcp: framing survives garbage (-32700) and drives multiple messages; 
 
 // --- Observer -------------------------------------------------------------
 
-TEST_CASE("mcp: the tool observer hears every finished tools/call with its arguments, answer "
-          "and annotations, and nothing else")
+TEST_CASE("mcp: the tool observer hears every tools/call with its arguments, answer and "
+          "annotations, a refused one as Refused, and no other method")
 {
     McpServer s;
     Setup(s);
@@ -436,10 +436,9 @@ TEST_CASE("mcp: the tool observer hears every finished tools/call with its argum
     Array<u64> serials;
     s.SetToolObserver([&heard, &serials](const ToolCallReport& report)
                       {
-                          CHECK(report.phase == ToolCallPhase::Finished);
                           REQUIRE(report.arguments != nullptr);
-                          heard.PushBack(Format(u8"{}:{}:{}:{}", report.tool, report.isError ? u8"err" : u8"ok",
-                                                report.arguments->ToString(), report.result));
+                          heard.PushBack(Format(u8"{}:{}:{}:{}:{}", report.phase == ToolCallPhase::Refused ? u8"refused" : u8"finished",
+                                                report.tool, report.isError ? u8"err" : u8"ok", report.arguments->ToString(), report.result));
                           CHECK(report.annotations.readOnly);
                           CHECK(report.elapsed >= Duration::Zero());
                           serials.PushBack(report.serial);
@@ -449,17 +448,21 @@ TEST_CASE("mcp: the tool observer hears every finished tools/call with its argum
                        u8"{\"name\":\"echo\",\"arguments\":{\"message\":\"hi\"}}}");
     (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":"
                        u8"{\"name\":\"fail\"}}");
-    // Not a finished tool run: a schema refusal (-32602), an unknown tool, a ping.
+    // Refused before any tool ran (-32602): arguments the schema refuses, an unknown tool. Not a
+    // tools/call at all: a ping.
     (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":"
                        u8"{\"name\":\"echo\",\"arguments\":{}}}");
     (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":"
                        u8"{\"name\":\"nope\"}}");
     (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}");
 
-    REQUIRE(heard.Size() == 2);
-    CHECK(heard[0] == u8"echo:ok:{\"message\":\"hi\"}:{\"echoed\":\"hi\"}");
-    CHECK(heard[1] == u8"fail:err:{}:cook failed: bad input"); // no arguments reads as {}
+    REQUIRE(heard.Size() == 4);
+    CHECK(heard[0] == u8"finished:echo:ok:{\"message\":\"hi\"}:{\"echoed\":\"hi\"}");
+    CHECK(heard[1] == u8"finished:fail:err:{}:cook failed: bad input"); // no arguments reads as {}
+    CHECK(heard[2].AsView().StartsWith(u8"refused:echo:err:{}:echo: "));
+    CHECK(heard[3] == u8"refused:nope:err:{}:unknown tool 'nope'");
     CHECK(serials[0] != serials[1]);
+    CHECK(serials[2] != serials[3]);
 }
 
 TEST_CASE("mcp: a tool's annotations say whether it changes authored data")

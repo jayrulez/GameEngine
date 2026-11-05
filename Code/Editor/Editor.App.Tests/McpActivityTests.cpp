@@ -86,6 +86,17 @@ TEST_CASE("mcp activity: an at-once call is one finished entry; a running one is
     CHECK(activity.At(3).outcome == McpActivity::Outcome::Abandoned);
     activity.Record(Report(9, ToolCallPhase::Abandoned, u8"pie_run", none, ToolAnnotations::Adjusts()), 1031);
     CHECK(activity.Size() == 4u);
+
+    // Refused before any tool ran: an entry of its own with the refusal, never an edit.
+    activity.Record(Report(10, ToolCallPhase::Refused, u8"scene_write", none, ToolAnnotations::Overwrites(), true,
+                           u8"scene_write: missing required field 'source'"),
+                    1040);
+    REQUIRE(activity.Size() == 5u);
+    CHECK(activity.At(4).outcome == McpActivity::Outcome::Refused);
+    CHECK_FALSE(activity.At(4).changes);
+    CHECK(activity.At(4).result == u8"scene_write: missing required field 'source'");
+    CHECK(McpActivity::Summary(activity.At(4)) == u8"scene_write: missing required field 'source'");
+    CHECK(activity.RunningCall() == nullptr);
 }
 
 TEST_CASE("mcp activity: the host's events sit between the calls, and a stop abandons what still runs")

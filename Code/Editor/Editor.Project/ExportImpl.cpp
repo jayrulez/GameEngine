@@ -1387,6 +1387,13 @@ namespace editor
                    StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CXX_COMPILER)));
         const String defPackages = Format(u8"-DENGINE_PROJECT_PLUGINS={}", packages);
         const String defSuffix = Format(u8"-DBUILDSYSTEM_OUTPUT_SUFFIX={}", suffix);
+        // The editor's own configuration, not a fixed one. A plugin is loaded into this process, so
+        // a mismatch puts two C runtimes in it (a Debug plugin brings ucrtbased and VCRUNTIME140D
+        // alongside the editor's ucrtbase and VCRUNTIME140) and the plugin's inline code, built
+        // against different library internals, runs against the engine DLLs already loaded. It
+        // links and loads; it fails later, where memory allocated on one side is freed on the
+        // other. The compiler is pinned to this editor's for the same reason, two lines above.
+        const String defBuild = Format(u8"-DCMAKE_BUILD_TYPE={}", GetBuildConfigName());
         const StringView cfgArgs[] = {u8"-S",
                                       engineRoot,
                                       u8"-B",
@@ -1394,7 +1401,7 @@ namespace editor
                                       u8"-G",
                                       u8"Ninja",
                                       defCompiler.AsView(),
-                                      u8"-DCMAKE_BUILD_TYPE=Debug",
+                                      defBuild.AsView(),
                                       u8"-DENGINE_SHARED_LIBS=ON",
                                       defPackages.AsView(),
                                       defSuffix.AsView()};

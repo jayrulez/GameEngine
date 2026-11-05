@@ -708,7 +708,7 @@ namespace editor
             u8"state}. Runs are real frames: a time lands within a frame of where it was asked, so "
             u8"compare with tolerances. Start from pie_start for a reproducible run. One run per "
             u8"instance at a time.",
-            Move(schema), ToolAnnotations::Creates(),
+            Move(schema), ToolAnnotations::Adjusts(),
             [ctx, runsPtr, keep = Move(runs)](foundation::mcp::ToolCall& call,
                                               const JsonValue& args) -> ToolOutcome
             { return Handle(*ctx, *runsPtr, call, args); });

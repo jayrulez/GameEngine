@@ -148,7 +148,8 @@ entity outside a run, each running behaviour's properties under `live` beside wh
 ## First moves in a session
 
 1. `tools/list` - read the real surface before guessing; descriptions carry the contract, and
-   each tool's `annotations` say what it does to the project: `readOnlyHint` (changes nothing),
+   each tool's `annotations` say what it does to the project: `readOnlyHint` (changes nothing of
+   it; a screenshot or a capture written outside it does not count),
    `destructiveHint` (overwrites what exists - the scene and prefab writes), `idempotentHint`.
 2. `host_info` - pid (kill a hung host by it) and `buildStamp`. After rebuilding the
    engine, compare stamps: a stale host serves yesterday's engine.

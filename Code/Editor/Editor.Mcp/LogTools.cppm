@@ -154,7 +154,7 @@ export namespace editor::mcp
                 .Str(u8"message", u8"the marker text", true)
                 .Enum(u8"level", detail::LogLevelChoices(), u8"log level (default info)")
                 .Build(),
-                foundation::mcp::ToolAnnotations::Creates(),
+                foundation::mcp::ToolAnnotations::Adjusts(),
             [buffer](const JsonValue& args) -> ToolResult
             {
                 const String message = args.Get(u8"message").AsString();

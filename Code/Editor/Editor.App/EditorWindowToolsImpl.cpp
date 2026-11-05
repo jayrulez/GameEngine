@@ -92,7 +92,7 @@ namespace editor::app
                 .Enum(u8"window", WindowChoices(), u8"\"main\" (default) or \"all\" its windows")
                 .Str(u8"path", u8"the PNG to write (default: a new file under <user-data>/screenshots)")
                 .Build(),
-            ToolAnnotations::Creates(),
+            ToolAnnotations::ReadOnly(),
             [state](const JsonValue& args) -> ToolOutcome
             {
                 if (state->pending)

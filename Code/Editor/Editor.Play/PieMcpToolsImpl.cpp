@@ -379,7 +379,7 @@ namespace editor
                 .Boolean(u8"newInstance", u8"open another Game tab with an instance of its own "
                                           u8"(Play New Instance) instead of the primary")
                 .Build(),
-            ToolAnnotations::Creates(),
+            ToolAnnotations::Adjusts(),
             [ctx](foundation::mcp::ToolCall& call, const JsonValue& args) -> ToolOutcome
             { return Start(*ctx, call, args); });
 
@@ -559,7 +559,7 @@ namespace editor
                 .Str(u8"pie", kPieArgument)
                 .Str(u8"path", u8"the PNG to write (default: a new file under <user-data>/screenshots)")
                 .Build(),
-            ToolAnnotations::Creates(),
+            ToolAnnotations::ReadOnly(),
             [ctx, serialPtr, keep = Move(serial)](foundation::mcp::ToolCall& call,
                                                    const JsonValue& args) -> ToolOutcome
             { return Screenshot(*ctx, *serialPtr, call, args); });

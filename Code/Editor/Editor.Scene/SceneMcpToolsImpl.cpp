@@ -1398,7 +1398,7 @@ namespace editor
                 .Str(u8"page", kPageArgument)
                 .Str(u8"path", u8"the PNG to write (default: a new file under <user-data>/screenshots)")
                 .Build(),
-            ToolAnnotations::Creates(),
+            ToolAnnotations::ReadOnly(),
             [ctx, pendingPtr, keep = Move(pending)](const JsonValue& args) -> foundation::mcp::ToolOutcome
             {
                 Result<AddressedPage, String> addressed = ResolveScenePage(*ctx, args);

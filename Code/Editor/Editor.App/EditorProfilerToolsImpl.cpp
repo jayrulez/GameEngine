@@ -195,7 +195,7 @@ namespace editor::app
             SchemaBuilder()
                 .Number(u8"seconds", u8"How long to capture (default 3, at most 30).")
                 .Build(),
-            ToolAnnotations::Creates(),
+            ToolAnnotations::ReadOnly(),
             [state](ToolCall& call, const JsonValue& args) -> ToolOutcome
             {
                 const ProfilerToolSeams& seams = state->seams;

@@ -23,6 +23,14 @@
 // fragment, so this makes it uniformly available. <new> is a tiny header.
 #include <new>
 
+// std::strong_ordering's named constants (less/equal/greater) are static data members that
+// the builtin <=> references. Reaching them only through a BMI leaves them defined in the
+// module's own object, which on PE is inside the DLL and unexported, so a consumer that
+// inlines an operator<=> cannot link. Including <compare> textually makes every TU emit its
+// own COMDAT. Only optimized shared builds hit this: unoptimized ones keep the comparison
+// out of line in the DLL.
+#include <compare>
+
 // ---------------------------------------------------------------------------
 // Compiler detection
 // ---------------------------------------------------------------------------

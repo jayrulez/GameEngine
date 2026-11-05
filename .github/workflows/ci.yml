@@ -541,6 +541,39 @@ jobs:
 
       - name: Build editor distribution
         run: pwsh scripts/build-editor-dist.ps1 -Out dist/Editor-Win64
+      # Only when the build failed: what the linker made of Editor.App's import library, which the
+      # editor libraries linking against it have called corrupt (LNK1127) in this shared
+      # RelWithDebInfo build: its size, what lib and dumpbin say of it, the .def it was made from
+      # (its longest names, any byte outside printable ASCII), and an import library made from the
+      # same .def by lib.exe alone, to tell the .def from the link.
+      - name: Diagnose the Editor.App import library
+        if: failure()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $lib = 'Bin/RelWithDebInfo/Win64-MSVC-Shared/lib/Editor.App.lib'
+          $def = 'build/msvc-reldbg-shared/Code/Editor/Editor.App/Editor.App_exports.def'
+          if (Test-Path $lib) { Get-Item $lib | Format-List FullName, Length, LastWriteTime } else { "no $lib" }
+          '--- lib /list (last lines)'
+          lib /nologo /list $lib 2>&1 | Select-Object -Last 15
+          '--- dumpbin /headers: errors and warnings'
+          dumpbin /nologo /headers $lib 2>&1 | Select-String -Pattern 'error|corrupt|warning|invalid' | Select-Object -First 20
+          '--- dumpbin /linkermember:1 (first lines)'
+          dumpbin /nologo /linkermember:1 $lib 2>&1 | Select-Object -First 25
+          if (Test-Path $def) {
+            $lines = Get-Content $def
+            "--- the .def: $($lines.Count) lines; the five longest:"
+            $lines | Sort-Object Length -Descending | Select-Object -First 5 |
+              ForEach-Object { "$($_.Length): $($_.Substring(0, [Math]::Min(300, $_.Length)))" }
+            '--- lines with a byte outside printable ASCII:'
+            $lines | Where-Object { $_ -match '[^\x20-\x7E]' } | Select-Object -First 10
+            '--- an import library from the same .def, by lib.exe alone:'
+            lib /nologo /machine:x64 /def:$def /out:$env:RUNNER_TEMP/EditorAppFromDef.lib 2>&1 | Select-Object -Last 10
+            dumpbin /nologo /headers $env:RUNNER_TEMP/EditorAppFromDef.lib 2>&1 |
+              Select-String -Pattern 'error|corrupt|warning|invalid' | Select-Object -First 10
+          } else { "no $def" }
+          Get-PSDrive D | Format-List Used, Free
+          exit 0
       # Fail LOUDLY if the Vulkan backend did not make it into the artifact. find_package(Vulkan)
       # failing is only a STATUS message, so a missing SDK silently produces an editor with no
       # Vulkan backend - and since Vulkan is the default backend, that artifact cannot start on a

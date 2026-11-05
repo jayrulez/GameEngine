@@ -163,8 +163,11 @@ export namespace editor::app
                                                String(reinterpret_cast<const char8_t*>(BuildStamp())));
             m_host->screen = [self]() { return self->m_services.screen ? self->m_services.screen() : StringView{}; };
             editor::EditorContext* context = m_services.context;
-            m_host->OnToolFinished = [context](StringView tool, bool isError)
-            { context->SetStatus(Format(u8"MCP: {} {}", tool, isError ? u8"failed" : u8"done")); };
+            m_host->OnCall = [context](const foundation::mcp::ToolCallReport& report)
+            {
+                if (report.phase == foundation::mcp::ToolCallPhase::Finished)
+                    context->SetStatus(Format(u8"MCP: {} {}", report.tool, report.isError ? u8"failed" : u8"done"));
+            };
 
             PageToolSeams pages;
             pages.context = m_services.context;

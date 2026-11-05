@@ -77,9 +77,9 @@ export namespace editor::app
         [[nodiscard]] bool HasPendingRequest() const noexcept { return m_http.HasPendingRequest(); }
         [[nodiscard]] foundation::mcp::McpServer& Server() noexcept { return m_server; }
 
-        /// Called with (tool, isError) after every finished tools/call, so the application can
-        /// show the agent's activity.
-        Function<void(StringView, bool)> OnToolFinished;
+        /// Told of each tools/call as it starts running, finishes or is abandoned, so the
+        /// application can show the agent's activity.
+        Function<void(const foundation::mcp::ToolCallReport&)> OnCall;
         /// What the window shows, for host_info's `screen` ("projectManager" or "editor"; empty:
         /// it follows whether a project is open).
         Function<StringView()> screen;

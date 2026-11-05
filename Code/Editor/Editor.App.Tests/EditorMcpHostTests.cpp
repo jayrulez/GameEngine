@@ -138,8 +138,8 @@ TEST_CASE("editor-mcp-host: serves the engine surface over the live project on l
         context.ClosePage(page);
     }
     Array<String> finished;
-    host.OnToolFinished = [&finished](StringView tool, bool isError)
-    { finished.PushBack(Format(u8"{}:{}", tool, isError ? u8"err" : u8"ok")); };
+    host.OnCall = [&finished](const foundation::mcp::ToolCallReport& report)
+    { finished.PushBack(Format(u8"{}:{}", report.tool, report.isError ? u8"err" : u8"ok")); };
     CHECK_FALSE(host.IsRunning());
 
     app::EditorMcpHostConfig config;

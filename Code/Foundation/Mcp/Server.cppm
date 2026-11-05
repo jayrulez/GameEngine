@@ -139,6 +139,42 @@ export namespace foundation::mcp
         [[nodiscard]] static ToolAnnotations Rebuilds() { return {false, false, true, false}; }
         /// Changes the editor's session (a page opened, a selection) and no authored data.
         [[nodiscard]] static ToolAnnotations Adjusts() { return {false, false, true, false}; }
+
+        /// Whether the tool changes authored data: it creates, overwrites or deletes (Creates,
+        /// Overwrites, Deletes), where a read, a rebuild of derived output or a change to the
+        /// editor's session leaves the project's data as it was.
+        [[nodiscard]] bool ChangesAuthoredData() const noexcept { return !readOnly && (destructive || !idempotent); }
+    };
+
+    /// Where a tools/call is when the tool observer hears of it.
+    enum class ToolCallPhase : u8
+    {
+        Started,   ///< the tool answered NotFinished the first time: it keeps running across pumps
+        Finished,  ///< the tool answered
+        Abandoned, ///< it ended unanswered: its caller went away, or its tool was unregistered
+    };
+
+    /// One step of a tools/call, as the tool observer hears it. A call that answers at once is
+    /// heard once, Finished; one that answers NotFinished is heard Started, then Finished or
+    /// Abandoned. Schema refusals, unknown tools and the other methods run no tool and are not
+    /// heard.
+    struct ToolCallReport
+    {
+        u64 serial = 0; ///< the server's number for the call, the same in each of its reports
+        ToolCallPhase phase = ToolCallPhase::Finished;
+        StringView tool;
+        const JsonValue* arguments = nullptr; ///< the validated arguments; never null
+        ToolAnnotations annotations;          ///< the tool's
+        bool isError = false;                 ///< Finished: the tool failed
+        StringView result;                    ///< Finished: the answer's text, its JSON or the error message
+        Duration elapsed;                     ///< from the call's first entry to this report
+    };
+
+    /// Who connected, as its initialize request named itself (clientInfo).
+    struct McpClientInfo
+    {
+        String name;
+        String version;
     };
 
     struct Tool
@@ -214,7 +250,9 @@ export namespace foundation::mcp
         Array<ResourceProvider> m_resourceProviders;
         String m_serverName = String(ENGINE_ID u8"-mcp"); // a host names itself with SetServerInfo
         String m_serverVersion;
-        Function<void(StringView, bool)> m_toolObserver;
+        Function<void(const ToolCallReport&)> m_toolObserver;
+        McpClientInfo m_client;
+        u64 m_nextSerial = 1;
 
         /// A call in flight, known by the transport's id, or by its line when it gave none.
         struct CallEntry
@@ -222,6 +260,10 @@ export namespace foundation::mcp
             ToolCall call;
             String line; ///< the line, when the call has no id
             String tool; ///< the tool it calls
+            u64 serial = 0;
+            JsonValue arguments; ///< what it was called with, for its reports
+            ToolAnnotations annotations;
+            Stopwatch clock; ///< since its first entry
         };
         /// The calls that answered NotFinished and have not answered since.
         Array<CallEntry> m_calls;
@@ -242,13 +284,15 @@ export namespace foundation::mcp
             m_serverVersion = Move(version);
         }
 
-        /// Told `(toolName, isError)` after every finished tools/call, on the dispatching
-        /// thread, so a host can refresh what a write tool changed or log the agent's activity.
-        /// Not-finished attempts and protocol failures (no tool ran) are not reported.
-        void SetToolObserver(Function<void(StringView, bool)> observer)
+        /// Told of each tools/call as it starts running across pumps, finishes or is abandoned
+        /// (ToolCallReport), on the dispatching thread, so a host can refresh what a write tool
+        /// changed or show the agent's activity.
+        void SetToolObserver(Function<void(const ToolCallReport&)> observer)
         {
             m_toolObserver = Move(observer);
         }
+        /// The client that last initialized, by its clientInfo; empty before any did.
+        [[nodiscard]] const McpClientInfo& Client() const noexcept { return m_client; }
         void RegisterTool(String name, String description, JsonValue schema,
                           ToolAnnotations annotations, ToolHandler handler)
         {
@@ -275,6 +319,7 @@ export namespace foundation::mcp
             {
                 if (m_calls[i].call.id == callId)
                 {
+                    ReportAbandoned(m_calls[i]);
                     m_calls.RemoveAt(i);
                     return;
                 }
@@ -320,6 +365,7 @@ export namespace foundation::mcp
                 {
                     if (m_calls[c - 1].tool.AsView() == name)
                     {
+                        ReportAbandoned(m_calls[c - 1]);
                         m_calls.RemoveAt(c - 1);
                     }
                 }
@@ -383,6 +429,32 @@ export namespace foundation::mcp
         }
 
     private:
+        void Report(const CallEntry& entry, ToolCallPhase phase, bool isError = false, StringView result = {})
+        {
+            if (!m_toolObserver)
+            {
+                return;
+            }
+            ToolCallReport report;
+            report.serial = entry.serial;
+            report.phase = phase;
+            report.tool = entry.tool.AsView();
+            report.arguments = &entry.arguments;
+            report.annotations = entry.annotations;
+            report.isError = isError;
+            report.result = result;
+            report.elapsed = entry.clock.Elapsed();
+            m_toolObserver(report);
+        }
+        /// Tells the observer of a call that ended unanswered (only one heard Started before).
+        void ReportAbandoned(const CallEntry& entry)
+        {
+            if (entry.call.isReentry)
+            {
+                Report(entry, ToolCallPhase::Abandoned);
+            }
+        }
+
         /// The index of the call in flight under the current identity, a new one started when
         /// there is none.
         [[nodiscard]] usize FindOrStartCall()
@@ -398,6 +470,8 @@ export namespace foundation::mcp
             }
             CallEntry entry;
             entry.call.id = m_callId;
+            entry.serial = m_nextSerial++;
+            entry.clock = Stopwatch::StartNew();
             if (m_callId == 0)
             {
                 entry.line = String(m_callLine);
@@ -434,6 +508,11 @@ export namespace foundation::mcp
         {
             if (method == StringView(u8"initialize"))
             {
+                const JsonValue client = params.Get(u8"clientInfo");
+                const JsonValue clientName = client.Get(u8"name");
+                const JsonValue clientVersion = client.Get(u8"version");
+                m_client.name = clientName.IsString() ? clientName.AsString() : String();
+                m_client.version = clientVersion.IsString() ? clientVersion.AsString() : String();
                 JsonValue result = JsonValue::MakeObject();
                 // We support only our pinned revision; echo it (it equals the client's when supported).
                 result.Set(u8"protocolVersion", JsonValue::MakeString(kProtocolVersion));
@@ -504,37 +583,37 @@ export namespace foundation::mcp
                 // a tool failure is reported as isError content, not a protocol error.
                 // The call this is: the one in flight under this identity, or a new one.
                 const usize callIndex = FindOrStartCall();
-                m_calls[callIndex].tool = tool->name;
+                if (!m_calls[callIndex].call.isReentry)
+                {
+                    m_calls[callIndex].tool = tool->name;
+                    m_calls[callIndex].arguments = args;
+                    m_calls[callIndex].annotations = tool->annotations;
+                }
                 ToolOutcome outcome = tool->callHandler ? tool->callHandler(m_calls[callIndex].call, args)
                                                         : tool->handler(args);
                 if (!outcome.IsFinished())
                 {
-                    m_calls[callIndex].call.isReentry = true;
+                    if (!m_calls[callIndex].call.isReentry)
+                    {
+                        m_calls[callIndex].call.isReentry = true;
+                        Report(m_calls[callIndex], ToolCallPhase::Started);
+                    }
                     return LineOutcome{LineState::NotFinished, String()};
                 }
+                CallEntry finished = Move(m_calls[callIndex]);
                 m_calls.RemoveAt(callIndex); // answered: its state goes
                 ToolResult& answer = outcome.answer.Value();
+                const bool isError = !answer.HasValue();
+                const String text = isError ? Move(answer.Error()) : answer.Value().ToString();
                 JsonValue item = JsonValue::MakeObject();
                 item.Set(u8"type", JsonValue::MakeString(u8"text"));
+                item.Set(u8"text", JsonValue::MakeString(text));
                 JsonValue result = JsonValue::MakeObject();
-                if (answer.HasValue())
-                {
-                    item.Set(u8"text", JsonValue::MakeString(answer.Value().ToString()));
-                    result.Set(u8"isError", JsonValue::MakeBool(false));
-                }
-                else
-                {
-                    item.Set(u8"text", JsonValue::MakeString(Move(answer.Error())));
-                    result.Set(u8"isError", JsonValue::MakeBool(true));
-                }
+                result.Set(u8"isError", JsonValue::MakeBool(isError));
                 JsonValue content = JsonValue::MakeArray();
                 content.Add(Move(item));
-                const bool isError = result.Get(u8"isError").AsBool();
                 result.Set(u8"content", Move(content));
-                if (m_toolObserver)
-                {
-                    m_toolObserver(tool->name.AsView(), isError);
-                }
+                Report(finished, ToolCallPhase::Finished, isError, text.AsView());
                 return detail::Answered(detail::MakeResult(id, Move(result)));
             }
             if (method == StringView(u8"resources/list"))

@@ -427,14 +427,23 @@ TEST_CASE("mcp: framing survives garbage (-32700) and drives multiple messages; 
 
 // --- Observer -------------------------------------------------------------
 
-TEST_CASE("mcp: the tool observer hears every finished tools/call by name, with its outcome, "
-          "and nothing else")
+TEST_CASE("mcp: the tool observer hears every finished tools/call with its arguments, answer "
+          "and annotations, and nothing else")
 {
     McpServer s;
     Setup(s);
     Array<String> heard;
-    s.SetToolObserver([&heard](StringView tool, bool isError)
-                      { heard.PushBack(Format(u8"{}:{}", tool, isError ? u8"err" : u8"ok")); });
+    Array<u64> serials;
+    s.SetToolObserver([&heard, &serials](const ToolCallReport& report)
+                      {
+                          CHECK(report.phase == ToolCallPhase::Finished);
+                          REQUIRE(report.arguments != nullptr);
+                          heard.PushBack(Format(u8"{}:{}:{}:{}", report.tool, report.isError ? u8"err" : u8"ok",
+                                                report.arguments->ToString(), report.result));
+                          CHECK(report.annotations.readOnly);
+                          CHECK(report.elapsed >= Duration::Zero());
+                          serials.PushBack(report.serial);
+                      });
 
     (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
                        u8"{\"name\":\"echo\",\"arguments\":{\"message\":\"hi\"}}}");
@@ -448,8 +457,35 @@ TEST_CASE("mcp: the tool observer hears every finished tools/call by name, with 
     (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}");
 
     REQUIRE(heard.Size() == 2);
-    CHECK(heard[0] == u8"echo:ok");
-    CHECK(heard[1] == u8"fail:err");
+    CHECK(heard[0] == u8"echo:ok:{\"message\":\"hi\"}:{\"echoed\":\"hi\"}");
+    CHECK(heard[1] == u8"fail:err:{}:cook failed: bad input"); // no arguments reads as {}
+    CHECK(serials[0] != serials[1]);
+}
+
+TEST_CASE("mcp: a tool's annotations say whether it changes authored data")
+{
+    using foundation::mcp::ToolAnnotations;
+    CHECK(ToolAnnotations::Creates().ChangesAuthoredData());
+    CHECK(ToolAnnotations::Overwrites().ChangesAuthoredData());
+    CHECK(ToolAnnotations::Deletes().ChangesAuthoredData());
+    CHECK_FALSE(ToolAnnotations::ReadOnly().ChangesAuthoredData());
+    CHECK_FALSE(ToolAnnotations::Rebuilds().ChangesAuthoredData());
+    CHECK_FALSE(ToolAnnotations::Adjusts().ChangesAuthoredData());
+}
+
+TEST_CASE("mcp: the server keeps the client that last initialized, by its clientInfo")
+{
+    McpServer s;
+    Setup(s);
+    CHECK(s.Client().name.IsEmpty());
+    (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":"
+                       u8"\"2025-06-18\",\"clientInfo\":{\"name\":\"claude-code\",\"version\":\"2.1.0\"}}}");
+    CHECK(s.Client().name == u8"claude-code");
+    CHECK(s.Client().version == u8"2.1.0");
+    // A client that names nothing replaces the last one with nobody in particular.
+    (void)s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{}}");
+    CHECK(s.Client().name.IsEmpty());
+    CHECK(s.Client().version.IsEmpty());
 }
 
 // --- Not finished ---------------------------------------------------------
@@ -510,6 +546,52 @@ TEST_CASE("mcp: a tool that is not finished makes HandleLine say so, until the s
         u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"echo\","
         u8"\"arguments\":{\"message\":\"hi\"}}}"));
     CHECK(e.Get(u8"result").Get(u8"isError").AsBool() == false);
+}
+
+TEST_CASE("mcp: the tool observer hears a call that keeps running as Started once, then Finished "
+          "or Abandoned under the same serial")
+{
+    McpServer s;
+    SlowTool slow;
+    RegisterSlow(s, slow);
+    s.RegisterTool(u8"forever", u8"never finishes", SchemaBuilder().Build(), foundation::mcp::ToolAnnotations::Overwrites(),
+                   [](const JsonValue&) -> ToolOutcome { return ToolOutcome::NotFinished(); });
+    struct Heard
+    {
+        u64 serial;
+        ToolCallPhase phase;
+        String tool;
+        bool changes;
+    };
+    Array<Heard> heard;
+    s.SetToolObserver([&heard](const ToolCallReport& report)
+                      { heard.PushBack(Heard{report.serial, report.phase, String(report.tool), report.annotations.ChangesAuthoredData()}); });
+
+    CHECK(s.HandleLine(kSlowCall).state == LineState::NotFinished);
+    CHECK(s.HandleLine(kSlowCall).state == LineState::NotFinished);
+    CHECK(s.HandleLine(kSlowCall).state == LineState::Answered);
+    REQUIRE(heard.Size() == 2);
+    CHECK(heard[0].phase == ToolCallPhase::Started);
+    CHECK(heard[1].phase == ToolCallPhase::Finished);
+    CHECK(heard[0].serial == heard[1].serial);
+    CHECK(heard[1].tool == u8"slow");
+
+    // Its caller leaves: Abandoned. Its tool unregistered: Abandoned.
+    const StringView forever = u8"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"forever\"}}";
+    CHECK(s.HandleLine(forever, 41).state == LineState::NotFinished);
+    CHECK(s.HandleLine(forever, 41).state == LineState::NotFinished);
+    s.AbandonCall(41);
+    CHECK(s.HandleLine(forever, 42).state == LineState::NotFinished);
+    CHECK(s.UnregisterTool(u8"forever"));
+    REQUIRE(heard.Size() == 6);
+    CHECK(heard[2].phase == ToolCallPhase::Started);
+    CHECK(heard[2].changes);
+    CHECK(heard[3].phase == ToolCallPhase::Abandoned);
+    CHECK(heard[3].serial == heard[2].serial);
+    CHECK(heard[4].phase == ToolCallPhase::Started);
+    CHECK(heard[5].phase == ToolCallPhase::Abandoned);
+    CHECK(heard[5].serial == heard[4].serial);
+    CHECK(heard[4].serial != heard[2].serial);
 }
 
 TEST_CASE("mcp: Serve re-enters a not-finished line until it answers - one output line, the "

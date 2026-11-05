@@ -67,11 +67,11 @@ namespace editor::app
                                       return host;
                                   }});
         m_server.SetToolObserver(
-            [this](StringView tool, bool isError)
+            [this](const foundation::mcp::ToolCallReport& report)
             {
-                if (OnToolFinished)
+                if (OnCall)
                 {
-                    OnToolFinished(tool, isError);
+                    OnCall(report);
                 }
             });
     }

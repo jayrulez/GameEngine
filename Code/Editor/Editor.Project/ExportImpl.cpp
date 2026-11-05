@@ -1405,6 +1405,11 @@ namespace editor
                                       u8"-DENGINE_SHARED_LIBS=ON",
                                       defPackages.AsView(),
                                       defSuffix.AsView()};
+        // Logged at each step, because this runs for minutes: it configures a build of the engine
+        // beside the plugins, so the first one compiles the whole tree. Without these lines the
+        // only sign of it is a notice at the end, and a caller driving the editor over MCP (or
+        // reading the log after the fact) cannot tell a running build from a finished one.
+        LOG_INFO(u8"Export", u8"project plugins: configuring {} in '{}'", GetBuildConfigName(), devDir);
         const ProcessResult configured =
             RunProcess(cmakePath, Span<const StringView>(cfgArgs, 11));
         if (!configured.Ok())
@@ -1413,6 +1418,7 @@ namespace editor
                       configured.exitCode, configured.output);
             return Status{ErrorCode::Internal};
         }
+        LOG_INFO(u8"Export", u8"project plugins: building (the first build compiles the engine too)");
         const StringView buildArgs[] = {u8"--build", devDir.AsView(), u8"--target",
                                         u8"ProjectPlugins", u8"-j", u8"4"};
         const ProcessResult built = RunProcess(cmakePath, Span<const StringView>(buildArgs, 6));
@@ -1422,9 +1428,26 @@ namespace editor
                       built.exitCode, built.output);
             return Status{ErrorCode::Internal};
         }
-        // The configure lists every part's library (util_add_project_plugins).
+        // The configure writes this, so it is there from the configure on and says nothing about
+        // whether the libraries it names were built. Check the libraries themselves.
         const String listed = PathJoin(devDir.AsView(), engine::project::kPluginLibrariesFile);
-        return FileExists(listed.AsView()) ? Status{} : Status{ErrorCode::NotFound};
+        if (!FileExists(listed.AsView()))
+        {
+            LOG_ERROR(u8"Export", u8"the project plugins' build left no '{}'", listed);
+            return Status{ErrorCode::NotFound};
+        }
+        for (const engine::project::BuiltPluginPart& part : engine::project::ReadBuiltPluginParts(
+                 project.Directory(), EditorRootAllocator()))
+        {
+            if (!FileExists(part.library.AsView()))
+            {
+                LOG_ERROR(u8"Export", u8"the project plugins' build listed '{}' but did not build it",
+                          part.library);
+                return Status{ErrorCode::NotFound};
+            }
+        }
+        LOG_INFO(u8"Export", u8"project plugins: built - run Project > Reload Project Plugins to load them");
+        return Status{};
     }
 
     Status ApplyPresetDisplay(StringView outDir, const ExportPreset& preset)

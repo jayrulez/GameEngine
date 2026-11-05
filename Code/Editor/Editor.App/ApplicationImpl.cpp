@@ -1203,6 +1203,10 @@ namespace editor::app
             return;
         }
         editor::EditorContext* context = &m_context;
+        // Said when it starts, not only when it ends: the first build of a project's plugins
+        // configures and compiles the engine beside them, which takes minutes.
+        m_context.Notify(editor::NoticeKind::Info,
+                         u8"Building the project's plugins - this takes a few minutes (see Console).");
         (void)m_context.Tasks().Submit(
             u8"Plugin Build", [project](TaskContext&) -> Status { return editor::BuildProjectPlugins(*project); },
             [context](Status built) // main thread

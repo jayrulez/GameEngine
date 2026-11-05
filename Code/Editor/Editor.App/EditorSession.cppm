@@ -256,7 +256,13 @@ export namespace editor::app
             Result<Array<byte>> bytes = ReadFile(library, m_allocator);
             if (!bytes.HasValue())
             {
-                LOG_ERROR(u8"Editor", u8"plugin library '{}' cannot be read (Project > Build Project Plugins first)", library);
+                // The build names its libraries at configure time and makes them at the end, so a
+                // build still running is the usual reason one is missing. Saying "build them
+                // first" alone tells whoever is waiting on that build to do what they are doing.
+                LOG_ERROR(u8"Editor",
+                          u8"plugin library '{}' cannot be read - if Project > Build Project "
+                          u8"Plugins is running, wait for it to finish; otherwise run it",
+                          library);
                 return String{};
             }
             const String hotDir = PathJoin(project.Directory(), Format(u8"{}/plugins-hot", engine::project::kProjectCacheDir).AsView());

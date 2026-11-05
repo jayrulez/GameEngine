@@ -158,7 +158,9 @@ export namespace editor::app
                     Move(run.addNativeCode));
         detail::Add(actions,
                     detail::NeedsProject(context, detail::Declare(u8"project.buildPlugins", u8"Build Project Plugins",
-                                                                  u8"Build the project's own plugin packages on the job service",
+                                                                  u8"Build the project's own plugin packages on the job service. It starts the "
+                                                                  u8"build and returns; the build takes minutes and logs 'project plugins: built' "
+                                                                  u8"when it finishes. Reload Project Plugins then loads them",
                                                                   u8"Project/Build Project Plugins", 201)),
                     Move(run.buildPlugins));
         detail::Add(actions,

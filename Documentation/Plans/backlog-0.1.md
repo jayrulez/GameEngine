@@ -8,6 +8,27 @@
 
 ## Editor
 
+- **The waveform shows a limited master as a solid block** (user 2026-11-05, from the website's
+  screenshots): `BuildWaveformPeaks` keeps each of the clip page's 256 buckets' largest absolute
+  sample, and mastered music peaks at full scale in every one (PaperKid's `MusicBlockB.ogg`: every
+  bucket 1.01 to 1.17), so every bar is full height. The picture is true, but it shows nothing of
+  the music's shape. Draw an inner loudness layer (RMS per bucket) inside the peaks, as audio
+  editors do, so loud music still shows where it rises and falls
+  (`Code/Foundation/Audio/AudioEngineImpl.cpp` `BuildWaveformPeaks`,
+  `Code/Editor/Editor.Audio/WaveformView.cppm`, and the import window's preview, which uses both).
+- **A prefab page has no light of its own** (user 2026-11-05, from the website's screenshots): a
+  prefab opens with the scene defaults (a procedural sky for IBL and a 0.3 flat ambient), which
+  light the engine's materials, but a custom shader that lights only from lights and the flat
+  ambient (PaperKid's `Toon.hlsl`) renders nearly black there (PaperKid's Car prefab). Give the
+  prefab page an editor-only preview light while the prefab has none of its own, never saved with
+  it; decide whether a scene page with no light gets it too.
+- **The viewport's Overlays menu has no navmesh entry** (user 2026-11-05, from the website's
+  screenshots): Colliders is a view setting (`SceneViewSettings::showColliders`, editor state, never
+  in the scene), but the navmesh draws only through the scene's own
+  `NavigationSceneSettings.debugDraw` (`Engine.Navigation` `NavigationComponents.cppm`), so looking
+  at it means changing and saving the scene. Add a Navmesh entry beside Colliders that draws the
+  loaded navmesh as an editor overlay, the scene's setting left for the runtime.
+
 - **UAT checks for the user** (user 2026-11-02, from retiring the old smoke checklist): what the
   checklist held that only a person can judge, everything else having been checked, covered by
   tests or made obsolete (week 2026-10-24, "The old smoke checklist retired"):
@@ -397,6 +418,11 @@ website and the flagship game.
   so the same gap is still open on the clang side - and clang's answers differ by design (it emits
   its own COMDAT per TU where cl emits one in the owning module). Add the lane, or decide the
   distribution build covers it and say why here.
+
+- **PaperKid's music decodes above full scale** (user 2026-11-05, from the website's screenshots):
+  0.1% of `MusicBlockB.ogg`'s samples go past 1.0 (a brick-wall master and the Vorbis decode's
+  overshoot), which can clip a little at gain 1. Likely inaudible; Normalize, or a gain a little
+  under 1, on the music clips would remove it. Check the other music clips while there.
 
 - **`--screenshot` in the framework samples** (user 2026-11-02, from the UAT check): the samples
   built on `SampleApp` (VGSandbox, the RHI samples, WebTriangle) take the `--screenshot` flags, but

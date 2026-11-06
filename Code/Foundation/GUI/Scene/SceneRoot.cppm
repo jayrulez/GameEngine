@@ -496,6 +496,7 @@ export namespace foundation::gui
         [[nodiscard]] ActionManager* GetActionManager() override { return &m_context->m_actionManager; }
         [[nodiscard]] MutationQueue* GetMutationQueue() override { return &m_context->m_mutationQueue; }
         [[nodiscard]] EventDispatcher* GetEventDispatcher() override { return &m_eventDispatcher; }
+        void OnStylePassEnded() override { m_eventDispatcher.GrantPendingFocus(); }
         [[nodiscard]] fonts::IFontService* GetFontService() override { return m_context->GetFontService(); }
         [[nodiscard]] IResourceProvider* GetResourceProvider() override { return m_context->GetResourceProvider(); }
         [[nodiscard]] ElementTable* GetElementTable() override { return m_context->m_elements.Get(); }

@@ -900,6 +900,22 @@ export namespace foundation::gui
         /// or out of the layout), as removing it would. The keys then go to its scope and never to
         /// something that cannot be seen, so Return does not press a button left focused on a
         /// screen that has been hidden. Runs each tick and before a key or a pad button.
+        /// Asks for focus on `node` (or its entry point) once the next style pass has run: it cannot
+        /// take focus now, most often because a class that hid it was just taken off and the sheet
+        /// has not applied yet. One request waits at a time; the latest wins.
+        void RequestFocusAfterStyle(Node& node) noexcept { m_pendingFocus = &node; }
+        [[nodiscard]] Node* GetPendingFocus() const noexcept { return m_pendingFocus; }
+        /// Grants the waiting request, at the end of a style pass: its node, or the entry point inside
+        /// it, takes focus if it can now; if it still cannot, the request is dropped, never kept for
+        /// a later frame that shows the node for some other reason.
+        void GrantPendingFocus()
+        {
+            Node* waiting = m_pendingFocus;
+            m_pendingFocus = nullptr;
+            if (waiting != nullptr)
+                if (Node* target = FocusTargetOf(*waiting))
+                    SetFocusNode(target);
+        }
         void DropHiddenFocus()
         {
             if (m_focusNode != nullptr && !m_focusNode->IsTreeVisible())
@@ -907,6 +923,8 @@ export namespace foundation::gui
         }
         void SetFocusNode(Node* node)
         {
+            if (node != nullptr)
+                m_pendingFocus = nullptr; // a focus given now outranks one still waiting for the sheet
             if (node == m_focusNode || (node != nullptr && node->IsTreeInert())) // a node that is leaving or inert takes no focus
                 return;
             Node* previous = m_focusNode;
@@ -1479,6 +1497,8 @@ export namespace foundation::gui
             }
             if (IsInSubtree(m_focusNode, &removed))
                 SetFocusNode(nullptr);
+            if (IsInSubtree(m_pendingFocus, &removed))
+                m_pendingFocus = nullptr;
             if (IsInSubtree(m_dropTarget, &removed))
                 m_dropTarget = nullptr;
             if (IsInSubtree(m_dragSource, &removed))
@@ -2956,6 +2976,7 @@ export namespace foundation::gui
         core::Float2 m_panLast{0.0f, 0.0f}; // where the finger was at the last pan step
         bool m_clickSuppressed = false;    // the press has already activated (SuppressClick)
         Node* m_focusNode = nullptr;       // non-owning
+        Node* m_pendingFocus = nullptr;    // non-owning: a focus asked before the sheet showed its node
         bool m_dragActive = false;                   // drag-and-drop in progress
         bool m_dragTried = true;                     // this press has already offered its drag
         bool m_touchDragArmed = false;               // a finger held long enough over a source

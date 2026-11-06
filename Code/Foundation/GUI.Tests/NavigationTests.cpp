@@ -374,6 +374,56 @@ TEST_CASE("navigation: focusing a page lands on its entry, and Tab stays in a di
     CHECK(bed.Focused() == SV(u8"second"));
 }
 
+TEST_CASE("navigation: focusing a widget a class still hides waits for the sheet, then takes it")
+{
+    // A game script shows a box by taking its `hidden` class off and focuses a button in it in the
+    // same call: until the sheet applies, the box is hidden and nothing in it can take focus.
+    Bed bed;
+    StyleManager styles(CSSParser::Parse(SV(u8".hidden { display: none; }")));
+    auto box = Make<UIWidget>();
+    box->AddClass(SV(u8"hidden"));
+    bed.root->AddChild(box.Get());
+    auto next = Cell(*box.Get(), u8"next", 10.0f, 10.0f);
+    auto other = Cell(*bed.root.Get(), u8"other", 200.0f, 10.0f);
+    styles.ApplyTree(*bed.root.Get());
+    CHECK_FALSE(next->IsTreeVisible());
+
+    box->RemoveClass(SV(u8"hidden"));
+    CHECK_FALSE(next->FocusElement()); // not yet: the sheet has not shown it
+    CHECK(bed.d.GetFocusNode() == nullptr);
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.Focused() == SV(u8"next")); // granted when the pass ends
+
+    // A focus given while one waits outranks it.
+    box->AddClass(SV(u8"hidden"));
+    styles.ApplyTree(*bed.root.Get());
+    box->RemoveClass(SV(u8"hidden"));
+    CHECK_FALSE(next->FocusElement());
+    bed.d.SetFocusNode(other.Get());
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.Focused() == SV(u8"other"));
+
+    // One the sheet still hides after the pass is dropped, not kept for a later showing.
+    box->AddClass(SV(u8"hidden"));
+    styles.ApplyTree(*bed.root.Get());
+    CHECK_FALSE(next->FocusElement());
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.d.GetPendingFocus() == nullptr);
+    box->RemoveClass(SV(u8"hidden"));
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.Focused() == SV(u8"other"));
+
+    // A node removed while its focus waits takes nothing with it.
+    box->AddClass(SV(u8"hidden"));
+    styles.ApplyTree(*bed.root.Get());
+    box->RemoveClass(SV(u8"hidden"));
+    CHECK_FALSE(next->FocusElement());
+    bed.root->RemoveChild(box.Get());
+    CHECK(bed.d.GetPendingFocus() == nullptr);
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.Focused() == SV(u8"other"));
+}
+
 TEST_CASE("navigation: a held d-pad direction reaches the focused widget before navigation")
 {
     // Like the showcase's slider: the d-pad must change its value, not move focus away from it.

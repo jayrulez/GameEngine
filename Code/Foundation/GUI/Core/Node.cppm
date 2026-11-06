@@ -1616,7 +1616,10 @@ export namespace foundation::gui
         bool BindSceneData(core::StringView property, core::StringView key);
         /// Focuses this widget, or, for a container (a page, a dialog), its entry point: what was last
         /// focused in it, or else its default focus (nav-default), or else its first focusable
-        /// widget. Returns false when there is nothing to focus.
+        /// widget. Returns false when there is nothing to focus now. Then the request waits for the
+        /// next style pass, since a class just taken off (`hidden`) shows the node only once the
+        /// sheet applies, as a browser restyles before it focuses: the node takes focus after that
+        /// pass if it can by then, unless another focus came first or it left.
         bool FocusElement();
         /// Handles command `id` with a script function, in the bubble phase. When the function returns
         /// true, the command continues up the focus path.
@@ -1940,6 +1943,9 @@ export namespace foundation::gui
         /// Records that a style pass ran over the tree under this node (StyleManager::ApplyTree calls
         /// it), so a node leaving that tree waits for the sheet's exit.
         void NoteStylePass() noexcept { m_styledTree = true; }
+        /// Called on the tree's root when a style pass over the tree has ended (StyleManager::ApplyTree):
+        /// a scene root grants a focus that waited for it (FocusElement).
+        virtual void OnStylePassEnded() {}
         [[nodiscard]] bool HasStylePass() const noexcept { return m_styledTree; }
         /// Returns whether the node owns a press at `local` for a drag of its own (a slider's thumb,
         /// a scroll bar, a field selecting text), in which case no ancestor is offered a drag.

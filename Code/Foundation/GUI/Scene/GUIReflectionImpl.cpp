@@ -580,9 +580,14 @@ namespace foundation::gui
     bool Node::FocusElement()
     {
         EventDispatcher* dispatcher = GetEventDispatcher();
-        Node* target = dispatcher != nullptr ? FocusTargetOf(*this) : nullptr;
-        if (target == nullptr)
+        if (dispatcher == nullptr)
             return false;
+        Node* target = FocusTargetOf(*this);
+        if (target == nullptr)
+        {
+            dispatcher->RequestFocusAfterStyle(*this); // shown by a class the sheet has not applied yet
+            return false;
+        }
         dispatcher->SetFocusNode(target);
         return true;
     }

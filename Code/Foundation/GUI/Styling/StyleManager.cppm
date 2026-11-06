@@ -258,6 +258,7 @@ export namespace foundation::gui
             m_filtering = false;
             if (m_owners.Size() > m_sweepAt)
                 SweepGone();
+            root.GetRootNode()->OnStylePassEnded(); // a focus asked before the sheet showed its node
             if (FrameStats* stats = root.GetFrameStats()) // the GUI's frame stats
             {
                 stats->StyleMs += watch.Elapsed().AsMilliseconds();

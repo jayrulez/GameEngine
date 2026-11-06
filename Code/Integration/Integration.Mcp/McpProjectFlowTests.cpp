@@ -25,7 +25,8 @@ import engine.composition;
 import foundation.mcp.script;
 #if defined(OPTION_HAS_ANGELSCRIPT)
 import foundation.script.angelscript;
-#elif defined(OPTION_HAS_LUAU)
+#endif
+#if defined(OPTION_HAS_LUAU)
 import foundation.script.luau;
 #endif
 import editor.mcp;
@@ -378,6 +379,77 @@ TEST_CASE("integration.mcp: script_api reports the COMPLETE engine surface, head
     // core facades alone.
     CHECK(reported.Get(u8"typeCount").AsInt() > 30);
 }
+
+#if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
+namespace
+{
+    // One property as `script_api` lists it for `language`, or null when it is not listed.
+    JsonValue ListedMember(StringView language, StringView typeName, StringView memberName)
+    {
+        McpServer server;
+        RegisterScriptTools(server);
+        JsonValue types = CallOk(server, u8"script_api", With(Obj(), u8"language", language))
+                              .Get(u8"languages")
+                              .At(0)
+                              .Get(u8"types");
+        for (i64 i = 0; i < types.Count(); ++i)
+        {
+            JsonValue type = types.At(i);
+            if (type.Get(u8"scriptName").AsString().AsView() != typeName)
+            {
+                continue;
+            }
+            JsonValue members = type.Get(u8"members");
+            for (i64 m = 0; m < members.Count(); ++m)
+            {
+                if (members.At(m).Get(u8"name").AsString().AsView() == memberName &&
+                    members.At(m).Get(u8"kind").AsString().AsView() == u8"property")
+                {
+                    return members.At(m);
+                }
+            }
+        }
+        return JsonValue();
+    }
+
+    // What every backend's listing promises: the properties a script can use, its bases' included,
+    // and not one it cannot. A skeletal animation's clip is an asset reference, which no backend
+    // has a script form for (a script changes it through SceneAnimation's setClip), and its mesh
+    // entities are a container, which binds as owner methods rather than a property; its speed is
+    // a plain value. A Button's text is its base's property, used on the Button as well.
+    void CheckListedProperties(StringView language)
+    {
+        CHECK(ListedMember(language, u8"SkeletalAnimationComponent", u8"clip").IsNull());
+        CHECK(ListedMember(language, u8"SkeletalAnimationComponent", u8"meshEntities").IsNull());
+        JsonValue speed = ListedMember(language, u8"SkeletalAnimationComponent", u8"speed");
+        REQUIRE_FALSE(speed.IsNull());
+        CHECK_FALSE(speed.Get(u8"readOnly").AsBool());
+        JsonValue text = ListedMember(language, u8"Button", u8"text");
+        REQUIRE_FALSE(text.IsNull());
+        CHECK_FALSE(text.Get(u8"readOnly").AsBool());
+    }
+}
+#endif
+
+#if defined(OPTION_HAS_ANGELSCRIPT)
+TEST_CASE("integration.mcp: script_api lists the AngelScript properties a script can use, inherited "
+          "ones too, and not an asset reference it cannot")
+{
+    engine::RegisterAllScriptFacades();
+    foundation::script::angelscript::RegisterAngelScriptBackend();
+    CheckListedProperties(u8"angelscript");
+}
+#endif
+
+#if defined(OPTION_HAS_LUAU)
+TEST_CASE("integration.mcp: script_api lists the Luau properties a script can use, inherited ones "
+          "too, and not an asset reference or a container it cannot")
+{
+    engine::RegisterAllScriptFacades();
+    foundation::script::RegisterLuauScriptBackend();
+    CheckListedProperties(u8"luau");
+}
+#endif
 
 TEST_CASE("integration.mcp: project_info before any project is open is a tool error")
 {

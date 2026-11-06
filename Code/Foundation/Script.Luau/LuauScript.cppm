@@ -1292,6 +1292,46 @@ namespace foundation::script
             return nullptr;
         }
 
+        // Whether a script uses a property as a value: one whose type crosses to Luau and back (a
+        // number, a boolean, a string, a vector, an enum, a Variant, or a type scripts have). An
+        // asset reference has no script form (it reads as an opaque handle and refuses a write), and
+        // a container reads as nil (it binds as `<name>_count` and the other owner methods), so
+        // neither is listed or declared as a property.
+        [[nodiscard]] bool IsScriptProperty(const PropertyInfo& property, Span<const TypeInfo* const> declared)
+        {
+            const TypeInfo* type = property.type;
+            if (property.name == nullptr || type == nullptr || IsContainer(*type))
+            {
+                return false;
+            }
+            return type == &TypeOf<Variant>() || LuauTypeName(type, declared).AsView() != StringView(u8"any");
+        }
+
+        // The properties a script uses on `type`, as the dispatch finds them (FindPropertyInChain):
+        // its own and its bases', derived first, a base's left out where a derived type has one of
+        // the same name.
+        [[nodiscard]] Array<const PropertyInfo*> ScriptProperties(const TypeInfo& type,
+                                                                  Span<const TypeInfo* const> declared)
+        {
+            Array<const PropertyInfo*> out;
+            for (const TypeInfo* t = &type; t != nullptr; t = t->base)
+            {
+                for (u32 p = 0; p < t->propertyCount; ++p)
+                {
+                    const PropertyInfo& property = t->properties[p];
+                    if (property.name == nullptr || FindPropertyInChain(&type, property.name) != &property)
+                    {
+                        continue; // shadowed by a derived type's property of the name
+                    }
+                    if (IsScriptProperty(property, declared))
+                    {
+                        out.PushBack(&property);
+                    }
+                }
+            }
+            return out;
+        }
+
         // Marshal self (for instance methods) and args off the Lua stack and invoke `method`, pushing
         // its result. Shared by MethodThunk (one captured method) and ArityMethodThunk (resolved by
         // argc). Returns the Lua result count.
@@ -3047,24 +3087,21 @@ namespace foundation::script
                         api.members.PushBack(Move(op));
                     }
                 }
-                for (u32 p = 0; p < t->propertyCount; ++p)
+            }
+            for (const PropertyInfo* property :
+                 ScriptProperties(*type, Span<const TypeInfo* const>{emittable.Data(), emittable.Size()}))
+            {
+                ScriptApiMember member;
+                member.name = String(ViewOf(property->name));
+                member.kind = ScriptApiMemberKind::Property;
+                member.readOnly = (static_cast<u32>(property->flags) &
+                                   static_cast<u32>(PropertyFlags::ReadOnly)) != 0;
+                member.signature = member.name;
+                if (member.readOnly)
                 {
-                    if (t->properties[p].name == nullptr)
-                    {
-                        continue;
-                    }
-                    ScriptApiMember member;
-                    member.name = String(ViewOf(t->properties[p].name));
-                    member.kind = ScriptApiMemberKind::Property;
-                    member.readOnly = (static_cast<u32>(t->properties[p].flags) &
-                                       static_cast<u32>(PropertyFlags::ReadOnly)) != 0;
-                    member.signature = member.name;
-                    if (member.readOnly)
-                    {
-                        member.signature += u8" (read only)";
-                    }
-                    api.members.PushBack(Move(member));
+                    member.signature += u8" (read only)";
                 }
+                api.members.PushBack(Move(member));
             }
             surface.PushBack(Move(api));
         }
@@ -3156,25 +3193,17 @@ export namespace foundation::script
             out += u8"declare class ";
             out += name;
             out += u8"\n";
-            for (const TypeInfo* t = type; t != nullptr; t = t->base)
+            for (const PropertyInfo* prop : ScriptProperties(*type, declaredSpan))
             {
-                for (u32 p = 0; p < t->propertyCount; ++p)
+                out += u8"    ";
+                if ((static_cast<u32>(prop->flags) & static_cast<u32>(PropertyFlags::ReadOnly)) != 0)
                 {
-                    const PropertyInfo& prop = t->properties[p];
-                    if (prop.name == nullptr)
-                    {
-                        continue;
-                    }
-                    out += u8"    ";
-                    if ((static_cast<u32>(prop.flags) & static_cast<u32>(PropertyFlags::ReadOnly)) != 0)
-                    {
-                        out += u8"read "; // luau-analyze then refuses the assignment at check time
-                    }
-                    out += ViewOf(prop.name);
-                    out += u8": ";
-                    out += LuauTypeName(prop.type, declaredSpan);
-                    out += u8"\n";
+                    out += u8"read "; // luau-analyze then refuses the assignment at check time
                 }
+                out += ViewOf(prop->name);
+                out += u8": ";
+                out += LuauTypeName(prop->type, declaredSpan);
+                out += u8"\n";
             }
             Array<StringView> seenInstance; // dedup arity families (first overload wins)
             for (const TypeInfo* t = type; t != nullptr; t = t->base)

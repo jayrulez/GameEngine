@@ -778,7 +778,7 @@ namespace foundation::script::angelscript
 
         // The AngelScript-callable surface as bound: one entry per declared object type, with
         // members spelled the way AngelScript presents them (statics as `Type::name(...)`,
-        // properties as `get_`/`set_` accessors). A member whose declaration the backend
+        // properties by name, as a script writes them). A member whose declaration the backend
         // could not express (and therefore did not register) is omitted, so the surface
         // matches what BindType actually bound, which is what the reflection diff needs to
         // catch a type that silently failed to bind.
@@ -793,17 +793,31 @@ namespace foundation::script::angelscript
                 api.scriptName = core::String(ViewOfAscii(scriptName));
                 api.typeId = type.id;
                 api.isNamespace = false;
-                for (core::usize i = 0; i < core::PropertyCount(type); ++i)
+                // Properties as BindType registered them, its own and its bases': a `get_` accessor
+                // (a leaf value, or a nested value's borrow), and a `set_` unless it is read only. A
+                // property of a type the backend cannot spell (an asset reference) has neither and is
+                // left out; a container member binds as methods, not an accessor.
+                const asITypeInfo* bound = m_engine->GetTypeInfoById(entry.typeId);
+                for (const core::PropertyInfo* inherited : ChainProperties(type))
                 {
-                    const core::PropertyInfo& property = core::PropertyAt(type, i);
-                    if (!IsValidIdentifier(property.name) || core::IsNested(property))
+                    const core::PropertyInfo& property = *inherited;
+                    if (bound == nullptr || !IsValidIdentifier(property.name))
                     {
-                        continue; // nested structures are not scriptable leaf values
+                        continue;
                     }
+                    core::String getter;
+                    AppendAscii(getter, "get_");
+                    AppendAscii(getter, property.name);
+                    if (bound->GetMethodByName(CStr(getter)) == nullptr)
+                    {
+                        continue;
+                    }
+                    core::String setter;
+                    AppendAscii(setter, "set_");
+                    AppendAscii(setter, property.name);
                     ScriptApiMember member;
                     member.name = core::String(ViewOfAscii(property.name));
-                    member.readOnly = (static_cast<core::u32>(property.flags) &
-                                       static_cast<core::u32>(core::PropertyFlags::ReadOnly)) != 0;
+                    member.readOnly = bound->GetMethodByName(CStr(setter)) == nullptr;
                     core::String signature(ViewOfAscii(scriptName));
                     AppendAscii(signature, ".");
                     AppendAscii(signature, property.name);

@@ -301,7 +301,10 @@ values (Wind's Strength, Speed and Height) are floats in the group's own `values
 `uniformDefaults`.
 
 **Scripts**: `script_api` first - the LIVE bound API per backend (angelscript | luau);
-never trust memorized signatures. A member with `readOnly: true` (a network identity's
+never trust memorized signatures. A property is listed only when a script can use it, in every backend:
+one of a type scripts have no form for (an asset reference, a skeletal animation's `clip`) is left out,
+and is changed through its facade instead (`SceneAnimation`'s `setClip`); a list member binds as
+methods rather than a property. A member with `readOnly: true` (a network identity's
 `authority`, for one) reads and refuses assignment in every backend. `script_create` seeds a starter asset
 (behavior | level | game tier), then edit the returned source FILE, loop on
 `script_validate`, and `asset_cook` to make the class attachable.

@@ -217,6 +217,15 @@
 
 ## Engine
 
+- **A model's clips from other files** (user 2026-11-05): a model import takes the skeleton and
+  clips of its own file only (`FileImport.cppm`: a skeleton from the file's first skin, a clip per
+  animation in it), so a character whose clips each come in a file of their own imports as one
+  model, skeleton and mesh per clip file, every clip named by its file's take. Let a model's
+  import take animation files beside it as its clips: the clips bind to the model's skeleton,
+  each named by its file (by a naming rule such as `Model@Clip`, or listed in the import's
+  settings), with root motion per clip as now; a mesh in a clip file is ignored, and when it differs
+  from the model's the import says so. A file of clips with no model of its own names the skeleton
+  it animates.
 - **The two spellings of a constant another library reads** (2026-11-05, from the MSVC optimized
   shared build): a class's `static constexpr` member is not exported from a shared library, so the
   codebase republishes several at namespace scope. Three carried `ENGINE_EXPORT_DATA`, which breaks

@@ -1096,7 +1096,7 @@ namespace editor
             const StringView source(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
             pipeline::CookScriptErrorSink sink;
             String className;
-            if (cook->Check(source, script->fileName.View(), sink, className,
+            if (cook->Check(source, script->fileName.View(), pipeline::PreferredScriptClass(*script).AsView(), sink, className,
                             Span<const TypeId>(hidden.Data(), hidden.Size())))
             {
                 continue;

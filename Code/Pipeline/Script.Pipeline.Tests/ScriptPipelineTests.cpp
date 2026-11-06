@@ -13,20 +13,50 @@
 
 import foundation.core;
 import pipeline.core;
+import foundation.vfs; // SourcePath
 import script.pipeline;
 
 using namespace foundation::core;
 using namespace pipeline;
 
-TEST_CASE("script.pipeline: class-name scan prefers the file stem, falls back to the "
-          "first class, ignores comments")
+TEST_CASE("script.pipeline: the class scan lists every top-level class in order, comments ignored")
 {
-    CHECK(FindScriptClassName(u8"class Mover {\n}\n", u8"Mover") == u8"Mover");
-    CHECK(FindScriptClassName(u8"class Helper {\n}\nclass Mover {\n}\n", u8"Mover") == u8"Mover");
-    CHECK(FindScriptClassName(u8"class Helper {\n}\nclass Other {\n}\n", u8"Mover") == u8"Helper");
-    CHECK(FindScriptClassName(u8"// class Fake {\nclass Real {\n}\n", u8"nope") == u8"Real");
-    CHECK(FindScriptClassName(u8"/* class Fake { */\nclass Real {\n}\n", u8"nope") == u8"Real");
-    CHECK(FindScriptClassName(u8"var x = 1\n", u8"Mover").IsEmpty());
+    const Array<String> two = ListScriptClassNames(u8"class Helper {\n}\nclass Mover {\n}\n");
+    REQUIRE(two.Size() == 2u);
+    CHECK(two[0] == u8"Helper");
+    CHECK(two[1] == u8"Mover");
+    const Array<String> real = ListScriptClassNames(u8"// class Fake {\n/* class Ghost { */\nclass Real {\n}\n");
+    REQUIRE(real.Size() == 1u);
+    CHECK(real[0] == u8"Real");
+    CHECK(ListScriptClassNames(u8"var x = 1\n").IsEmpty());
+}
+
+// The class a script plays: the preferred one (the asset's, else its file's stem), else its only
+// one; several and none preferred is never a guess, but a problem naming them; none is a utility
+// module.
+TEST_CASE("script.pipeline: the class a script plays is the preferred one or its only one, never a guess")
+{
+    const Array<String> several = ListScriptClassNames(u8"class EffectDef {}\nclass Fighter {}\nclass Battle {}\n");
+    const Span<const String> declared(several.Data(), several.Size());
+    String problem;
+    CHECK(ChooseScriptClass(declared, u8"Battle", problem) == u8"Battle");
+    CHECK(problem.IsEmpty());
+    CHECK(ChooseScriptClass(declared, u8"Battle.2", problem).IsEmpty()); // a copy's stem names none
+    CHECK(problem.AsView().Contains(u8"EffectDef, Fighter, Battle"));
+    CHECK(problem.AsView().Contains(u8"'Battle.2'"));
+
+    const Array<String> one = ListScriptClassNames(u8"class Game {}\n");
+    CHECK(ChooseScriptClass(Span<const String>(one.Data(), one.Size()), u8"Lamplight", problem) == u8"Game");
+    CHECK(problem.IsEmpty());
+    CHECK(ChooseScriptClass(Span<const String>{}, u8"Twice", problem).IsEmpty());
+    CHECK(problem.IsEmpty());
+
+    // An asset prefers the class it records, else the one named like its file.
+    ScriptClassAsset asset;
+    asset.fileName = foundation::vfs::SourcePath(u8"Battle.2.as");
+    CHECK(PreferredScriptClass(asset) == u8"Battle.2");
+    asset.className = String(u8"Battle");
+    CHECK(PreferredScriptClass(asset) == u8"Battle");
 }
 
 TEST_CASE("script.pipeline: handler scan finds declared handlers only (comments stripped)")

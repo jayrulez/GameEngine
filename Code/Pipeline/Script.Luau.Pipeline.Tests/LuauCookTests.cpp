@@ -295,14 +295,14 @@ TEST_CASE("luau.cook: a check without a type fails a script naming it as a globa
                                      u8"return Probe\n";
     String className;
     CookScriptErrorSink full;
-    CHECK(cook->Check(kUses, u8"Probe.luau", full, className, Span<const TypeId>{}));
+    CHECK(cook->Check(kUses, u8"Probe.luau", u8"Probe", full, className, Span<const TypeId>{}));
     CookScriptErrorSink without;
-    CHECK_FALSE(cook->Check(kUses, u8"Probe.luau", without, className, Span<const TypeId>(hidden, 1)));
+    CHECK_FALSE(cook->Check(kUses, u8"Probe.luau", u8"Probe", without, className, Span<const TypeId>(hidden, 1)));
     REQUIRE(without.errors.Size() == 1u);
     CHECK(without.errors[0].line == 3);
     CHECK(without.errors[0].message.AsView().Contains(u8"'ProbeFacade' is not available here"));
     CookScriptErrorSink unrelated;
-    CHECK(cook->Check(u8"local function twice(v) return v * 2 end\nreturn twice\n", u8"Twice.luau", unrelated,
+    CHECK(cook->Check(u8"local function twice(v) return v * 2 end\nreturn twice\n", u8"Twice.luau", u8"Twice", unrelated,
                       className, Span<const TypeId>(hidden, 1)));
     GlobalTypeRegistry().Unregister(probe.id);
 }

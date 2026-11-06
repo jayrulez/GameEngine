@@ -43,7 +43,9 @@ namespace pipeline
         dottedExtension.Append(extension);
         ScriptClassAsset asset;
         asset.language = String(languageId);
-        const String starter = cook->NewAssetTemplate(tier, ClassNameFor(name.AsView(), baseName).AsView());
+        const String className = ClassNameFor(name.AsView(), baseName);
+        asset.className = String(ScriptStarterClassName(tier, className.AsView()));
+        const String starter = cook->NewAssetTemplate(tier, className.AsView());
         return CreateLinkedTextAsset(named, baseName, dottedExtension.AsView(), starter.AsView(),
                                      ScriptClassAsset::StaticType(), asset);
     }

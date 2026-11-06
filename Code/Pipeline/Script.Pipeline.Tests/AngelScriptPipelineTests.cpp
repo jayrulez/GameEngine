@@ -11,7 +11,8 @@
 #include "CookBed.h"
 
 import editor.core;       // ScriptSourceDocument (the ScriptPage save-and-recook loop)
-import pipeline.importer; // ScriptFileImporter (extension acceptance)
+import pipeline.importer; // ScriptFileImporter (extension acceptance, the class an import records)
+import foundation.xml.serialization; // a script asset as a project stores it, at data version 0
 
 using namespace foundation::core;
 using namespace pipeline;
@@ -172,7 +173,8 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
         {
             return String(u8"// fake\n");
         }
-        [[nodiscard]] bool Cook(StringView source, StringView, CookScriptErrorSink&,
+        using IScriptLanguageCook::Cook;
+        [[nodiscard]] bool Cook(StringView source, StringView, StringView, CookScriptErrorSink&,
                                 ScriptClassSource& out) override
         {
             ++cooked;
@@ -180,7 +182,7 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
             out.source = String(source);
             return true;
         }
-        [[nodiscard]] bool Check(StringView, StringView, CookScriptErrorSink&, String&, Span<const TypeId>) override
+        [[nodiscard]] bool Check(StringView, StringView, StringView, CookScriptErrorSink&, String&, Span<const TypeId>) override
         {
             return true;
         }
@@ -353,4 +355,159 @@ TEST_CASE("script.pipeline: ScriptSourceDocument::Validate compiles without runn
     REQUIRE(doc.Errors().Size() >= 1u);
     CHECK(doc.Errors().Data()[0].line == 3);
     CHECK(doc.Errors().Data()[0].column == 30);
+}
+
+// An imported script plays the class its file is named for, wherever its copy lands: kept beside
+// another file's ("Battle.2.as") it still plays Battle, where the file's stem names no class and
+// the first one (EffectDef) used to be played instead. A class set by hand survives a re-import of
+// the same file; with no class recorded, a file declaring several and none named like it does not
+// cook.
+TEST_CASE("script.pipeline: an imported script plays the class its file is named for, wherever its copy lands")
+{
+    CookBed bed(u8"as_import_class");
+    const String root = String(u8"scratch_scriptpipe_import_class");
+    CookBed::RemoveTree(root.AsView());
+    const String sources = PathJoin(root.AsView(), u8"Sources");
+    const String one = PathJoin(root.AsView(), u8"one");
+    const String two = PathJoin(root.AsView(), u8"two");
+    const String db = PathJoin(root.AsView(), u8"db");
+    for (const String* d : {&sources, &one, &two, &db})
+        REQUIRE(CreateDirectories(d->AsView()));
+    auto write = [](const String& folder, StringView text)
+    {
+        const String path = PathJoin(folder.AsView(), u8"Battle.as");
+        REQUIRE(WriteFile(path.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())).IsOk());
+        return path;
+    };
+    const String first = write(one, u8"class EffectDef { int turns; }\nclass Battle { void onStart() {} }\n");
+    const String second = write(two, u8"class EffectDef { int turns; }\nclass Fighter { int hp; }\nclass Battle { void onUpdate(double dt) {} }\n");
+
+    foundation::vfs::NativeFileSystem mount(db.AsView(), DefaultAllocator());
+    content::ContentDatabase sourceDb(DefaultAllocator(), mount, BinarySerializerFactory(), u8".asset");
+    content::Group& group = *sourceDb.RootGroup();
+    ImportContext context{DefaultAllocator(), sources.AsView()};
+    context.ledgerPath = ImportLedgerPath(PathJoin(root.AsView(), u8".cache").AsView());
+    ScriptFileImporter importer;
+    // A copy of an instance's asset (the asset type is not copyable: field by field).
+    auto copyOf = [](const ScriptClassAsset& from, ScriptClassAsset& to)
+    {
+        to.fileName = from.fileName;
+        to.language = from.language;
+        to.className = from.className;
+    };
+    auto assetOf = [&](content::Instance& instance, ScriptClassAsset& to)
+    {
+        RefPtr<ISerializable> object = instance.ReadObject();
+        const ScriptClassAsset* asset = Cast<ScriptClassAsset>(object.Get());
+        REQUIRE(asset != nullptr);
+        copyOf(*asset, to);
+    };
+    foundation::vfs::NativeFileSystem sourcesMount(sources.AsView(), DefaultAllocator());
+    auto cookClass = [&](const ScriptClassAsset& asset, String& className)
+    {
+        content::Instance* out = bed.outputDb->RootGroup()->GetInstance(u8"cooked");
+        if (out == nullptr)
+            out = bed.outputDb->RootGroup()->CreateInstance(u8"cooked", ScriptClassSource::StaticType());
+        ScriptClassAssetBuilder builder;
+        pipeline::AssetBuildContext ctx{DefaultAllocator()};
+        ctx.sources = &sourcesMount;
+        ctx.output = out;
+        const bool ok = builder.Build(asset, ctx).IsOk();
+        RefPtr<ISerializable> object = out->ReadObject();
+        if (const ScriptClassSource* cooked = Cast<ScriptClassSource>(object.Get()); ok && cooked != nullptr)
+            className = cooked->className;
+        return ok;
+    };
+
+    Result<content::Instance*> made = importer.Import(first.AsView(), context, group, nullptr, nullptr, nullptr);
+    REQUIRE(made.HasValue());
+    ScriptClassAsset madeAsset;
+    assetOf(*made.Value(), madeAsset);
+    CHECK(madeAsset.className == u8"Battle");
+
+    context.onConflict = ImportConflictChoice::KeepBoth;
+    Result<content::Instance*> beside = importer.Import(second.AsView(), context, group, nullptr, nullptr, nullptr);
+    REQUIRE(beside.HasValue());
+    ScriptClassAsset kept;
+    assetOf(*beside.Value(), kept);
+    CHECK(kept.fileName.View() == StringView(u8"Battle.2.as"));
+    CHECK(kept.className == u8"Battle");
+    String played;
+    REQUIRE(cookClass(kept, played));
+    CHECK(played == u8"Battle");
+
+    // Nothing recorded: Battle.2 names no class of the three, and the cook says so.
+    ScriptClassAsset unrecorded;
+    copyOf(kept, unrecorded);
+    unrecorded.className = String{};
+    String none;
+    CHECK_FALSE(cookClass(unrecorded, none));
+
+    // A class chosen by hand survives a re-import of the same file (under its asset's name, as the
+    // editor's reimport asks for it).
+    ScriptClassAsset chosen;
+    copyOf(kept, chosen);
+    chosen.className = String(u8"Fighter");
+    REQUIRE(beside.Value()->WriteObject(chosen).IsOk());
+    context.onConflict = ImportConflictChoice::Refuse;
+    RefPtr<ImportOptions> named = MakeRef<ImportOptions>(DefaultAllocator());
+    named->selection = SingleAssetPlan(second.AsView());
+    named->selection.entries[0].targetName = String(beside.Value()->Name());
+    Result<content::Instance*> again = importer.Import(second.AsView(), context, group, named.Get(), nullptr, nullptr);
+    REQUIRE(again.HasValue());
+    CHECK(again.Value() == beside.Value());
+    ScriptClassAsset reimported;
+    assetOf(*again.Value(), reimported);
+    CHECK(reimported.className == u8"Fighter");
+    CookBed::RemoveTree(root.AsView());
+}
+
+// A script asset stored before it recorded a class (data version 0, as the sample projects keep
+// them) still reads, with no class, so it plays the one named like its file as before; written
+// again, it carries the field.
+TEST_CASE("script.pipeline: a version 0 script asset reads with no class recorded")
+{
+    const String root = String(u8"scratch_scriptpipe_v0");
+    CookBed::RemoveTree(root.AsView());
+    REQUIRE(CreateDirectories(root.AsView()));
+    RegisterScriptAssets();
+    const String text = Format(u8"<root>\n"
+                               u8"\t<string name=\"guid\">20ce951c-b789-4c02-b3b0-63e3ba3993ef</string>\n"
+                               u8"\t<string name=\"typeNamespace\">rtti::pipeline::script</string>\n"
+                               u8"\t<string name=\"typeName\">ScriptClassAsset</string>\n"
+                               u8"\t<array name=\"dataVersions\" count=\"1\">\n"
+                               u8"\t\t<u64 name=\"type\">{}</u64>\n"
+                               u8"\t\t<u32 name=\"version\">0</u32>\n"
+                               u8"\t</array>\n"
+                               u8"\t<object name=\"payload\">\n"
+                               u8"\t\t<string name=\"fileName\">Paper.as</string>\n"
+                               u8"\t\t<string name=\"language\">angelscript</string>\n"
+                               u8"\t</object>\n"
+                               u8"</root>\n",
+                               ScriptClassAsset::StaticType().id);
+    const String file = PathJoin(root.AsView(), u8"Paper.xasset");
+    REQUIRE(WriteFile(file.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())).IsOk());
+    {
+        foundation::vfs::NativeFileSystem mount(root.AsView(), DefaultAllocator());
+        content::ContentDatabase db(DefaultAllocator(), mount, foundation::xml::XmlSerializerFactory(), u8".xasset");
+        content::Instance* instance = db.RootGroup()->GetInstance(u8"Paper");
+        REQUIRE(instance != nullptr);
+        RefPtr<ISerializable> object = instance->ReadObject();
+        const ScriptClassAsset* asset = Cast<ScriptClassAsset>(object.Get());
+        REQUIRE(asset != nullptr);
+        CHECK(asset->fileName.View() == StringView(u8"Paper.as"));
+        CHECK(asset->className.IsEmpty());
+        CHECK(PreferredScriptClass(*asset) == u8"Paper");
+        ScriptClassAsset updated;
+        updated.fileName = asset->fileName;
+        updated.language = asset->language;
+        updated.className = String(u8"Paper");
+        REQUIRE(instance->WriteObject(updated).IsOk());
+    }
+    Result<Array<byte>> written = ReadFile(file.AsView());
+    REQUIRE(written.HasValue());
+    const StringView saved(reinterpret_cast<const utf8char*>(written.Value().Data()), written.Value().Size());
+    CHECK(saved.Contains(u8"name=\"className\""));
+    CHECK(saved.Contains(u8"<u32 name=\"version\">1</u32>"));
+    CookBed::RemoveTree(root.AsView());
 }

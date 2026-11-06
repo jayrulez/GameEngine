@@ -561,12 +561,12 @@ TEST_CASE("as.cook: a check without a type fails the script that uses it, and on
 
     String className;
     CookScriptErrorSink full;
-    CHECK(cook->Check(kUsesRun, u8"Game.as", full, className, Span<const TypeId>{}));
+    CHECK(cook->Check(kUsesRun, u8"Game.as", u8"Game", full, className, Span<const TypeId>{}));
     CookScriptErrorSink without;
-    CHECK_FALSE(cook->Check(kUsesRun, u8"Game.as", without, className, Span<const TypeId>(hidden, 1)));
+    CHECK_FALSE(cook->Check(kUsesRun, u8"Game.as", u8"Game", without, className, Span<const TypeId>(hidden, 1)));
     CHECK_FALSE(without.errors.IsEmpty());
     CookScriptErrorSink unrelated;
-    CHECK(cook->Check(u8"double twice(double v) { return v * 2.0; }\n", u8"Twice.as", unrelated, className,
+    CHECK(cook->Check(u8"double twice(double v) { return v * 2.0; }\n", u8"Twice.as", u8"Twice", unrelated, className,
                       Span<const TypeId>(hidden, 1)));
 }
 

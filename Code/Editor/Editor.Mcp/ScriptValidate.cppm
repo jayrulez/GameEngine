@@ -29,6 +29,7 @@ import foundation.json;
 import foundation.mcp;
 import foundation.script.resource;
 import script.pipeline;
+import pipeline.importer; // FileStemOf: the class named like the file
 import editor.project; // detail::AbsentPluginTypes (what a platform lacks of the project's plugins)
 import :session;
 
@@ -72,7 +73,10 @@ export namespace editor::mcp
                 .Enum(u8"language", detail::ScriptLanguageChoices(),
                       u8"the script backend to compile against", true)
                 .Str(u8"name", u8"a display name for error messages (e.g. the intended file "
-                               u8"name; default 'script')")
+                               u8"name; default 'script'); its stem is the class it plays when "
+                               u8"the source declares several")
+                .Str(u8"className", u8"the class it plays when the source declares several (a "
+                                    u8"script asset's Class); default: the one named like `name`")
                 .Str(u8"platform", u8"also check it for this platform's plugins (Linux64, Win64, Web); "
                                    u8"needs an open project")
                 .Build(),
@@ -100,10 +104,15 @@ export namespace editor::mcp
                                       language.AsView()));
                 }
 
+                String preferred = args.Get(u8"className").AsString();
+                if (preferred.IsEmpty())
+                {
+                    preferred = String(pipeline::FileStemOf(pipeline::FileNameOf(name.AsView())));
+                }
                 const String source = args.Get(u8"source").AsString();
                 pipeline::CookScriptErrorSink sink;
                 foundation::script::ScriptClassSource harvested;
-                bool ok = cook->Cook(source.AsView(), name.AsView(), sink, harvested);
+                bool ok = cook->Cook(source.AsView(), name.AsView(), preferred.AsView(), sink, harvested);
                 // Then against the platform's surface, when one is asked for and lacks plugins.
                 String absent;
                 if (ok && !platform.IsEmpty() && session.plugins != nullptr)
@@ -114,7 +123,7 @@ export namespace editor::mcp
                     if (!hidden.IsEmpty())
                     {
                         String className;
-                        ok = cook->Check(source.AsView(), name.AsView(), sink, className,
+                        ok = cook->Check(source.AsView(), name.AsView(), preferred.AsView(), sink, className,
                                          Span<const TypeId>(hidden.Data(), hidden.Size()));
                     }
                 }

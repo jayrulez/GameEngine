@@ -4,7 +4,7 @@
 // Pipeline::Script - reflection implementation unit: ScriptClassAsset's reflected surface.
 //
 // Kept out of the ScriptAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
-// ScriptClassAsset::StaticType() gains its `language` property here. There are no enums, so the
+// ScriptClassAsset::StaticType() gains its `language` and `className` properties here. There are no enums, so the
 // reflection comes with StaticType() and needs no registrar.
 
 module;
@@ -68,10 +68,17 @@ namespace pipeline{
 
     REFLECT_MEMBERS(ScriptClassAsset, "rtti::pipeline::script")
     {
-        builder.Attribute("displayName", String(u8"Script"))
+        // v1 adds "className"; v0 payloads still read (the legacy reader) and leave it empty.
+        builder.DataVersion(1)
+            .ReadsDataVersionsFrom(0)
+            .Attribute("displayName", String(u8"Script"))
             .Attribute("category", String(u8"Scripting"))
             .Property<&ScriptClassAsset::language>("language")
             .PropAttribute("displayName", String(u8"Language"))
-            .PropAttribute("description", String(u8"Backend id (e.g. \"angelscript\", \"luau\")"));
+            .PropAttribute("description", String(u8"Backend id (e.g. \"angelscript\", \"luau\")"))
+            .Property<&ScriptClassAsset::className>("className")
+            .PropAttribute("displayName", String(u8"Class"))
+            .PropAttribute("description", String(u8"The class it plays when its file declares several (empty: the one "
+                                                 u8"named like its file, or its only one)"));
     }
 }

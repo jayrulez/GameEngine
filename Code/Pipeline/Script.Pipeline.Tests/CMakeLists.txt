@@ -17,7 +17,8 @@ add_executable(Script.Pipeline.Tests TestsMain.cpp ScriptPipelineTests.cpp
 target_link_libraries(Script.Pipeline.Tests PRIVATE
     Pipeline::Script Foundation::Script.Resource Foundation::Script
     Foundation::Script.Facades ${_script_pipeline_backend_libs}
-    Pipeline::Core Editor::Core Foundation::Content Foundation::Resource Foundation::VFS
+    Pipeline::Core Pipeline::Importer Editor::Core Foundation::Content Foundation::Resource Foundation::VFS
+    Foundation::Xml.Serialization # a script asset as a project stores it (the version 0 read)
     doctest::doctest)
 target_compile_definitions(Script.Pipeline.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 target_compile_options(Script.Pipeline.Tests PRIVATE

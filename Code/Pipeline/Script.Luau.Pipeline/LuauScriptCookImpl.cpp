@@ -88,17 +88,17 @@ namespace pipeline{
             return p;
         }
 
-        // Luau has no `class` keyword (so the shared FindScriptClassName does not apply): the
+        // Luau has no `class` keyword (so the shared ListScriptClassNames does not apply): a
         // class is a global table with a `function <Name>.new(...)` constructor, the same table
-        // the runtime instantiates. Find that name; prefer the one matching the file stem, else
-        // the first constructor declared. Comments are stripped first.
-        [[nodiscard]] String FindLuauClassName(StringView source, StringView preferredName)
+        // the runtime instantiates. Every such name, in order (the shared ChooseScriptClass picks
+        // the one it plays). Comments are stripped first.
+        [[nodiscard]] Array<String> ListLuauClassNames(StringView source)
         {
             const String stripped = StripScriptComments(source);
             const StringView text = stripped.AsView();
             const StringView keyword = u8"function ";
             const StringView dotNew = u8".new";
-            String first;
+            Array<String> found;
             for (usize i = 0; i + keyword.Size() < text.Size(); ++i)
             {
                 if (text.SubStr(i, keyword.Size()) != keyword)
@@ -124,17 +124,9 @@ namespace pipeline{
                 {
                     continue;
                 }
-                const StringView name = text.SubStr(begin, end - begin);
-                if (name == preferredName)
-                {
-                    return String(name);
-                }
-                if (first.IsEmpty())
-                {
-                    first = String(name);
-                }
+                found.PushBack(String(text.SubStr(begin, end - begin)));
             }
-            return first;
+            return found;
         }
 
         // Sort harvested props by name (pairs() order is unspecified) for deterministic bytes.
@@ -304,9 +296,25 @@ namespace pipeline{
             // fingerprint so a vendor bump recooks every Luau script pack.
             [[nodiscard]] u32 CookVersion() const override { return LuauBytecodeVersion(); }
 
+            // The class it plays among its constructors (ChooseScriptClass); several and none
+            // preferred is a cook problem, reported, and false.
+            [[nodiscard]] static bool ChooseClass(StringView source, StringView assetName, StringView preferredClass,
+                                                  CookScriptErrorSink& sink, String& className)
+            {
+                const Array<String> declared = ListLuauClassNames(source);
+                String problem;
+                className = ChooseScriptClass(Span<const String>(declared.Data(), declared.Size()), preferredClass, problem);
+                if (!problem.IsEmpty())
+                {
+                    ReportCookProblem(sink, assetName, problem);
+                    return false;
+                }
+                return true;
+            }
+
             // Compiles through the manager's Check, so unlike Cook nothing in the source runs; the
             // manager's Check also refuses a global naming a type it was not given (a hidden one).
-            [[nodiscard]] bool Check(StringView source, StringView assetName,
+            [[nodiscard]] bool Check(StringView source, StringView assetName, StringView preferredClass,
                                      CookScriptErrorSink& sink, String& className,
                                      Span<const TypeId> hidden) override
             {
@@ -315,11 +323,12 @@ namespace pipeline{
                 {
                     return false;
                 }
-                className = FindLuauClassName(source, pipeline::FileStemOf(assetName));
-                return true;
+                return ChooseClass(source, assetName, preferredClass, sink, className);
             }
 
-            [[nodiscard]] bool Cook(StringView source, StringView assetName,
+            using IScriptLanguageCook::Cook; // and the overload that prefers the file's stem
+
+            [[nodiscard]] bool Cook(StringView source, StringView assetName, StringView preferredClass,
                                     CookScriptErrorSink& sink, ScriptClassSource& out) override
             {
                 out.language = String(u8"luau");
@@ -347,7 +356,10 @@ namespace pipeline{
                     return false;
                 }
 
-                out.className = FindLuauClassName(source, pipeline::FileStemOf(assetName));
+                if (!ChooseClass(source, assetName, preferredClass, sink, out.className))
+                {
+                    return false;
+                }
                 out.handlers = ScanScriptHandlers(source);
                 out.usesCoroutines = ScriptReferencesCoroutineStart(source);
 

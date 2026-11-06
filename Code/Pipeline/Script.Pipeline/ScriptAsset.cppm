@@ -16,9 +16,10 @@
 //   * ScriptFileImporter: drop-import for any extension a registered backend claims; no
 //     options dialog.
 //   * Shared cook conventions (not language syntax): the on<Upper>(...) handler scan
-//     (ScanScriptHandlers), the C-family comment stripper (StripScriptComments), the first
-//     top-level `class Name` scan (FindScriptClassName), and the shared `startCoroutine(`
-//     surface detection (ScriptReferencesCoroutineStart). Every cook reuses these.
+//     (ScanScriptHandlers), the C-family comment stripper (StripScriptComments), the top-level
+//     `class Name` scan (ListScriptClassNames), the choice of the class a script plays
+//     (ChooseScriptClass), and the shared `startCoroutine(` surface detection
+//     (ScriptReferencesCoroutineStart). Every cook reuses these.
 //
 // Never linked by the runtime.
 
@@ -42,27 +43,41 @@ using namespace foundation::script;
 export namespace pipeline{
     namespace content = foundation::content;
 
-    // Source asset: the script file and the backend that compiles it.
+    // Source asset: the script file, the backend that compiles it, and the class it plays.
     class ScriptClassAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(ScriptClassAsset, pipeline::Asset)
     public:
         String language; // backend id ("angelscript"), defaulted from the file extension
+        // The class it plays among those its file declares: the name its file was imported
+        // under, or a new script's starter class; set by hand to pick another. Empty: the class
+        // named like its file, else its only one (PreferredScriptClass, ChooseScriptClass).
+        // Data version 1; version 0 assets read it empty.
+        String className;
 
         void Serialize(ISerializer& ar) override
         {
             pipeline::Asset::Serialize(ar); // fileName
             foundation::core::Serialize(ar, "language", language);
+            if (ar.Mode() == SerializeMode::Write || ar.Version() >= 1)
+            {
+                foundation::core::Serialize(ar, "className", className);
+            }
         }
     };
 
     // ---- shared cook helpers (unit-testable without a project; not language syntax) ----
 
-    /// First top-level `class Name` whose name matches `preferredName` (the file stem),
-    /// else the first top-level class; empty when the source declares none (a utility
-    /// module). Line and block comments are ignored. `class Name` is a C-family
-    /// convention shared by every language backend, so this stays neutral and shared.
-    [[nodiscard]] inline String FindScriptClassName(StringView source, StringView preferredName);
+    /// Every top-level `class Name` in `source`, in order; empty when it declares none (a
+    /// utility module). Line and block comments are ignored. `class Name` is the C-family
+    /// convention (AngelScript's); Luau lists its own.
+    [[nodiscard]] inline Array<String> ListScriptClassNames(StringView source);
+
+    /// The class a script plays among the classes it declares: the one named `preferred` (the
+    /// asset's recorded class, else its file's stem: PreferredScriptClass), else its only one.
+    /// Several and none so named is no guess: empty, with `problem` naming the classes and how to
+    /// choose. None at all is a utility module: empty, no problem.
+    [[nodiscard]] inline String ChooseScriptClass(Span<const String> declared, StringView preferred, String& problem);
 
     /// The declared lifecycle/event/message handlers out of the `on<Upper>(...)` naming
     /// convention, by source scan (comments stripped). Both languages use it, so it is a
@@ -193,11 +208,11 @@ export namespace pipeline{
         return out;
     }
 
-    inline String FindScriptClassName(StringView source, StringView preferredName)
+    inline Array<String> ListScriptClassNames(StringView source)
     {
         const String stripped = StripScriptComments(source);
         const StringView text = stripped.AsView();
-        String first;
+        Array<String> found;
         bool lineStart = true;
         for (usize i = 0; i < text.Size(); ++i)
         {
@@ -229,20 +244,54 @@ export namespace pipeline{
                     }
                     if (end > begin)
                     {
-                        const StringView name = text.SubStr(begin, end - begin);
-                        if (name == preferredName)
-                        {
-                            return String(name);
-                        }
-                        if (first.IsEmpty())
-                        {
-                            first = String(name);
-                        }
+                        found.PushBack(String(text.SubStr(begin, end - begin)));
                     }
                 }
             }
         }
-        return first;
+        return found;
+    }
+
+    inline String ChooseScriptClass(Span<const String> declared, StringView preferred, String& problem)
+    {
+        problem = String{};
+        for (const String& name : declared)
+        {
+            if (name.AsView() == preferred)
+            {
+                return name;
+            }
+        }
+        if (declared.Size() == 1)
+        {
+            return declared[0];
+        }
+        if (declared.Size() > 1)
+        {
+            String names;
+            for (const String& name : declared)
+            {
+                if (!names.IsEmpty())
+                {
+                    names.Append(u8", ");
+                }
+                names.Append(name.AsView());
+            }
+            problem = Format(u8"it declares the classes {} and none is '{}': set the script asset's Class "
+                             u8"to the one it plays (script_validate: className)",
+                             names.AsView(), preferred);
+        }
+        return {};
+    }
+
+    /// The class a script asset prefers: the one it records, else the one named like its file.
+    [[nodiscard]] inline String PreferredScriptClass(const ScriptClassAsset& asset)
+    {
+        if (!asset.className.IsEmpty())
+        {
+            return asset.className;
+        }
+        return String(pipeline::FileStemOf(pipeline::FileNameOf(asset.fileName.View())));
     }
 
     inline Array<String> ScanScriptHandlers(StringView source)
@@ -566,17 +615,28 @@ export namespace pipeline{
         /// Compile-check `source` (named `assetName` for error reporting) and harvest its
         /// metadata into `out` (language, className, handlers, usesCoroutines, and any
         /// property metadata the language supports); report cook errors through `sink`;
-        /// return success. On failure the builder does not write, so the last good cooked
+        /// return success. The class is ChooseScriptClass's over what the source declares, by
+        /// `preferredClass` (PreferredScriptClass of the asset); several classes and none so
+        /// named fails the cook. On failure the builder does not write, so the last good cooked
         /// record survives (live instances keep running the old class).
-        [[nodiscard]] virtual bool Cook(StringView source, StringView assetName,
+        [[nodiscard]] virtual bool Cook(StringView source, StringView assetName, StringView preferredClass,
                                         CookScriptErrorSink& sink, ScriptClassSource& out) = 0;
 
+        /// Cook with the class named like `assetName`'s stem preferred: a source with no asset
+        /// behind it (a test, a check of text).
+        [[nodiscard]] bool Cook(StringView source, StringView assetName, CookScriptErrorSink& sink,
+                                ScriptClassSource& out)
+        {
+            return Cook(source, assetName, pipeline::FileStemOf(pipeline::FileNameOf(assetName)), sink, out);
+        }
+
         /// Compile-check `source` as Cook would, without running any of it and without the
-        /// harvest: errors to `sink`, the class name (empty when none is found) to `className`.
-        /// The surface is every registered type less `hidden` (a platform without some plugins:
-        /// their types), and a use of a hidden type is an error. For checking a script as it is
-        /// typed, and for each platform it ships to. Returns whether it compiled.
-        [[nodiscard]] virtual bool Check(StringView source, StringView assetName,
+        /// harvest: errors to `sink`, the class it plays (chosen as Cook chooses it, by
+        /// `preferredClass`; empty when it declares none) to `className`. The surface is every
+        /// registered type less `hidden` (a platform without some plugins: their types), and a
+        /// use of a hidden type is an error. For checking a script as it is typed, and for each
+        /// platform it ships to. Returns whether it compiled.
+        [[nodiscard]] virtual bool Check(StringView source, StringView assetName, StringView preferredClass,
                                          CookScriptErrorSink& sink, String& className,
                                          Span<const TypeId> hidden) = 0;
     };
@@ -670,9 +730,10 @@ export namespace pipeline{
         {
             // Base cook-logic version (2: the cooked record gained a bytecode field; 3: each
             // property a replicated flag; 4: the record carries data version 1, so the reader
-            // refuses one from before the flag), plus every language cook's compiler version, so a
-            // Luau (or other bytecode) vendor bump recooks every script pack automatically.
-            return 4 + ScriptLanguageCookRegistry::Get().CombinedCookVersion();
+            // refuses one from before the flag; 5: the class is the asset's choice, never a guess
+            // among several), plus every language cook's compiler version, so a Luau (or other
+            // bytecode) vendor bump recooks every script pack automatically.
+            return 5 + ScriptLanguageCookRegistry::Get().CombinedCookVersion();
         }
 
         // The script surface the products compile against and their bytecode binds to.
@@ -713,7 +774,8 @@ export namespace pipeline{
 
             ScriptClassSource cooked;
             CookScriptErrorSink sink;
-            if (!cook->Cook(source.AsView(), scriptAsset.fileName.View(), sink, cooked))
+            if (!cook->Cook(source.AsView(), scriptAsset.fileName.View(), PreferredScriptClass(scriptAsset).AsView(), sink,
+                            cooked))
             {
                 return Status{ErrorCode::InvalidArgument};
             }
@@ -770,7 +832,9 @@ export namespace pipeline{
 
             // The name claimed by the clash rule, the file copied in beside any other's (pipeline::ClaimSingleAsset).
             String fileName;
-            Result<content::Instance*> claimed = pipeline::ClaimSingleAsset(context, group, options, sourcePath, ScriptClassAsset::StaticType(), fileName);
+            pipeline::ImportClashKind clash = pipeline::ImportClashKind::None;
+            Result<content::Instance*> claimed =
+                pipeline::ClaimSingleAsset(context, group, options, sourcePath, ScriptClassAsset::StaticType(), fileName, &clash);
             if (!claimed.HasValue())
             {
                 return Err(claimed.Error());
@@ -780,6 +844,18 @@ export namespace pipeline{
             ScriptClassAsset asset;
             asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
             asset.language = String(backend->languageId.AsView());
+            // The class it plays: the one its file is named for, wherever its copy lands
+            // ("Battle.2.as" still plays Battle); a re-import of the same file keeps a class
+            // chosen by hand.
+            asset.className = String(pipeline::FileStemOf(pipeline::FileNameOf(sourcePath)));
+            if (clash == pipeline::ImportClashKind::Reimport)
+            {
+                RefPtr<ISerializable> before = instance->ReadObject();
+                if (const auto* prior = Cast<ScriptClassAsset>(before.Get()); prior != nullptr && !prior->className.IsEmpty())
+                {
+                    asset.className = prior->className;
+                }
+            }
             const Status written = instance->WriteObject(asset);
             if (!written.IsOk())
             {
@@ -814,12 +890,15 @@ export namespace pipeline{
         };
 
         /// Bind to an asset's source file: the project's Sources/ root, the asset's file name,
-        /// and its language id (empty defaults to AngelScript, matching the builder).
-        void Bind(StringView sourcesRoot, StringView fileName, StringView language)
+        /// its language id (empty defaults to AngelScript, matching the builder) and the class
+        /// it prefers (PreferredScriptClass; empty: the one named like the file).
+        void Bind(StringView sourcesRoot, StringView fileName, StringView language, StringView preferredClass = {})
         {
             m_sourcesRoot = String(sourcesRoot);
             m_fileName = String(fileName);
             m_language = language.IsEmpty() ? String(u8"angelscript") : String(language);
+            m_preferredClass = preferredClass.IsEmpty() ? String(pipeline::FileStemOf(pipeline::FileNameOf(fileName)))
+                                                        : String(preferredClass);
         }
 
         [[nodiscard]] StringView FileName() const noexcept { return m_fileName.AsView(); }
@@ -881,7 +960,8 @@ export namespace pipeline{
             }
             CookScriptErrorSink sink;
             String className;
-            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), sink, className, Span<const TypeId>{});
+            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), m_preferredClass.AsView(), sink, className,
+                                        Span<const TypeId>{});
             for (const CookScriptErrorSink::Entry& entry : sink.errors)
             {
                 CompileError e;
@@ -910,6 +990,7 @@ export namespace pipeline{
     private:
         String m_sourcesRoot;
         String m_fileName;
+        String m_preferredClass;
         String m_language;
         String m_source;
         String m_saved;
@@ -991,6 +1072,22 @@ export namespace pipeline{
         case ScriptTier::Behavior:
         default:
             return u8"NewBehavior";
+        }
+    }
+
+    /// The class a new script's starter declares: a behaviour's is named after its asset
+    /// (`behaviourClass`, ClassNameFor's), the level and game tiers' are reserved.
+    [[nodiscard]] inline StringView ScriptStarterClassName(ScriptTier tier, StringView behaviourClass) noexcept
+    {
+        switch (tier)
+        {
+        case ScriptTier::Level:
+            return u8"Level";
+        case ScriptTier::Game:
+            return u8"Game";
+        case ScriptTier::Behavior:
+        default:
+            return behaviourClass;
         }
     }
 

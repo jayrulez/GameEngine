@@ -487,10 +487,12 @@ namespace pipeline{
                 return foundation::script::angelscript::AngelScriptBytecodeVersion();
             }
 
-            [[nodiscard]] bool Cook(StringView source, StringView assetName,
+            using IScriptLanguageCook::Cook; // and the overload that prefers the file's stem
+
+            [[nodiscard]] bool Cook(StringView source, StringView assetName, StringView preferredClass,
                                     CookScriptErrorSink& sink, ScriptClassSource& out) override
             {
-                const bool ok = CookOnThisThread(source, assetName, sink, out, false, Span<const TypeId>{});
+                const bool ok = CookOnThisThread(source, assetName, preferredClass, sink, out, false, Span<const TypeId>{});
                 // AngelScript keeps per-thread local data (active-context stack, type-name
                 // scratch) that only asThreadCleanup releases. Cooks run on job workers that
                 // never exit through AngelScript's own teardown, so release it here, after
@@ -499,12 +501,12 @@ namespace pipeline{
                 return ok;
             }
 
-            [[nodiscard]] bool Check(StringView source, StringView assetName,
+            [[nodiscard]] bool Check(StringView source, StringView assetName, StringView preferredClass,
                                      CookScriptErrorSink& sink, String& className,
                                      Span<const TypeId> hidden) override
             {
                 ScriptClassSource out;
-                const bool ok = CookOnThisThread(source, assetName, sink, out, true, hidden);
+                const bool ok = CookOnThisThread(source, assetName, preferredClass, sink, out, true, hidden);
                 asThreadCleanup(); // as in Cook
                 className = Move(out.className);
                 return ok;
@@ -513,7 +515,7 @@ namespace pipeline{
             // `checkOnly` stops after the build (Check): no harvest, no bytecode, and the build
             // leaves the global initializers unrun. The engine registers every type but `hidden`, so
             // a use of one is a compile error.
-            [[nodiscard]] bool CookOnThisThread(StringView source, StringView assetName,
+            [[nodiscard]] bool CookOnThisThread(StringView source, StringView assetName, StringView preferredClass,
                                                 CookScriptErrorSink& sink, ScriptClassSource& out,
                                                 bool checkOnly, Span<const TypeId> hidden)
             {
@@ -583,8 +585,15 @@ namespace pipeline{
                     return false;
                 }
 
-                out.className =
-                    FindScriptClassName(source, pipeline::FileStemOf(assetName));
+                const Array<String> declared = ListScriptClassNames(source);
+                String problem;
+                out.className = ChooseScriptClass(Span<const String>(declared.Data(), declared.Size()), preferredClass, problem);
+                if (!problem.IsEmpty())
+                {
+                    ReportCookProblem(sink, assetName, problem);
+                    engine->ClearMessageCallback();
+                    return false;
+                }
                 if (checkOnly)
                 {
                     engine->ClearMessageCallback();

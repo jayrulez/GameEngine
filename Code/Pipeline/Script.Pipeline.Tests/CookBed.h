@@ -101,11 +101,12 @@ namespace scriptpipe
         }
 
         [[nodiscard]] Status Cook(StringView fileName, StringView language,
-                                  content::Instance*& outInstance)
+                                  content::Instance*& outInstance, StringView className = {})
         {
             ScriptClassAsset asset;
             asset.fileName = foundation::vfs::SourcePath(fileName);
             asset.language = String(language);
+            asset.className = String(className);
             ScriptClassAssetBuilder builder;
             pipeline::AssetBuildContext ctx{foundation::core::DefaultAllocator()};
             ctx.sources = sources.Get();

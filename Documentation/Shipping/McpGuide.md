@@ -310,7 +310,11 @@ and is changed through its facade instead (`SceneAnimation`'s `setClip`); a list
 methods rather than a property. A member with `readOnly: true` (a network identity's
 `authority`, for one) reads and refuses assignment in every backend. `script_create` seeds a starter asset
 (behavior | level | game tier), then edit the returned source FILE, loop on
-`script_validate`, and `asset_cook` to make the class attachable.
+`script_validate`, and `asset_cook` to make the class attachable. A script file may declare several
+classes (data, helpers); the one it plays is its asset's Class (`className`: the name its file was
+imported under, or a new script's starter class), else the one named like its file, else its only
+one. Several and none so named fails the cook, naming them: set the asset's Class, or pass
+`script_validate` the file's `name` (or `className`).
 
 **Shaders**: a custom shader is one `.hlsl` with a `properties` block declaring its materials'
 parameters, in one of two kinds. A SURFACE shader (a `// surface: lit` or `// surface: unlit`
@@ -452,7 +456,9 @@ script types with it, and the refusal names the script, the plugin and the line.
 
 - `script_validate` is a COMPILE check (`checkLevel: "compile"`): a call the language cannot
   see through, a misspelled member on a handle say, compiles and fails at runtime. Cross
-  check against `script_api`. With `platform` (an open project needed), it also checks the source
+  check against `script_api`. It plays the class its asset would: `className`, else the one named
+  like `name` (default "script"), else the only one; pass the file's `name` for a file of several
+  classes, or it fails as the cook would. With `platform` (an open project needed), it also checks the source
   against what the project's plugins leave on that platform, as an export for it does: `valid`
   false with the errors, and `absentPlugins` naming the plugins the platform lacks. In Luau that
   is any global naming one of their types, guarded or not.

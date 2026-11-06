@@ -241,3 +241,29 @@ TEST_CASE("script.pipeline: luau ScriptSourceDocument::Validate compiles without
     CHECK(doc.Errors().Data()[0].line == 2);
     CHECK(doc.Errors().Data()[0].column == 11);
 }
+
+// A Luau script with several classes (constructors) plays the one its asset prefers: the recorded
+// class, else the one named like its file; several and none so named fails the cook, never a guess.
+TEST_CASE("script.pipeline: a Luau script with several classes plays the one its asset prefers")
+{
+    CookBed bed(u8"luau_classes");
+    constexpr StringView kTwo = u8R"lua(
+Helper = {}
+Helper.__index = Helper
+function Helper.new() return setmetatable({}, Helper) end
+Mover = {}
+Mover.__index = Mover
+function Mover.new(entity) return setmetatable({}, Mover) end
+function Mover:onUpdate(dt) end
+)lua";
+    bed.WriteSource(u8"Mover.2.luau", kTwo);
+    content::Instance* instance = nullptr;
+    CHECK_FALSE(bed.Cook(u8"Mover.2.luau", u8"luau", instance).IsOk()); // "Mover.2" names neither
+    content::Instance* chosen = nullptr;
+    REQUIRE(bed.Cook(u8"Mover.2.luau", u8"luau", chosen, u8"Mover").IsOk());
+    RefPtr<ISerializable> object = chosen->ReadObject();
+    ScriptClassSource* cooked = Cast<ScriptClassSource>(object.Get());
+    REQUIRE(cooked != nullptr);
+    CHECK(cooked->className == u8"Mover");
+    CHECK(cooked->handlers.Size() == 1u);
+}

@@ -31,6 +31,12 @@ namespace
     {
         REQUIRE(WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())).IsOk());
     }
+    String ReadText(StringView path)
+    {
+        Result<Array<byte>> bytes = ReadFile(path);
+        REQUIRE(bytes.HasValue());
+        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
     void RemoveAll(StringView dir)
     {
         RemoveDirectoryRecursive(dir);
@@ -188,7 +194,8 @@ TEST_CASE("gui.pipeline: the importer takes .xml and .css; the creators make a d
 // easily): a sheet over a document of the same name is refused, the document untouched;
 // re-importing the document's own file replaces it in place (its guid kept); another folder's
 // file of the same name is refused, kept beside ("menu.2", its own copy "menu.2.xml"), or takes
-// the asset over (guid kept), as the context says; and the window's check (FindClash) says so first.
+// the asset over (guid kept, the other file's bytes in the asset's own copy, nothing left behind),
+// as the context says; and the window's check (FindClash) says so first.
 TEST_CASE("gui.pipeline: an import's name clashes: another type refused; another file refused, kept beside or replacing")
 {
     RegisterGuiAssets();
@@ -260,11 +267,67 @@ TEST_CASE("gui.pipeline: an import's name clashes: another type refused; another
     CHECK(beside.Value()->Id() != id);
     CHECK(fileOf(*beside.Value()) == StringView(u8"menu.2.xml"));
     CHECK(fileOf(*group.GetInstance(u8"menu")) == StringView(u8"menu.xml"));
-    // Replacing: the first asset takes the other file, its guid kept.
+    // Replacing: the first asset takes the other file, its guid kept, into its own copy (no copy
+    // beside it, none orphaned); the kept-beside asset's copy is untouched.
     context.onConflict = ImportConflictChoice::Replace;
     Result<content::Instance*> replaced = importer.Import(otherDoc.AsView(), context, group);
     REQUIRE(replaced.HasValue());
     CHECK(replaced.Value()->Id() == id);
-    CHECK(fileOf(*replaced.Value()) == StringView(u8"menu.2.xml")); // the other file's copy, the first's left alone
+    CHECK(fileOf(*replaced.Value()) == StringView(u8"menu.xml"));
+    CHECK(ReadText(PathJoin(sources.AsView(), u8"menu.xml").AsView()) == StringView(u8"<Screen covers=\"true\"/>\n"));
+    CHECK(fileOf(*group.GetInstance(u8"menu.2")) == StringView(u8"menu.2.xml"));
+    CHECK_FALSE(FileExists(PathJoin(sources.AsView(), u8"menu.3.xml").AsView()));
+    CHECK(ImportOriginOf(context.ledgerPath.AsView(), u8"menu.xml") == otherDoc);
+    RemoveAll(root.AsView());
+}
+
+// Replace over an asset whose copy another asset shares (the same bytes imported from two folders
+// share one copy): the shared copy is left as it is, for the other asset, and the replaced asset
+// takes a copy of its own.
+TEST_CASE("gui.pipeline: Replace leaves a copy another asset shares, and copies in beside it")
+{
+    RegisterGuiAssets();
+    const String root = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_guipipe_shared");
+    RemoveAll(root.AsView());
+    const String sources = PathJoin(root.AsView(), u8"Sources");
+    const String one = PathJoin(root.AsView(), u8"one");
+    const String two = PathJoin(root.AsView(), u8"two");
+    const String three = PathJoin(root.AsView(), u8"three");
+    const String db = PathJoin(root.AsView(), u8"db");
+    for (const String* d : {&sources, &one, &two, &three, &db})
+        REQUIRE(CreateDirectories(d->AsView()));
+    const String first = PathJoin(one.AsView(), u8"menu.xml");
+    const String twin = PathJoin(two.AsView(), u8"menu.xml");
+    const String other = PathJoin(three.AsView(), u8"menu.xml");
+    WriteText(first.AsView(), kTitle);
+    WriteText(twin.AsView(), kTitle); // the same bytes
+    WriteText(other.AsView(), u8"<Screen covers=\"true\"/>\n");
+
+    foundation::vfs::NativeFileSystem mount(db.AsView(), DefaultAllocator());
+    content::ContentDatabase sourceDb(DefaultAllocator(), mount, BinarySerializerFactory(), u8".asset");
+    content::Group& group = *sourceDb.RootGroup();
+    GuiFileImporter guiImporter;
+    IFileImporter& importer = guiImporter;
+    ImportContext context{DefaultAllocator(), sources.AsView()};
+    context.ledgerPath = ImportLedgerPath(PathJoin(root.AsView(), u8".cache").AsView());
+    auto fileOf = [](content::Instance& instance)
+    {
+        RefPtr<ISerializable> object = instance.ReadObject();
+        return String(Cast<Asset>(object.Get())->fileName.View());
+    };
+
+    REQUIRE(importer.Import(first.AsView(), context, group).HasValue());
+    context.onConflict = ImportConflictChoice::KeepBoth;
+    Result<content::Instance*> beside = importer.Import(twin.AsView(), context, group);
+    REQUIRE(beside.HasValue());
+    CHECK(fileOf(*beside.Value()) == StringView(u8"menu.xml")); // shared: the very same bytes
+
+    context.onConflict = ImportConflictChoice::Replace;
+    Result<content::Instance*> replaced = importer.Import(other.AsView(), context, group);
+    REQUIRE(replaced.HasValue());
+    CHECK(replaced.Value()->Name() == StringView(u8"menu"));
+    CHECK(fileOf(*replaced.Value()) != StringView(u8"menu.xml"));
+    CHECK(ReadText(PathJoin(sources.AsView(), u8"menu.xml").AsView()) == kTitle); // the other asset's, untouched
+    CHECK(fileOf(*group.GetInstance(u8"menu.2")) == StringView(u8"menu.xml"));
     RemoveAll(root.AsView());
 }

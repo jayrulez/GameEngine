@@ -890,6 +890,22 @@ export namespace pipeline
             }
             return true;
         }
+
+        // Writes `bytes` to `sourcesName` under the context's Sources/, leaving the same bytes
+        // already there untouched.
+        [[nodiscard]] inline Status WriteSourcesCopy(const ImportContext& context, StringView sourcesName, const Array<byte>& bytes)
+        {
+            const String target = PathJoin(context.sourcesRoot.AsView(), sourcesName);
+            if (FileExists(target.AsView()))
+            {
+                Result<Array<byte>> existing = ReadFile(target.AsView());
+                if (existing.HasValue() && SameBytes(existing.Value(), bytes))
+                {
+                    return Status{};
+                }
+            }
+            return WriteFile(target.AsView(), Span<const byte>(bytes.Data(), bytes.Size()));
+        }
     }
 
     /// The name under Sources/ a copy of `sourcePath` takes, from what is there and the ledger
@@ -949,22 +965,72 @@ export namespace pipeline
             return Err(bytes.Error());
         }
         String name = SourcesNameFor(context, sourcePath, mayOverwrite, &bytes.Value());
-        const String target = PathJoin(context.sourcesRoot.AsView(), name.AsView());
-        if (FileExists(target.AsView()))
-        {
-            Result<Array<byte>> existing = ReadFile(target.AsView());
-            if (existing.HasValue() && import_detail::SameBytes(existing.Value(), bytes.Value()))
-            {
-                return name; // identical: no touch, no recook churn
-            }
-        }
-        const Status written = WriteFile(
-            target.AsView(), Span<const byte>(bytes.Value().Data(), bytes.Value().Size()));
+        const Status written = import_detail::WriteSourcesCopy(context, name.AsView(), bytes.Value());
         if (!written.IsOk())
         {
             return Err(written.Code());
         }
         return name;
+    }
+
+    /// Copy an OS file into the project's Sources/ tree over `sourcesName`, a copy the caller
+    /// owns (the asset a re-import or a Replace lands on), and note it in the ledger as
+    /// `sourcePath`'s. The same bytes already there are left untouched (no recook churn).
+    [[nodiscard]] inline Status CopyIntoSourcesAs(const ImportContext& context, StringView sourcePath, StringView sourcesName)
+    {
+        if (FileNameOf(sourcePath).IsEmpty() || sourcesName.IsEmpty())
+        {
+            return Status{ErrorCode::InvalidArgument};
+        }
+        Result<Array<byte>> bytes = ReadFile(sourcePath);
+        if (!bytes.HasValue())
+        {
+            return Status{bytes.Error()};
+        }
+        const Status written = import_detail::WriteSourcesCopy(context, sourcesName, bytes.Value());
+        if (written.IsOk())
+        {
+            RecordImportOrigin(context.ledgerPath.AsView(), sourcesName, sourcePath);
+        }
+        return written;
+    }
+
+    /// Whether an asset other than `except`, anywhere in the database `group` belongs to, names
+    /// `sourcesName` as its file: a copy two assets share (the same bytes imported twice) is
+    /// overwritten for neither.
+    [[nodiscard]] inline bool SourcesCopyUsedByOther(foundation::content::Group& group, StringView sourcesName,
+                                                     const foundation::content::Instance* except)
+    {
+        foundation::content::Group* root = &group;
+        while (root->Parent() != nullptr)
+        {
+            root = root->Parent();
+        }
+        Array<foundation::content::Group*> pending;
+        pending.PushBack(root);
+        while (!pending.IsEmpty())
+        {
+            foundation::content::Group* at = pending.Back();
+            pending.PopBack();
+            for (foundation::content::Instance* instance : at->Instances())
+            {
+                if (instance == except)
+                {
+                    continue;
+                }
+                RefPtr<ISerializable> object = instance->ReadObject();
+                const auto* asset = Cast<Asset>(object.Get());
+                if (asset != nullptr && asset->fileName.View() == sourcesName)
+                {
+                    return true;
+                }
+            }
+            for (foundation::content::Group* child : at->Groups())
+            {
+                pending.PushBack(child);
+            }
+        }
+        return false;
     }
 
     // === name clashes ===
@@ -1057,11 +1123,16 @@ export namespace pipeline
     /// The asset a single-asset importer writes: its name (the user's, else the stem) claimed in
     /// `group` by the clash rule and the context's choice, and the file copied into Sources/
     /// (never over another file's copy). `sourcesName` gets the copy's name for the asset's
-    /// fileName. Refused (AlreadyExists) for an asset of another type, or of its type from another
-    /// file when the choice is Refuse; nothing is copied or made then.
+    /// fileName. An asset the import lands on (a re-import, or Replace) keeps its own copy, which
+    /// takes the new bytes, when that copy has the file's extension and no other asset uses it;
+    /// else the file is copied in beside, as a new asset's is. Refused (AlreadyExists) for an asset
+    /// of another type, or of its type from another file when the choice is Refuse; nothing is
+    /// copied or made then. `clashKind`, when given, gets what the name met (Reimport: this file's
+    /// own earlier import).
     [[nodiscard]] inline Result<foundation::content::Instance*> ClaimSingleAsset(const ImportContext& context, foundation::content::Group& group,
                                                                                  const ImportOptions* options, StringView sourcePath,
-                                                                                 const TypeInfo& type, String& sourcesName)
+                                                                                 const TypeInfo& type, String& sourcesName,
+                                                                                 ImportClashKind* clashKind = nullptr)
     {
         const StringView stem = FileStemOf(FileNameOf(sourcePath));
         String name(SingleAssetName(options, stem));
@@ -1071,19 +1142,44 @@ export namespace pipeline
         {
             return Err(ErrorCode::AlreadyExists);
         }
+        if (clashKind != nullptr)
+        {
+            *clashKind = clash.kind;
+        }
         foundation::content::Instance* reuse = nullptr;
-        bool overwriteOwn = false; // its copy under Sources/ is the asset's own, to be overwritten
+        String own; // the reused asset's copy under Sources/, when it may take the new bytes
+        bool overwriteOwn = false; // the file's own name under Sources/ is the asset's, to be overwritten
         if (clash.kind == ImportClashKind::Reimport ||
             (clash.kind == ImportClashKind::SameType && context.onConflict == ImportConflictChoice::Replace))
         {
             reuse = clash.existing;
             RefPtr<ISerializable> object = reuse->ReadObject();
             const auto* asset = Cast<Asset>(object.Get());
-            overwriteOwn = asset != nullptr && asset->fileName.View() == FileNameOf(sourcePath);
+            if (asset != nullptr)
+            {
+                const StringView held = asset->fileName.View();
+                overwriteOwn = held == FileNameOf(sourcePath);
+                if (!held.IsEmpty() && FileExtensionLower(held) == FileExtensionLower(sourcePath) &&
+                    !SourcesCopyUsedByOther(group, held, reuse))
+                {
+                    own = String(held);
+                }
+            }
         }
         else if (clash.kind == ImportClashKind::SameType)
         {
             name = group.UniqueInstanceName(name.AsView()); // KeepBoth
+        }
+        if (!own.IsEmpty())
+        {
+            // Its own copy takes the new bytes in place: no copy beside it, none left behind.
+            const Status written = CopyIntoSourcesAs(context, sourcePath, own.AsView());
+            if (!written.IsOk())
+            {
+                return Err(written.Code());
+            }
+            sourcesName = Move(own);
+            return reuse;
         }
         Result<String> copied = CopyIntoSources(context, sourcePath, overwriteOwn);
         if (!copied.HasValue())

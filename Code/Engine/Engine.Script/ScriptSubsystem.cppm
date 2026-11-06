@@ -1476,6 +1476,16 @@ export namespace engine::script
         /// True once a Level object is live (test/inspection).
         [[nodiscard]] bool LevelActive() const noexcept { return m_level.Get() != nullptr; }
         [[nodiscard]] bool LevelFaulted() const noexcept { return m_faulted; }
+        /// Reads a property of the live Level object (a playtest probes a level's state with it).
+        /// NotFound with no Level live or no such property.
+        [[nodiscard]] core::Result<Variant> GetLevelProperty(StringView name) const
+        {
+            if (m_level.Get() == nullptr)
+            {
+                return core::Err(ErrorCode::NotFound);
+            }
+            return m_level->GetProperty(name);
+        }
 
         // ---- SceneSystem ----
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }

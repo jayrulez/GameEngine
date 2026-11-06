@@ -263,6 +263,19 @@ export namespace editor
             }
             return m_gameInstance->GetScriptProperty(name);
         }
+        [[nodiscard]] Result<Variant> GetLevelProperty(StringView name) const override
+        {
+            if (!m_running || m_scene == nullptr)
+            {
+                return Err(ErrorCode::NotFound);
+            }
+            const engine::script::SceneScriptSystem* level = m_scene->GetSystem<engine::script::SceneScriptSystem>();
+            if (level == nullptr)
+            {
+                return Err(ErrorCode::NotFound);
+            }
+            return level->GetLevelProperty(name);
+        }
         void BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) override;
         void EndScriptedInput() override;
         [[nodiscard]] bool IsScripted() const noexcept override

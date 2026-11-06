@@ -129,12 +129,13 @@ mouse and keys, the other instances keep theirs, and whatever it holds is let go
 `probes` read entities (by guid, name or slash path) at field paths (`worldPosition`,
 `position`, `rotation`, `scale`, `active`, `<component>.<property>` as `entity_inspect` names
 them, or `<BehaviorClass>.<field>` for a behaviour running on the entity, private fields too,
-then `.x`/`.y`/`.z` or a key or an index) and the game script's fields (`{"script":
-"score"}`), sampled `every` N seconds (0.5 by default) or at `sampleAt` times; each row is `{t,
-frame, values}`, the last one at the end, and an entity gone by then reads null. `screenshots`
-writes the tab at those run times. `until` ends the run early, on a death or a win:
-`{"entity": "Player", "field": "worldPosition.y", "op": "<", "value": -10}`. `endedBy` says why
-it stopped: `duration`, `until`, `stopped` or `timeout`. A menu is played the same way:
+then `.x`/`.y`/`.z` or a key or an index), the game script's fields (`{"script":
+"score"}`) and the scene's level script's (`{"level": "m_round"}`, private fields too), sampled
+`every` N seconds (0.5 by default) or at `sampleAt` times; each row is `{t, frame, values}`, the
+last one at the end, and an entity gone by then reads null. `screenshots` writes the tab at those
+run times. `until` ends the run early, on a death or a win: `{"entity": "Player", "field":
+"worldPosition.y", "op": "<", "value": -10}`, or on a script's value (`{"level": "m_over", "op":
+"==", "value": true}`). `endedBy` says why it stopped: `duration`, `until`, `stopped` or `timeout`. A menu is played the same way:
 `pie_screenshot`, find the button, click it with a timeline. Probes and names are checked
 against the running game before the run starts, so a typo fails at once. Runs are real frames
 at real frame rates: a time lands within a frame of where it was asked, so compare with

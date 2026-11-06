@@ -64,6 +64,9 @@ export namespace editor
         /// Reads a property of the running game script; NotFound without a script or with no
         /// such property.
         [[nodiscard]] virtual Result<Variant> GetScriptProperty(StringView name) const = 0;
+        /// Reads a property of the running scene's level script; NotFound without one or with no
+        /// such property.
+        [[nodiscard]] virtual Result<Variant> GetLevelProperty(StringView name) const = 0;
 
         /// Plays `source` into this instance in place of the viewport's input, with its time zero
         /// now; the page advances it each frame by the run's time. A script already playing is

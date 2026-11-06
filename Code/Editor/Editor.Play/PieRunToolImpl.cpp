@@ -45,6 +45,7 @@ namespace editor
             String entity; ///< a guid, a name or a slash path; empty for a script probe
             String field;
             String script; ///< the game script property; empty for an entity probe
+            String level;  ///< the scene's level script property; empty otherwise
             String label;
         };
 
@@ -145,6 +146,17 @@ namespace editor
                 }
                 return ValueJson(value.Value());
             }
+            if (!probe.level.IsEmpty())
+            {
+                Result<Variant, ErrorCode> value = pie.GetLevelProperty(probe.level.AsView());
+                if (!value.HasValue())
+                {
+                    return Err(Format(u8"the level script of PIE instance '{}' has no property "
+                                      u8"'{}' (or its scene runs none)",
+                                      pie.PieId(), probe.level.AsView()));
+                }
+                return ValueJson(value.Value());
+            }
             scene::Scene* running = pie.RunningScene();
             if (running == nullptr)
             {
@@ -174,11 +186,19 @@ namespace editor
                 out.PushBack(Move(probe));
                 return Status{};
             }
+            if (entry.Has(u8"level"))
+            {
+                Probe probe;
+                probe.level = entry.Get(u8"level").AsString();
+                probe.label = Format(u8"level.{}", probe.level.AsView());
+                out.PushBack(Move(probe));
+                return Status{};
+            }
             const String entity = entry.Get(u8"entity").AsString();
             if (entity.IsEmpty())
             {
-                error = Format(u8"probes[{}]: name an `entity` (guid, name or slash path) or a "
-                               u8"`script` property",
+                error = Format(u8"probes[{}]: name an `entity` (guid, name or slash path), a "
+                               u8"`script` property or a `level` property",
                                i);
                 return ErrorCode::InvalidArgument;
             }
@@ -205,7 +225,8 @@ namespace editor
         {
             if (!until.IsObject())
             {
-                error = String(u8"`until` takes {entity, field, op, value} or {script, op, value}");
+                error = String(u8"`until` takes {entity, field, op, value}, {script, op, value} or "
+                               u8"{level, op, value}");
                 return ErrorCode::InvalidArgument;
             }
             Probe& probe = run.until;
@@ -215,13 +236,18 @@ namespace editor
                 probe.script = until.Get(u8"script").AsString();
                 probe.label = Format(u8"script.{}", probe.script.AsView());
             }
+            else if (until.Has(u8"level"))
+            {
+                probe.level = until.Get(u8"level").AsString();
+                probe.label = Format(u8"level.{}", probe.level.AsView());
+            }
             else
             {
                 probe.entity = until.Get(u8"entity").AsString();
                 if (probe.entity.IsEmpty())
                 {
-                    error = String(u8"`until` names an `entity` (with a `field`) or a `script` "
-                                   u8"property");
+                    error = String(u8"`until` names an `entity` (with a `field`), a `script` "
+                                   u8"property or a `level` property");
                     return ErrorCode::InvalidArgument;
                 }
                 const JsonValue field = until.Get(u8"field");
@@ -640,6 +666,7 @@ namespace editor
             .Str(u8"field", u8"its field path, as in probes (default worldPosition; worldPosition.y "
                             u8"for the height)")
             .Str(u8"script", u8"or a game script property")
+            .Str(u8"level", u8"or a property of the scene's level script")
             .Str(u8"op", u8"<, <=, >, >=, == or !=")
             .Any(u8"value", u8"what it is compared with: a number, or with == and != a boolean or a "
                             u8"string");
@@ -657,7 +684,8 @@ namespace editor
         SchemaBuilder probe;
         probe.Str(u8"entity", u8"the entity, by guid, name or slash path")
             .Arr(u8"fields", u8"string", u8"its field paths (default [\"worldPosition\"])")
-            .Str(u8"script", u8"or a game script property");
+            .Str(u8"script", u8"or a game script property")
+            .Str(u8"level", u8"or a property of the scene's level script");
         JsonValue schema =
             SchemaBuilder()
                 .Str(u8"pie", u8"the PIE instance's id, as pie_list reports it (default: the "
@@ -671,16 +699,16 @@ namespace editor
                            u8"render-resolution pixels (a scaled screenshot's divided by its scale)")
                 .ObjectArr(u8"probes", probe,
                            u8"what to read: {entity, fields} (entity by guid, name or slash path; "
-                           u8"fields default [\"worldPosition\"]) or {script: \"<game script "
-                           u8"property>\"}")
+                           u8"fields default [\"worldPosition\"]), {script: \"<game script "
+                           u8"property>\"} or {level: \"<the scene's level script property>\"}")
                 .Number(u8"every", u8"sample the probes every N run seconds (default 0.5)")
                 .Arr(u8"sampleAt", u8"number", u8"or sample at these run times instead")
                 .Arr(u8"screenshots", u8"number", u8"run times at which to write a PNG of the tab")
                 .Str(u8"screenshotDir", u8"an existing directory for the screenshots (default: "
                                         u8"<user-data>/screenshots)")
                 .Obj(u8"until", until,
-                     u8"end the run early when one value crosses: {entity, field, op, value} or "
-                     u8"{script, op, value}; `value` is a number, or with == and != a boolean or a "
+                     u8"end the run early when one value crosses: {entity, field, op, value}, "
+                     u8"{script, op, value} or {level, op, value}; `value` is a number, or with == and != a boolean or a "
                      u8"string")
                 .Build();
 
@@ -699,7 +727,8 @@ namespace editor
             u8"\"LeftX\"). Held keys are let go when the run ends. `probes` read entity fields "
             u8"(`worldPosition`, `position`, `rotation`, `scale`, `active`, or "
             u8"`<component>.<property>` as entity_inspect names them, then `.x`/`.y`/`.z` or a "
-            u8"key or index to go inside) and game script properties, sampled `every` N seconds "
+            u8"key or index to go inside), game script properties and the scene's level script's "
+            u8"(`level`), sampled `every` N seconds "
             u8"or at `sampleAt` times, one row per sample {t, frame, values} with a final row at "
             u8"the end; an entity missing at a sample reads null. `screenshots` writes the tab at "
             u8"those run times. `until` ends the run when its value crosses (\"Player "

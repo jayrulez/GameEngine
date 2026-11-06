@@ -82,6 +82,15 @@ namespace
             }
             return Variant::From<f64>(score);
         }
+        // The scene's level script, with one property, `wave`.
+        [[nodiscard]] Result<Variant> GetLevelProperty(StringView name) const override
+        {
+            if (!running || name != u8"wave")
+            {
+                return Err(ErrorCode::NotFound);
+            }
+            return Variant::From<f64>(wave);
+        }
 
         // The scripted input a run installed, advanced by Frame as the page's OnUpdate does.
         void BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) override
@@ -160,6 +169,7 @@ namespace
         String scene{u8"Arena"};
         foundation::scene::Scene level{DefaultAllocator(), u8"Level1"};
         f64 score = 0.0;
+        f64 wave = 0.0;
         UniquePtr<foundation::input::ScriptedInputSource> scripted;
         f64 scriptStart = 0.0;
         bool scriptEnding = false;
@@ -651,6 +661,36 @@ TEST_CASE("pie-tools: until ends a run, and a stop ends it too")
     CHECK(got.payload.Get(u8"endedBy").AsString() == StringView(u8"stopped"));
     CHECK(got.payload.Get(u8"samples").Count() == 1);
     CHECK_FALSE(got.payload.Get(u8"state").Get(u8"running").AsBool());
+}
+
+TEST_CASE("pie-tools: a run reads the scene's level script, and ends on it")
+{
+    PlayRig rig;
+    HeadlessGamePage* host = RunningPie(rig, u8"game-page");
+
+    // A property the level script does not have is refused before the run starts.
+    Answer got = Pump(rig.server, u8"pie_run", u8"{\"duration\":1,\"probes\":[{\"level\":\"lives\"}]}");
+    CHECK(got.error.AsView().StartsWith(u8"the level script of PIE instance 'game-page' has no property 'lives'"));
+    CHECK(host->scriptsBegun == 0u);
+
+    // Its property is sampled as `level.<name>`.
+    const StringView sample = u8"{\"duration\":1,\"probes\":[{\"level\":\"wave\"}],\"every\":0.5}";
+    host->wave = 2.0;
+    got = RunToEnd(rig, sample, *host, 0.05);
+    REQUIRE(got.ok);
+    const JsonValue samples = got.payload.Get(u8"samples");
+    REQUIRE(samples.Count() > 0);
+    CHECK(samples.At(samples.Count() - 1).Get(u8"values").Get(u8"level.wave").AsNumber() == doctest::Approx(2.0));
+
+    // And `until` ends the run when it crosses.
+    PlayFrame(*host, 0.1);
+    const StringView until = u8"{\"duration\":10,\"until\":{\"level\":\"wave\",\"op\":\">=\",\"value\":3}}";
+    CHECK_FALSE(Pump(rig.server, u8"pie_run", until).finished);
+    host->wave = 3.0;
+    got = RunToEnd(rig, until, *host, 0.05);
+    REQUIRE(got.ok);
+    CHECK(got.payload.Get(u8"endedBy").AsString() == StringView(u8"until"));
+    CHECK(got.payload.Get(u8"until").Get(u8"probe").AsString() == StringView(u8"level.wave"));
 }
 
 TEST_CASE("pie-tools: two instances run side by side, and only the scripted one moves")

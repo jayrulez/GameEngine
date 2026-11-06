@@ -2233,6 +2233,62 @@ TEST_CASE("model-import: the node an unskinned mesh hangs under joins the skelet
     CHECK(clip.trackBone[0] == 2); // the prop's swing is a track of the pose
 }
 
+TEST_CASE("model-import: a bone between two joints that no vertex is bound to joins the skeleton, its animation played")
+{
+    // A rig whose second spine bone carries no vertices: the skin's joints are the pelvis and the
+    // ribcage, with the spine between them. Left out, the ribcage would root a skeleton of its own
+    // and the upper body would ignore the spine's rest and its sway.
+    model::Model m;
+    auto bone = [&](StringView name, i32 parent)
+    {
+        auto* b = new model::ModelBone();
+        b->setName(name);
+        b->parentIndex = parent;
+        b->isSkeletonBone = true;
+        return m.addBone(b);
+    };
+    const i32 pelvis = bone(u8"RigPelvis", -1);
+    const i32 spine1 = bone(u8"RigSpine1", pelvis);
+    const i32 spine2 = bone(u8"RigSpine2", spine1);
+    const i32 ribcage = bone(u8"RigRibcage", spine2);
+    const i32 head = bone(u8"RigHead", ribcage);
+    const i32 apart = bone(u8"Apart", -1);
+    const i32 tail = bone(u8"RigTail", apart); // a joint under a node the skeleton does not reach
+    model::ModelSkin skin;
+    skin.addJoint(pelvis, Float4x4::Identity());
+    skin.addJoint(ribcage, Float4x4::Identity());
+    skin.addJoint(head, Float4x4::Identity());
+    skin.addJoint(tail, Float4x4::Identity());
+
+    model::ModelAnimation idle;
+    idle.duration = 1.0f;
+    auto* sway = new model::AnimationChannel();
+    sway->targetBone = spine2;
+    sway->path = model::AnimationPath::Rotation;
+    sway->addKeyframe(0.0f, Float4{0.0f, 0.0f, 0.0f, 1.0f});
+    sway->addKeyframe(1.0f, Float4{0.0f, 0.0f, 0.38f, 0.92f});
+    idle.addChannel(sway);
+
+    const Array<i32> joints = pipeline::SkeletonJoints(m, skin);
+    REQUIRE(joints.Size() == 6u); // the skin's four (no vertex's joint index moves), then the spine, parents first
+    CHECK(joints[0] == pelvis);
+    CHECK(joints[3] == tail);
+    CHECK(joints[4] == spine1);
+    CHECK(joints[5] == spine2);
+    const HashMap<i32, i32> boneToJoint = pipeline::BuildBoneToJoint(joints.AsSpan());
+    foundation::animation::SkeletonSource skeleton;
+    pipeline::SkeletonSourceFromModel(m, skin, joints.AsSpan(), boneToJoint, skeleton);
+    CHECK(skeleton.parentIndices[4] == 0); // spine 1 under the pelvis
+    CHECK(skeleton.parentIndices[5] == 4); // spine 2 under spine 1
+    CHECK(skeleton.parentIndices[1] == 5); // the ribcage under spine 2, not a root
+    CHECK(skeleton.parentIndices[2] == 1); // the head under the ribcage
+    CHECK(skeleton.parentIndices[3] < 0);  // the tail's chain never reaches the skeleton: a root, as before
+    foundation::animation::AnimationClipSource clip;
+    pipeline::AnimationClipSourceFromModel(idle, boneToJoint, u8"idle", clip, pipeline::SkeletonParentNode(m, joints.AsSpan()));
+    REQUIRE(clip.trackBone.Size() == 1u);
+    CHECK(clip.trackBone[0] == 5); // the spine's sway is a track of the pose
+}
+
 TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, its animation played; an empty one does not")
 {
     // 3ds Max hangs a skeleton from a Dummy helper bone with no vertices of its own and animates it

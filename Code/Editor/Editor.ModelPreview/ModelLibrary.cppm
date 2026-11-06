@@ -96,7 +96,7 @@ export namespace editor
 
     /// The version of the cache's cooked files. Raise it when the import changes what it makes, so
     /// a model opened again cooks afresh.
-    inline constexpr u32 kCacheVersion = 7; // 7: the loose texture rule takes only an image named like the material or the model
+    inline constexpr u32 kCacheVersion = 8; // 8: a bone between two joints joins the skeleton
 
     /// A name for what is made from the file at `path`: 16 hex digits hashed from its path, size,
     /// modification time and `version`, so a changed file or a raised version gets a new name.

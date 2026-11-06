@@ -98,6 +98,34 @@ export namespace pipeline
             return false;
         };
         const auto valid = [&](i32 bone) { return bone >= 0 && static_cast<usize>(bone) < bones.Size(); };
+
+        // Then the bones between a joint and the skeleton above it. A bone no vertex is bound to,
+        // between two that are (a spine bone under the ribcage, a neck under the head), is not
+        // among the skin's joints, so the joint under it would root a skeleton of its own and its
+        // pose would leave out the bone's rest and animation. Each such chain joins, parents first,
+        // when it reaches the skeleton; one that does not (a second root under the file's node)
+        // stays as it is.
+        for (usize j = 0; j < joints.Size(); ++j)
+        {
+            const i32 joint = joints[j];
+            if (!valid(joint))
+                continue;
+            const i32 parent = bones[static_cast<usize>(joint)]->parentIndex;
+            if (!valid(parent) || among(parent))
+                continue;
+            Array<i32> chain;
+            i32 up = parent;
+            for (usize guard = 0; valid(up) && !among(up) && guard <= bones.Size(); ++guard)
+            {
+                chain.PushBack(up);
+                up = bones[static_cast<usize>(up)]->parentIndex;
+            }
+            if (!valid(up) || !among(up))
+                continue;
+            for (usize i = chain.Size(); i-- > 0;)
+                joints.PushBack(chain[i]);
+        }
+
         for (const model::ModelBone* node : bones)
         {
             const Span<model::ModelMesh* const> meshes = model.meshes();

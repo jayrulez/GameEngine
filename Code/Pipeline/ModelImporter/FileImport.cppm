@@ -1439,13 +1439,22 @@ export namespace pipeline
                     clip.modelRest.rotation = armature.rotation;
                     clip.modelRest.scale = armature.scale;
                 }
-                // A re-import keeps what was authored on the clip (its root motion settings).
+                // A re-import keeps what was authored on the clip (its page): its root motion
+                // settings, whether it loops (a model file does not say; a Die plays once) and its
+                // events, each held inside the clip's new length.
                 if (clipInst != nullptr)
                 {
                     RefPtr<ISerializable> previous = clipInst->ReadObject();
                     if (const auto* before = Cast<pipeline::AnimationClipAsset>(previous.Get()))
                     {
                         clip.source.rootMotion = before->source.rootMotion;
+                        clip.source.isLooping = before->source.isLooping;
+                        clip.source.eventTimes = before->source.eventTimes;
+                        clip.source.eventNames = before->source.eventNames;
+                        for (f32& time : clip.source.eventTimes)
+                        {
+                            time = Clamp(time, 0.0f, clip.source.duration);
+                        }
                     }
                     else if (sel.rootMotion)
                     {

@@ -2359,7 +2359,7 @@ TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, 
     }
 }
 
-TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and rest, and a re-import keeps its root motion")
+TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and rest, and a re-import keeps its root motion, looping and events")
 {
     // The armature node (the skeleton's parent) animated in the file keeps its
     // channels as model tracks (bone -1), the clip names its skeleton and the armature's rest for
@@ -2460,10 +2460,18 @@ TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and 
     CHECK(walk->skeleton == group.GetInstance(u8"skeleton")->Id());
     CHECK(std::abs(Dot(walk->modelRest.rotation, turn)) > 1.0f - 1.0e-5f);
     CHECK_FALSE(walk->source.rootMotion.Any()); // off unless asked
+    CHECK(walk->source.isLooping);              // a model file does not say: a clip loops
+    CHECK(walk->source.eventTimes.IsEmpty());
 
     // Authored on the clip, kept by a re-import; a clip new in the file takes the import option.
+    // Its looping and its events too (the file has neither), an event held inside the clip.
     walk->source.rootMotion.horizontal = true;
     walk->source.rootMotion.rootBone = String(u8"Hips");
+    walk->source.isLooping = false;
+    walk->source.eventTimes.PushBack(0.0f);
+    walk->source.eventNames.PushBack(String(u8"step"));
+    walk->source.eventTimes.PushBack(walk->source.duration + 5.0f);
+    walk->source.eventNames.PushBack(String(u8"past"));
     REQUIRE(group.GetInstance(u8"Walk")->WriteObject(*walk).IsOk());
     pipeline::ModelImportOptions options;
     options.rootMotion = true;
@@ -2478,11 +2486,19 @@ TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and 
     CHECK(kept->source.rootMotion.horizontal);
     CHECK_FALSE(kept->source.rootMotion.yaw); // the clip's, not the option's
     CHECK(kept->source.rootMotion.rootBone == StringView(u8"Hips"));
+    CHECK_FALSE(kept->source.isLooping);
+    REQUIRE(kept->source.eventTimes.Size() == 2u);
+    REQUIRE(kept->source.eventNames.Size() == 2u);
+    CHECK(kept->source.eventNames[0] == StringView(u8"step"));
+    CHECK(kept->source.eventTimes[0] == 0.0f);
+    CHECK(kept->source.eventNames[1] == StringView(u8"past"));
+    CHECK(kept->source.eventTimes[1] == kept->source.duration); // held inside the clip
     RefPtr<ISerializable> runObject = readClip(u8"Run");
     auto* run = Cast<pipeline::AnimationClipAsset>(runObject.Get());
     REQUIRE(run != nullptr);
     CHECK(run->source.rootMotion.horizontal);
     CHECK(run->source.rootMotion.yaw);
+    CHECK(run->source.isLooping); // not authored: as imported
 
     // Its own settings in the review (the import window's clip details): they start as the clip
     // has them, and what is set there is what the clip gets; a clip not set keeps its own.

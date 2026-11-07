@@ -1,6 +1,6 @@
 # Sky Hopper - Credits
 
-Made with GameEngine. Third-party assets, with thanks:
+Made with AssiduousEngine. Third-party assets, with thanks:
 
 ## Music
 

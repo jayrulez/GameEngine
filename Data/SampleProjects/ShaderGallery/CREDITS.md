@@ -1,6 +1,6 @@
 # Shader Gallery - Credits
 
-Made with GameEngine. Third-party assets, with thanks:
+Made with AssiduousEngine. Third-party assets, with thanks:
 
 ## Made for this gallery
 

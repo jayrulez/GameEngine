@@ -50,6 +50,10 @@
 #   SOURCE_DIR   - the target's source dir, scanned for the modules this library declares
 #   DEF_FILE     - output path
 
+# Run as a script (cmake -P), which starts with every policy unset: the project's minimum, so this
+# reads as the build does (IN_LIST below is an operator only under CMP0057).
+cmake_minimum_required(VERSION 3.28)
+
 if(NOT DUMPBIN OR NOT DEF_FILE OR NOT OBJECTS_FILE)
     message(FATAL_ERROR "GenerateModuleDef: DUMPBIN, OBJECTS_FILE and DEF_FILE are required")
 endif()

@@ -353,6 +353,55 @@ TEST_CASE("system: RunProcess propagates a non-zero exit code")
     CHECK(r.exitCode == expected);
 }
 
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) int __stdcall GetHandleInformation(void* handle, unsigned long* flags);
+#endif
+
+// A process this one starts (a file manager, a build) must not inherit its sockets: a child that
+// outlives it would hold the port (an editor's MCP server, a game's listener) after it has gone.
+TEST_CASE("system: sockets are not inherited by a process this one starts")
+{
+    REQUIRE(InitializeNetworking());
+    u16 port = 0;
+    const SocketHandle listener = TcpListen(0, /*loopbackOnly*/ true, &port);
+    REQUIRE(listener != kInvalidSocket);
+    const SocketHandle udp = UdpOpen(0);
+    REQUIRE(udp != kInvalidSocket);
+    const SocketHandle client = TcpConnect(0x7F000001u, port);
+    REQUIRE(client != kInvalidSocket);
+    SocketHandle accepted = kInvalidSocket;
+    for (int i = 0; i < 200 && accepted == kInvalidSocket; ++i)
+    {
+        accepted = TcpAccept(listener);
+        if (accepted == kInvalidSocket)
+            SleepMilliseconds(5);
+    }
+    REQUIRE(accepted != kInvalidSocket);
+
+    const SocketHandle sockets[] = {listener, udp, client, accepted};
+#if defined(_WIN32)
+    for (const SocketHandle socket : sockets)
+    {
+        unsigned long flags = 0;
+        REQUIRE(GetHandleInformation(reinterpret_cast<void*>(socket), &flags) != 0);
+        CHECK((flags & 1ul) == 0ul); // HANDLE_FLAG_INHERIT
+    }
+#else
+    // The child shell looks for each descriptor among its own.
+    String script;
+    for (const SocketHandle socket : sockets)
+        script += Format(u8"test -e /proc/self/fd/{} && echo inherited {}; ", static_cast<u64>(socket), static_cast<u64>(socket));
+    script += u8"echo done";
+    const StringView args[] = {u8"-c", script.AsView()};
+    const ProcessResult r = RunProcess(u8"/bin/sh", Span<const StringView>(args, 2));
+    REQUIRE(r.Ok());
+    CHECK_FALSE(r.output.AsView().Contains(u8"inherited"));
+    CHECK(r.output.AsView().Contains(u8"done"));
+#endif
+    for (const SocketHandle socket : sockets)
+        SocketClose(socket);
+}
+
 TEST_CASE("system: RunProcess reports failure to spawn a missing binary")
 {
     // Explicit path, no PATH search: a bogus name cannot resolve on any platform.

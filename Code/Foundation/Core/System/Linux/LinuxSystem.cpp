@@ -663,7 +663,9 @@ namespace foundation::core::sys
 
     SocketHandle UdpOpen(std::uint16_t port, std::uint16_t* outBoundPort) noexcept
     {
-        const int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+        // Close-on-exec: a process this one starts (a file manager, a build) must not inherit the
+        // socket, or it holds the port after this process has gone.
+        const int fd = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
         if (fd < 0)
         {
             return kInvalidSocket;
@@ -807,7 +809,7 @@ namespace foundation::core::sys
     SocketHandle TcpListen(std::uint16_t port, bool loopbackOnly, std::uint16_t* outBoundPort,
                            std::uint32_t* outBoundIp) noexcept
     {
-        const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+        const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0); // not inherited (UdpOpen)
         if (fd < 0)
         {
             return kInvalidSocket;
@@ -852,8 +854,8 @@ namespace foundation::core::sys
         }
         sockaddr_in addr{};
         socklen_t len = sizeof(addr);
-        const int fd =
-            ::accept(static_cast<int>(listener), reinterpret_cast<sockaddr*>(&addr), &len);
+        const int fd = ::accept4(static_cast<int>(listener), reinterpret_cast<sockaddr*>(&addr), &len,
+                                 SOCK_CLOEXEC); // not inherited (UdpOpen)
         if (fd < 0)
         {
             return kInvalidSocket;
@@ -872,7 +874,7 @@ namespace foundation::core::sys
 
     SocketHandle TcpConnect(std::uint32_t ip, std::uint16_t port) noexcept
     {
-        const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+        const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0); // not inherited (UdpOpen)
         if (fd < 0)
         {
             return kInvalidSocket;

@@ -701,6 +701,13 @@ namespace foundation::core::sys
         }
     }
 
+    // A socket a process this one starts (Explorer on a folder, a build) must not inherit: it would
+    // hold the port after this process has gone. Winsock sockets are inheritable handles by default.
+    static void NotInherited(SOCKET s) noexcept
+    {
+        ::SetHandleInformation(reinterpret_cast<HANDLE>(s), HANDLE_FLAG_INHERIT, 0);
+    }
+
     SocketHandle UdpOpen(std::uint16_t port, std::uint16_t* outBoundPort) noexcept
     {
         const SOCKET s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -708,6 +715,7 @@ namespace foundation::core::sys
         {
             return kInvalidSocket;
         }
+        NotInherited(s);
         u_long nonBlocking = 1;
         ::ioctlsocket(s, FIONBIO, &nonBlocking);
         const BOOL yes = TRUE;
@@ -859,6 +867,7 @@ namespace foundation::core::sys
         {
             return kInvalidSocket;
         }
+        NotInherited(s);
         SetNonBlocking(s);
         // No SO_REUSEADDR here: on Windows it lets a second socket take a port that is live,
         // and a port held in TIME_WAIT never blocks a bind anyway (see SystemBackend.h).
@@ -905,6 +914,7 @@ namespace foundation::core::sys
         {
             return kInvalidSocket;
         } // WSAEWOULDBLOCK: none pending
+        NotInherited(fd);
         SetNonBlocking(fd);
         if (fromIp != nullptr)
         {
@@ -924,6 +934,7 @@ namespace foundation::core::sys
         {
             return kInvalidSocket;
         }
+        NotInherited(s);
         SetNonBlocking(s);
         sockaddr_in addr{};
         addr.sin_family = AF_INET;

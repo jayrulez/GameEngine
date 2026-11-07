@@ -7,6 +7,7 @@
 
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/WSvxW8mWH5)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/AssiduousEngine/AssiduousEngine?include_prereleases&label=Release)](https://github.com/AssiduousEngine/AssiduousEngine/releases)
 
 A modern C++23 game engine and editor built entirely with C++ modules. It provides a complete game
 development ecosystem, combining an integrated editor, asset pipeline, runtime, and toolchain with
@@ -59,6 +60,12 @@ enables AI agents to build entire games, from initial project setup to fully pla
   [AGENTS.md](AGENTS.md) describes how an agent works on the engine itself.
 - **Samples:** five sample games and a custom shaders gallery (below), and low-level C++ samples
   per engine area.
+
+## Download
+
+The editor for Windows and Linux, the players games export against (Windows, Linux and web) and
+the sample games are on the [releases page](https://github.com/AssiduousEngine/AssiduousEngine/releases).
+Unpack the editor anywhere and run `Tools.Editor`; its project manager downloads the samples.
 
 ## Building
 

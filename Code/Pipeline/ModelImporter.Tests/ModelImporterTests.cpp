@@ -2618,6 +2618,25 @@ TEST_CASE("model import: a material is made on the built-in its shading model na
     CHECK(onPbr.source.shaderName == u8"forward");
     CHECK(slots(onPbr) == String(u8"AlbedoMap NormalMap OcclusionMap MetallicRoughnessMap"));
     CHECK(bakes == 1); // its separate rough map baked into the packed one by the caller
+    CHECK(onPbr.source.blendMode == foundation::materials::BlendMode::Opaque);
+
+    // Glass (transmission): the engine does not refract, so it draws blended, as see-through as it
+    // transmits, down to the opacity a pane keeps. A masked one stays masked.
+    model::ModelMaterial& glass = add(model::ShadingModel::Pbr);
+    glass.transmission = 1.0f;
+    pipeline::MaterialAsset onGlass;
+    build(4, onGlass);
+    CHECK(onGlass.source.blendMode == foundation::materials::BlendMode::AlphaBlend);
+    CHECK(uniform(onGlass, u8"BaseColor").w == doctest::Approx(pipeline::kTransmissiveMinOpacity));
+    glass.transmission = 0.5f;
+    pipeline::MaterialAsset halfGlass;
+    build(4, halfGlass);
+    CHECK(uniform(halfGlass, u8"BaseColor").w == doctest::Approx(1.0f - 0.5f * (1.0f - pipeline::kTransmissiveMinOpacity)));
+    glass.alphaMode = model::AlphaMode::Mask;
+    pipeline::MaterialAsset maskedGlass;
+    build(4, maskedGlass);
+    CHECK(maskedGlass.source.blendMode == foundation::materials::BlendMode::Masked);
+    CHECK(uniform(maskedGlass, u8"BaseColor").w == doctest::Approx(1.0f));
 }
 
 TEST_CASE("model-cook: a mesh, a texture and a material of one name all cook (3ds Max exports name them alike)")

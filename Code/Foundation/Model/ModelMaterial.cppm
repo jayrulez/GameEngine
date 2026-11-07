@@ -85,6 +85,10 @@ export namespace foundation::model
         // -- Alpha --
         AlphaMode alphaMode = AlphaMode::Opaque;
         f32 alphaCutoff = 0.5f;
+        // The share of light the surface lets through, 0 (none) to 1 (clear glass): glTF
+        // KHR_materials_transmission's factor. The engine does not refract; an import draws a
+        // transmissive surface blended (BuildModelMaterial).
+        f32 transmission = 0.0f;
 
         // -- Double-sided --
         bool doubleSided = false;

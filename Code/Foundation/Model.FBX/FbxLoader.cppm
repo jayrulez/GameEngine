@@ -393,15 +393,42 @@ export namespace foundation::model::fbx
                     material->doubleSided = true;
 
                 // Alpha and opacity, scalar values only (texture-based alpha detection
-                // is handled by detectAlphaFromTextures after textures are loaded).
-                if (mat->features.opacity.enabled)
+                // is handled by detectAlphaFromTextures after textures are loaded). The opacity rides
+                // the base colour's alpha, which the blend reads. A classic material (Lambert, Phong,
+                // or a shading model ufbx reads as Phong) is as see-through as its TransparencyFactor
+                // says (ufbx enables no opacity feature for it); a PBR shader by its opacity.
+                const bool classic = mat->shader_type == UFBX_SHADER_FBX_LAMBERT || mat->shader_type == UFBX_SHADER_FBX_PHONG ||
+                                     mat->shader_type == UFBX_SHADER_UNKNOWN;
+                if (classic)
+                {
+                    if (mat->fbx.transparency_factor.has_value &&
+                        static_cast<f32>(mat->fbx.transparency_factor.value_real) > 0.0f)
+                    {
+                        material->alphaMode = AlphaMode::Blend;
+                        material->baseColorFactor.w *= 1.0f - Clamp(static_cast<f32>(mat->fbx.transparency_factor.value_real), 0.0f, 1.0f);
+                    }
+                }
+                else if (mat->features.opacity.enabled)
                 {
                     if (mat->pbr.opacity.has_value &&
                         static_cast<f32>(mat->pbr.opacity.value_real) < 1.0f)
+                    {
                         material->alphaMode = AlphaMode::Blend;
+                        material->baseColorFactor.w *= Clamp(static_cast<f32>(mat->pbr.opacity.value_real), 0.0f, 1.0f);
+                    }
                     else if (mat->fbx.transparency_factor.has_value &&
                              static_cast<f32>(mat->fbx.transparency_factor.value_real) > 0.0f)
+                    {
                         material->alphaMode = AlphaMode::Blend;
+                        material->baseColorFactor.w *= 1.0f - Clamp(static_cast<f32>(mat->fbx.transparency_factor.value_real), 0.0f, 1.0f);
+                    }
+                }
+                // Transmission (glass), as a PBR shader means it: Standard Surface's, 3ds Max
+                // Physical's, a glTF material's. ufbx maps a classic material's TransparencyFactor
+                // there too, but that is its opacity (above), not glass.
+                if (!classic && mat->pbr.transmission_factor.has_value)
+                {
+                    material->transmission = Clamp(static_cast<f32>(mat->pbr.transmission_factor.value_real), 0.0f, 1.0f);
                 }
 
                 i32 matIndex = model.addMaterial(material);

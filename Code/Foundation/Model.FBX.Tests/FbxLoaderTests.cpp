@@ -407,3 +407,71 @@ Connections:  {
     CHECK(rotations == 1u);
     std::remove("scratch_fbx_held.fbx");
 }
+
+// A classic material's transparency is its opacity, carried by the base colour's alpha (the blend
+// reads it); it is not glass. A Standard Surface material's transmission is glass.
+TEST_CASE("fbx: a classic material's transparency is its opacity; a PBR shader's transmission is glass")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	Material: 1000, "Material::Tinted", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",1,1,1
+			P: "TransparencyFactor", "Number", "", "A",0.6
+		}
+	}
+	Material: 1001, "Material::Solid", "" {
+		Version: 102
+		ShadingModel: "lambert"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",1,1,1
+		}
+	}
+	Material: 1002, "Material::Glass", "" {
+		Version: 102
+		ShadingModel: "unknown"
+		Properties70:  {
+			P: "3dsMax|ClassIDa", "int", "Integer", "",1030429932
+			P: "3dsMax|ClassIDb", "int", "Integer", "",-559038463
+			P: "3dsMax|Parameters|transparency", "Float", "", "A",0.9
+		}
+	}
+}
+Connections:  {
+}
+)";
+    WriteText("scratch_fbx_opacity.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_opacity.fbx")), model) == ModelLoadResult::Ok);
+    const ModelMaterial* tinted = nullptr;
+    const ModelMaterial* solid = nullptr;
+    for (const ModelMaterial* m : model.materials())
+    {
+        if (m->name() == StringView{u8"Tinted"})
+            tinted = m;
+        if (m->name() == StringView{u8"Solid"})
+            solid = m;
+    }
+    REQUIRE(tinted != nullptr);
+    REQUIRE(solid != nullptr);
+    CHECK(tinted->alphaMode == AlphaMode::Blend);
+    CHECK(tinted->baseColorFactor.w == doctest::Approx(0.4f)); // 1 - 0.6
+    CHECK(tinted->transmission == 0.0f);                       // classic transparency is not glass
+    CHECK(solid->alphaMode == AlphaMode::Opaque);
+    CHECK(solid->baseColorFactor.w == doctest::Approx(1.0f));
+    const ModelMaterial* glass = nullptr;
+    for (const ModelMaterial* m : model.materials())
+        if (m->name() == StringView{u8"Glass"})
+            glass = m;
+    REQUIRE(glass != nullptr); // a 3ds Max Physical material: its transparency is transmission
+    CHECK(glass->transmission == doctest::Approx(0.9f));
+    CHECK(glass->alphaMode == AlphaMode::Opaque); // the import draws it blended (BuildModelMaterial)
+    std::remove("scratch_fbx_opacity.fbx");
+}

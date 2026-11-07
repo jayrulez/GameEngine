@@ -151,3 +151,28 @@ TEST_CASE("gltf: a material with KHR_materials_unlit is unlit; one without is PB
     CHECK(model.materials()[1]->shadingModel == ShadingModel::Pbr);
     std::remove(path);
 }
+
+// KHR_materials_transmission: its factor is read (glass); a material without it transmits nothing.
+TEST_CASE("gltf: KHR_materials_transmission's factor is read; a material without it transmits nothing")
+{
+    constexpr const char* kMaterials = R"({
+  "asset": {"version": "2.0"},
+  "extensionsUsed": ["KHR_materials_transmission"],
+  "materials": [
+    {"name": "glass", "pbrMetallicRoughness": {"baseColorFactor": [1.0, 1.0, 1.0, 1.0]},
+     "extensions": {"KHR_materials_transmission": {"transmissionFactor": 0.8}}},
+    {"name": "brick", "pbrMetallicRoughness": {"baseColorFactor": [1.0, 1.0, 1.0, 1.0]}}
+  ]
+})";
+    const char* path = "scratch_gltf_transmission.gltf";
+    REQUIRE(WriteFile(StringView(reinterpret_cast<const utf8char*>(path)),
+                      Span<const byte>(reinterpret_cast<const byte*>(kMaterials), std::strlen(kMaterials)))
+                .IsOk());
+    Model model;
+    gltf::GltfLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>(path)), model) == ModelLoadResult::Ok);
+    REQUIRE(model.materials().Size() == 2u);
+    CHECK(model.materials()[0]->transmission == doctest::Approx(0.8f));
+    CHECK(model.materials()[1]->transmission == 0.0f);
+    std::remove(path);
+}

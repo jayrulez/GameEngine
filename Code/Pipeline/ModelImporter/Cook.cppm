@@ -145,11 +145,24 @@ export namespace pipeline
     // the authored pipeline state and the samplers. Every texture the material reads is wired into
     // its source, so a material picked on its own draws fully textured. Both cooks (the file
     // import's and the direct one) make their materials here.
+    // The opacity a fully transmissive surface keeps, drawn blended: enough for a pane of glass to
+    // show its tint, its frame's reflection and its highlights rather than vanish.
+    inline constexpr f32 kTransmissiveMinOpacity = 0.15f;
+
     inline void BuildModelMaterial(const model::Model& model, const model::ModelMaterial& m, StringView name,
                                    const Array<Guid>& textureGuids,
                                    const Function<Guid(i32 roughIndex, i32 metalIndex)>& packedMetallicRoughness,
                                    pipeline::MaterialAsset& asset)
     {
+        // A transmissive surface (glTF transmission: glass) that is otherwise opaque: the engine
+        // does not refract, so it draws blended, as see-through as it transmits (down to
+        // kTransmissiveMinOpacity), its base colour's alpha carrying the opacity.
+        const bool transmissive = m.transmission > 0.0f && m.alphaMode == model::AlphaMode::Opaque &&
+                                  m.shadingModel == model::ShadingModel::Pbr;
+        const Float4 baseColor = transmissive
+                                     ? Float4{m.baseColorFactor.x, m.baseColorFactor.y, m.baseColorFactor.z,
+                                              m.baseColorFactor.w * (1.0f - Clamp(m.transmission, 0.0f, 1.0f) * (1.0f - kTransmissiveMinOpacity))}
+                                     : m.baseColorFactor;
         RefPtr<materials::Material> built;
         switch (m.shadingModel)
         {
@@ -166,7 +179,7 @@ export namespace pipeline
             break;
         case model::ShadingModel::Pbr:
         default:
-            built = materials::CreatePBR(name, m.baseColorFactor, m.metallicFactor, m.roughnessFactor);
+            built = materials::CreatePBR(name, baseColor, m.metallicFactor, m.roughnessFactor);
             built->SetDefaultFloat(u8"OcclusionStrength", m.occlusionStrength);
             break;
         }
@@ -213,10 +226,11 @@ export namespace pipeline
             }
         }
         // Authored pipeline state: the alpha mode picks the blend (Mask is an alpha-tested cutout
-        // with holey shadows; Blend is the transparent pass), and double-sided turns culling off.
+        // with holey shadows; Blend, or transmission on an opaque surface, is the transparent
+        // pass), and double-sided turns culling off.
         if (m.alphaMode == model::AlphaMode::Mask)
             asset.source.blendMode = materials::BlendMode::Masked;
-        else if (m.alphaMode == model::AlphaMode::Blend)
+        else if (m.alphaMode == model::AlphaMode::Blend || transmissive)
             asset.source.blendMode = materials::BlendMode::AlphaBlend;
         if (m.doubleSided)
             asset.source.cullMode = materials::CullModeConfig::None;

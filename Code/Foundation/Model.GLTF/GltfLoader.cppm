@@ -263,6 +263,10 @@ export namespace foundation::model::gltf
                     material->emissiveTextureIndex = static_cast<i32>(
                         cgltf_texture_index(m_data, mat->emissive_texture.texture));
 
+                // KHR_materials_transmission: glass, a lens, a wrap (its factor; the texture is not read).
+                if (mat->has_transmission)
+                    material->transmission = mat->transmission.transmission_factor;
+
                 // Alpha.
                 switch (mat->alpha_mode)
                 {

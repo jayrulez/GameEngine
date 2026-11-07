@@ -91,8 +91,6 @@ animated by Blender scripts.
 |:---:|:---:|:---:|
 | ![Title](Documentation/Images/PaperKid-Title.png) | ![Playing](Documentation/Images/PaperKid-Play.png) | ![Cleared](Documentation/Images/PaperKid-Cleared.png) |
 
-Watch it played on a Steam Deck: [PaperKid gameplay video](https://youtu.be/syJlmIirg_o).
-
 **Snowline** is a snowboard time trial with tricks. It shows generated terrain with splat-painted
 snow, rock and forest, scattered vegetation whose trees are solid, splines for the course line and
 the medal ghosts, an animation graph the rider drives by parameters, decals for its tracks, and
@@ -104,8 +102,6 @@ is modelled, rigged and animated by Blender scripts.
 | Courses | Ridge, past the gap | A run's results |
 |:---:|:---:|:---:|
 | ![Courses](Documentation/Images/Snowline-Title.png) | ![Ridge](Documentation/Images/Snowline-Ridge.png) | ![Results](Documentation/Images/Snowline-Results.png) |
-
-Watch it played on a Steam Deck: [Snowline gameplay video](https://youtu.be/vlxxLiMEzp0).
 
 **Lamplight** is a night-time manor heist in pure stealth. It shows lamplight and lantern shadows, a
 light meter that reads the renderer's own lights (a guard's eye reads the same), guards on

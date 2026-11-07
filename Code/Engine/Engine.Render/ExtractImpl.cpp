@@ -41,27 +41,6 @@ namespace engine::render
         return EntityTag::Pack(e.index, e.generation); // the one layout the pick readback decodes
     }
 
-    RenderCategory CategoryForMaterial(const materials::Material* m) noexcept
-    {
-        if (m == nullptr)
-        {
-            return RenderCategories::Opaque;
-        }
-        switch (m->pipeline.blendMode)
-        {
-        case materials::BlendMode::Opaque:
-            // A material whose shader moves its vertices draws its depth with a program of its own
-            // (Material::depthShaderName), compiled apart from its forward program: the two need not
-            // place a vertex to the last bit, and the forward pass's equal test against the camera
-            // depth prepass would flicker where they differ. Out of the prepass, as a fading mesh is.
-            return m->depthShaderName.IsEmpty() ? RenderCategories::Opaque : RenderCategories::Masked;
-        case materials::BlendMode::Masked:
-            return RenderCategories::Masked;
-        default:
-            return RenderCategories::Transparent;
-        }
-    }
-
     f32 WorldBoundsRadius(const AABB& local, const Float4x4& world)
     {
         const f32 sx = Length(Float3{world.m[0][0], world.m[0][1], world.m[0][2]});
@@ -92,13 +71,8 @@ namespace engine::render
         rd.mesh = mc.mesh.Get();
         rd.material = primary;
         rd.entityId = PackEntity(e);
-        rd.category = CategoryForMaterial(primary);
         rd.fade = Clamp(mc.fade, 0.0f, 1.0f);
-        if (rd.fade > 0.0f && rd.category == RenderCategories::Opaque)
-        {
-            // Out of the depth prepass: its depth would hide what the dither lets through.
-            rd.category = RenderCategories::Masked;
-        }
+        rd.category = MeshSlotCategory(primary, rd.fade); // a fading mesh is out of the depth prepass
         // Batch-cluster key for the sort (opaque draws stay contiguous by mesh and material). rendererId
         // keeps its default 0: the MeshRenderer is the first-registered renderer, so mesh data routes to it.
         rd.sortBatchKey = BatchKey(mc.mesh.Get(), primary);
@@ -136,6 +110,7 @@ namespace engine::render
                     if (MeshRenderData* rd = out.Add<MeshRenderData>())
                     {
                         FillMeshRenderData(scene, mc, e, *rd);
+                        (void)SplitMeshByCategory(*rd, [&] { return out.Add<MeshRenderData>(); });
                     }
                 });
         }
@@ -182,6 +157,13 @@ namespace engine::render
                                  }
                                  FillMeshRenderData(scene, mc, owners[i], *rd);
                                  ctx.Items(slot).PushBack(static_cast<RenderData*>(rd));
+                                 (void)SplitMeshByCategory(*rd, [&]() -> MeshRenderData*
+                                                           {
+                                                               MeshRenderData* other = ctx.Arena(slot).New<MeshRenderData>();
+                                                               if (other != nullptr)
+                                                                   ctx.Items(slot).PushBack(static_cast<RenderData*>(other));
+                                                               return other;
+                                                           });
                              });
         }
         else
@@ -203,6 +185,13 @@ namespace engine::render
                 }
                 FillMeshRenderData(scene, mc, owners[i], *rd);
                 items.PushBack(static_cast<RenderData*>(rd));
+                (void)SplitMeshByCategory(*rd, [&]() -> MeshRenderData*
+                                          {
+                                              MeshRenderData* other = arena.New<MeshRenderData>();
+                                              if (other != nullptr)
+                                                  items.PushBack(static_cast<RenderData*>(other));
+                                              return other;
+                                          });
             }
         }
         ctx.MergeInto(out);

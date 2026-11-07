@@ -24,7 +24,7 @@ import foundation.terrain.resource;
 import foundation.vegetation.resource;
 import foundation.vegetation;
 import foundation.render;
-import engine.render;  // PackEntity, CategoryForMaterial (the instanced-mesh emitter's helpers)
+import engine.render;  // PackEntity (the instanced-mesh emitter's helper)
 import engine.terrain; // TerrainComponentManager (the terrain the layers grow on)
 
 using namespace foundation::core;
@@ -642,7 +642,7 @@ namespace engine::vegetation
             rd->worldCenter = set.worldCenter;
             rd->worldRadius = set.worldRadius;
             rd->entityId = engine::render::PackEntity(owner);
-            rd->category = engine::render::CategoryForMaterial(material);
+            rd->category = foundation::render::CategoryForMaterial(material);
             rd->sortBatchKey = render::BatchKey(mesh, material);
             rd->castShadows = layer.castShadows;
         }

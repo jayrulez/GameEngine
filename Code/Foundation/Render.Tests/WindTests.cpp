@@ -10,12 +10,14 @@
 import foundation.core;
 import foundation.shaders;
 import foundation.materials;
+import foundation.geometry;
 import foundation.render;
 
 using namespace foundation::core;
 using namespace foundation::render;
 namespace materials = foundation::materials;
 namespace shaders = foundation::shaders;
+namespace geometry = foundation::geometry;
 
 namespace
 {
@@ -172,4 +174,134 @@ TEST_CASE("depth passes: an active effect selects its variant and binds the mate
         CHECK(shaders::HasFlag(sway.config.shaderFlags, shaders::ShaderFlags::Wind));
         CHECK(sway.config.shaderName == (pick ? StringView(u8"pick_ids") : StringView(u8"shadow_depth")));
     }
+}
+
+TEST_CASE("depth passes: each submesh draws with its own slot's material, a masked slot as a cut-out")
+{
+    // A tree: bark in slot 0, a masked foliage card in slot 1. The prepass and the shadows must cut
+    // the foliage's holes, as the forward does: drawn with slot 0's choice, the cards would write
+    // their whole quads' depth, and the gaps would show the clear colour.
+    RenderRecordContext ctx{};
+    RefPtr<materials::Material> bark = materials::CreatePBR(u8"bark");
+    RefPtr<materials::Material> leaves = materials::CreatePBR(u8"leaves");
+    leaves->pipeline.blendMode = materials::BlendMode::Masked;
+    const RefPtr<materials::Material> slots[2] = {bark, leaves};
+    geometry::SubMesh subs[2];
+    subs[0].startIndex = 0;
+    subs[0].indexCount = 300;
+    subs[0].materialIndex = 0;
+    subs[1].startIndex = 300;
+    subs[1].indexCount = 120;
+    subs[1].materialIndex = 1;
+    Array<MeshRenderer::DepthLikeRange> ranges;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const bool pick = pass == 1;
+        MeshRenderer::DepthLikeRanges(ctx, bark.Get(), slots, 2, Span<const geometry::SubMesh>(subs, 2),
+                                      /*chain*/ false, /*instanced*/ false, pick, ranges);
+        REQUIRE(ranges.Size() == 2u);
+        CHECK(ranges[0].material == bark.Get());
+        CHECK(ranges[1].material == leaves.Get());
+        CHECK_FALSE(ranges[1].whole);
+        CHECK(ranges[1].startIndex == 300u);
+        CHECK(ranges[1].indexCount == 120u);
+        const MeshRenderer::DepthLikeChoice cut = MeshRenderer::DepthLikeFor(ctx, ranges[1].material, false, pick);
+        CHECK(shaders::HasFlag(cut.config.shaderFlags, shaders::ShaderFlags::AlphaTest));
+        CHECK(cut.materialSet);
+    }
+
+    // Two opaque slots draw alike: one draw of the whole mesh, as before.
+    RefPtr<materials::Material> trim = materials::CreatePBR(u8"trim");
+    const RefPtr<materials::Material> opaque[2] = {bark, trim};
+    MeshRenderer::DepthLikeRanges(ctx, bark.Get(), opaque, 2, Span<const geometry::SubMesh>(subs, 2), false, true,
+                                  false, ranges);
+    REQUIRE(ranges.Size() == 1u);
+    CHECK(ranges[0].whole);
+
+    // One masked material in every slot: one whole draw with it.
+    const RefPtr<materials::Material> allLeaves[2] = {leaves, leaves};
+    MeshRenderer::DepthLikeRanges(ctx, leaves.Get(), allLeaves, 2, Span<const geometry::SubMesh>(subs, 2), false,
+                                  false, false, ranges);
+    REQUIRE(ranges.Size() == 1u);
+    CHECK(ranges[0].whole);
+    CHECK(ranges[0].material == leaves.Get());
+
+    // No submeshes: the whole mesh with slot 0. A slot out of range draws as slot 0.
+    MeshRenderer::DepthLikeRanges(ctx, leaves.Get(), nullptr, 0, {}, false, false, false, ranges);
+    REQUIRE(ranges.Size() == 1u);
+    CHECK(ranges[0].whole);
+    CHECK(ranges[0].material == leaves.Get());
+    subs[1].materialIndex = 7;
+    MeshRenderer::DepthLikeRanges(ctx, bark.Get(), slots, 2, Span<const geometry::SubMesh>(subs, 2), false, false,
+                                  false, ranges);
+    REQUIRE(ranges.Size() == 1u); // both bark now: alike
+    CHECK(ranges[0].material == bark.Get());
+
+    // A LOD chain's level keeps its ranges even when they draw alike (the buffer holds every level).
+    MeshRenderer::DepthLikeRanges(ctx, bark.Get(), opaque, 2, Span<const geometry::SubMesh>(subs, 2), /*chain*/ true,
+                                  false, false, ranges);
+    CHECK(ranges.Size() == 2u);
+}
+
+TEST_CASE("depth passes: an item of a mesh split by category draws its own category's ranges alone")
+{
+    // The pane's opaque item: its frame in the prepass and the shadows, never its glass (the
+    // transparent item draws that, in no depth pass).
+    RenderRecordContext ctx{};
+    RefPtr<materials::Material> frame = materials::CreatePBR(u8"frame");
+    RefPtr<materials::Material> glass = materials::CreatePBR(u8"glass");
+    glass->pipeline.blendMode = materials::BlendMode::AlphaBlend;
+    CHECK(CategoryForMaterial(frame.Get()) == RenderCategories::Opaque);
+    CHECK(CategoryForMaterial(glass.Get()) == RenderCategories::Transparent);
+    CHECK(MeshSlotCategory(frame.Get(), 0.5f) == RenderCategories::Masked); // fading: out of the prepass
+    CHECK(MeshSlotCategory(glass.Get(), 0.5f) == RenderCategories::Transparent);
+
+    const RefPtr<materials::Material> slots[2] = {frame, glass};
+    geometry::SubMesh subs[2];
+    subs[0].indexCount = 60;
+    subs[1].startIndex = 60;
+    subs[1].indexCount = 12;
+    subs[1].materialIndex = 1;
+    MeshRenderData item;
+    item.material = frame.Get();
+    item.submeshMaterials = slots;
+    item.submeshMaterialCount = 2;
+    item.category = RenderCategories::Opaque;
+    item.categorySlots = true;
+    Array<MeshRenderer::DepthLikeRange> ranges;
+    MeshRenderer::DepthLikeRanges(ctx, frame.Get(), slots, 2, Span<const geometry::SubMesh>(subs, 2), false, false,
+                                  false, ranges, &item);
+    REQUIRE(ranges.Size() == 1u);
+    CHECK(ranges[0].material == frame.Get());
+    CHECK_FALSE(ranges[0].whole); // the frame's indices, not the whole mesh's
+    CHECK(ranges[0].indexCount == 60u);
+
+    item.categorySlots = false; // not split: as before, the plain program for both, so one whole draw
+    MeshRenderer::DepthLikeRanges(ctx, frame.Get(), slots, 2, Span<const geometry::SubMesh>(subs, 2), false, false,
+                                  false, ranges, &item);
+    REQUIRE(ranges.Size() == 1u);
+    CHECK(ranges[0].whole);
+}
+
+TEST_CASE("forward: an item of a mesh split by category draws its slots with their own pipelines")
+{
+    // The pane's transparent item: its glass blends with the transparent pass's one colour target,
+    // never with the frame's opaque five (the frame is slot 0, the item's material).
+    RenderRecordContext ctx{};
+    RefPtr<materials::Material> frame = materials::CreatePBR(u8"frame");
+    RefPtr<materials::Material> glass = materials::CreatePBR(u8"glass");
+    glass->pipeline.blendMode = materials::BlendMode::AlphaBlend;
+    MeshRenderData item;
+    item.material = frame.Get();
+    item.category = RenderCategories::Transparent;
+    item.categorySlots = true;
+    const materials::PipelineConfig base = MeshRenderer::ConfigFor(item, frame.Get(), ctx, false);
+    CHECK(base.colorTargetCount == 5u);
+    const materials::PipelineConfig own = MeshRenderer::SlotConfigFor(item, base, glass.Get(), ctx, false, false);
+    CHECK(own.blendMode == materials::BlendMode::AlphaBlend);
+    CHECK(own.colorTargetCount == 1u);
+
+    item.categorySlots = false; // unsplit: the slot of another pass keeps the mesh's pipeline, as before
+    const materials::PipelineConfig kept = MeshRenderer::SlotConfigFor(item, base, glass.Get(), ctx, false, false);
+    CHECK(kept.colorTargetCount == 5u);
 }

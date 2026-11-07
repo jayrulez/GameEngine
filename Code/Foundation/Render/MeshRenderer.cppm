@@ -330,6 +330,43 @@ export namespace foundation::render
                                                           const materials::Material* material,
                                                           bool instanced, bool pick);
 
+        // The forward pipeline of one submesh slot's material: a slot draws with its own program (a
+        // custom shader on one slot, PBR on the rest), over the mesh's per-draw state (its fade).
+        [[nodiscard]] static materials::PipelineConfig ConfigFor(const MeshRenderData& md, const materials::Material* material,
+                                                          const RenderRecordContext& ctx, bool instanced);
+        // A submesh's pipeline: its slot material's when that differs from the mesh's and draws in
+        // the same pass (the same colour targets), or always for an item of a mesh split by
+        // category (MeshRenderData::categorySlots: every slot it draws is of its pass); else the
+        // mesh's `base` (an unsplit mesh's slot of another pass has no targets here), skinning
+        // flags as given.
+        [[nodiscard]] static materials::PipelineConfig SlotConfigFor(const MeshRenderData& md,
+                                                              const materials::PipelineConfig& base,
+                                                              const materials::Material* slot,
+                                                              const RenderRecordContext& ctx, bool instanced,
+                                                              bool skinned);
+
+        // One range of a mesh's depth-like draw: its material and its indices (`whole`: the mesh's
+        // whole index range).
+        struct DepthLikeRange
+        {
+            materials::Material* material = nullptr;
+            u32 startIndex = 0;
+            u32 indexCount = 0;
+            bool whole = false;
+        };
+        // The ranges of a mesh's depth-like draw (depth prepass, shadows, or `pick`): each of
+        // `subMeshes` with its slot's material (`slots[materialIndex]`, else `slot0`), as the forward
+        // pass draws them, so a masked material, an active effect or a material's own depth program
+        // in any slot casts and prepasses as itself; one whole range when there are no submeshes,
+        // or, outside a LOD chain (`chain`: a level is its own ranges), when every range draws
+        // alike (one material, or the plain program with no material set for all). For `only`, an
+        // item of a mesh split by category (MeshRenderData::categorySlots), its category's ranges
+        // alone.
+        static void DepthLikeRanges(const RenderRecordContext& ctx, materials::Material* slot0,
+                                    const RefPtr<materials::Material>* slots, u32 slotCount,
+                                    Span<const geometry::SubMesh> subMeshes, bool chain, bool instanced,
+                                    bool pick, Array<DepthLikeRange>& out, const MeshRenderData* only = nullptr);
+
         // The depth a blended material's pipeline uses in the transparent pass, which reads the
         // depth buffer but never writes it (its bundle is depth-read-only): a writing mode becomes
         // ReadOnly. MaterialBuilder::Transparent pairs the two, but a material authored as data can
@@ -481,6 +518,19 @@ export namespace foundation::render
                                    Span<const DrawItem> items, usize first, u32 count,
                                    const GpuMesh& mesh, Array<ResolvedDraw>& out, bool pick);
 
+        // The submeshes a depth-like draw of `md` resolves per slot: the view's LOD level of a chain,
+        // every submesh when it has per-submesh materials, else none (its one material covers it).
+        [[nodiscard]] Span<const geometry::SubMesh> DepthLikeSubMeshes(const RenderRecordContext& ctx,
+                                                                       const MeshRenderData& md, bool chain);
+        // The depth-like pipeline and material set (set 2) of a draw of `material` onto `d`; false
+        // when no pipeline is had.
+        bool DepthLikeDraw(const RenderRecordContext& ctx, materials::Material* material, bool instanced,
+                           bool pick, bool skinned, ResolvedDraw& d);
+        // Pushes `base` once per range, each with its range's pipeline, material set and indices.
+        void EmitDepthLike(const RenderRecordContext& ctx, const ResolvedDraw& base, const GpuMesh& mesh,
+                           Span<const DepthLikeRange> ranges, bool instanced, bool pick, bool skinned,
+                           Array<ResolvedDraw>& out);
+
         // Forward draw for a MultiMesh: bind this set's persistent InstanceData (set 1) and the shared draw offsets
         // ramp, one instanced draw per submesh material. There is no fill loop: the buffer already holds the
         // instances (uploaded in UploadMultiMeshes). The shader is the same instanced path (Instances[drawOffsets.x]).
@@ -509,17 +559,6 @@ export namespace foundation::render
 
         [[nodiscard]] static materials::PipelineConfig
         ConfigFor(const MeshRenderData& md, const RenderRecordContext& ctx, bool instanced);
-        // The same for one submesh slot's material: a slot draws with its own program (a custom
-        // shader on one slot, PBR on the rest), over the mesh's per-draw state (its fade).
-        [[nodiscard]] static materials::PipelineConfig ConfigFor(const MeshRenderData& md, const materials::Material* material,
-                                                          const RenderRecordContext& ctx, bool instanced);
-        // A submesh's pipeline: its slot material's when that differs from the mesh's and draws in
-        // the same pass (the same colour targets); else the mesh's `base`, skinning flags as given.
-        [[nodiscard]] static materials::PipelineConfig SlotConfigFor(const MeshRenderData& md,
-                                                              const materials::PipelineConfig& base,
-                                                              const materials::Material* slot,
-                                                              const RenderRecordContext& ctx, bool instanced,
-                                                              bool skinned);
 
         bool MakeLayout(const rhi::BindGroupLayoutEntry& entry, rhi::BindGroupLayout*& out);
 
@@ -697,6 +736,7 @@ export namespace foundation::render
         };
         HashMap<const Float4x4*, BoneSlot> m_boneStart{*m_allocator};
         Array<SkinnedRef> m_skinnedScratch{*m_allocator};
+        Array<DepthLikeRange> m_depthRanges{*m_allocator}; // a depth-like draw's ranges, reused
 
         // Per-entity previous-frame world matrix, for rigid-object motion vectors. A flat double buffer
         // indexed by entity index (entityId's low 32 bits) rather than a hash map: a per-instance lookup is

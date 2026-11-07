@@ -251,6 +251,66 @@ TEST_CASE("ExtractSceneInto maps a transparent material to the Transparent categ
     CHECK(md->category == RenderCategories::Transparent);
 }
 
+TEST_CASE("ExtractSceneInto splits a mesh whose slots draw in different categories, one item per category")
+{
+    // A storefront pane: its frame opaque in slot 0, its glass blended in slot 1. One item would draw
+    // the glass in the opaque pass (and its depth in the prepass), hiding the store behind it.
+    scene::Scene scene{DefaultAllocator()};
+    auto* meshes = scene.AddSystem<MeshComponentManager>();
+    RefPtr<geometry::StaticMesh> mesh = geometry::Primitives::Quad(DefaultAllocator());
+    RefPtr<materials::Material> frame = materials::MaterialBuilder(u8"frame").Shader(u8"forward").Build();
+    RefPtr<materials::Material> trim = materials::MaterialBuilder(u8"trim").Shader(u8"forward").Build();
+    RefPtr<materials::Material> glass =
+        materials::MaterialBuilder(u8"glass").Shader(u8"forward").Transparent().Build();
+    Array<RefPtr<materials::Material>> pane;
+    pane.PushBack(frame);
+    pane.PushBack(glass);
+    pane.PushBack(trim);
+    Array<RefPtr<materials::Material>> solid;
+    solid.PushBack(frame);
+    solid.PushBack(trim);
+    meshes->Add(scene.CreateEntity(u8"pane")).mesh = mesh;
+    meshes->Get(scene.FindEntityByName(u8"pane"))->SetMaterials(pane);
+    meshes->Add(scene.CreateEntity(u8"wall")).mesh = mesh;
+    meshes->Get(scene.FindEntityByName(u8"wall"))->SetMaterials(solid);
+    scene.UpdateTransforms();
+
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        ExtractedScene snapshot{DefaultAllocator()};
+        RenderContext ctx{DefaultAllocator()};
+        if (pass == 0)
+            ExtractSceneInto(scene, snapshot);
+        else
+        {
+            ctx.BeginFrame(1);
+            ExtractSceneInto(scene, snapshot, ctx); // the context's path splits alike
+        }
+        REQUIRE(snapshot.Size() == 3u); // the pane twice (opaque, transparent), the wall once
+        u32 paneOpaque = 0, paneGlass = 0, wall = 0;
+        for (RenderData* rd : snapshot.Items())
+        {
+            const auto* m = static_cast<const MeshRenderData*>(rd);
+            if (m->submeshMaterialCount == 3)
+            {
+                CHECK(m->categorySlots);
+                CHECK(m->material == frame.Get());
+                paneOpaque += m->category == RenderCategories::Opaque ? 1u : 0u;
+                paneGlass += m->category == RenderCategories::Transparent ? 1u : 0u;
+            }
+            else
+            {
+                CHECK_FALSE(m->categorySlots); // every slot opaque: one item, as before
+                CHECK(m->category == RenderCategories::Opaque);
+                ++wall;
+            }
+        }
+        CHECK(paneOpaque == 1u);
+        CHECK(paneGlass == 1u);
+        CHECK(wall == 1u);
+    }
+}
+
 TEST_CASE("ExtractSceneInto carries a mesh's fade, clamped, and draws a faded opaque mesh Masked")
 {
     scene::Scene scene{DefaultAllocator()};

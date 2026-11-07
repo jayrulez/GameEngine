@@ -42,8 +42,38 @@ export namespace engine::render
     // Packs an entity handle into the opaque MeshRenderData::entityId (for pick; opaque to core).
     [[nodiscard]] u64 PackEntity(scene::EntityHandle e) noexcept;
 
-    // Maps a material's blend preset to a render category (the dispatch and sort key).
-    [[nodiscard]] RenderCategory CategoryForMaterial(const materials::Material* m) noexcept;
+    // A multi-material mesh's items: `rd` for its first slot's category, and, when its other slots
+    // draw in other categories (a pane's glass beside its frame), a copy for each from `copy`, each
+    // marked to draw only its own category's submeshes. Returns how many copies it made.
+    template <typename Copy>
+    u32 SplitMeshByCategory(MeshRenderData& rd, Copy&& copy)
+    {
+        if (rd.submeshMaterials == nullptr)
+            return 0;
+        RenderCategory others[4];
+        u32 count = 0;
+        for (u32 i = 0; i < rd.submeshMaterialCount; ++i)
+        {
+            const RenderCategory c = MeshSlotCategory(rd.submeshMaterials[i].Get(), rd.fade);
+            bool seen = c == rd.category;
+            for (u32 k = 0; k < count && !seen; ++k)
+                seen = others[k] == c;
+            if (!seen && count < 4)
+                others[count++] = c;
+        }
+        if (count == 0)
+            return 0;
+        rd.categorySlots = true;
+        u32 made = 0;
+        for (u32 k = 0; k < count; ++k)
+            if (MeshRenderData* other = copy())
+            {
+                *other = rd;
+                other->category = others[k];
+                ++made;
+            }
+        return made;
+    }
 
     // Below this many mesh components, parallel extraction's overhead isn't worth it, so extract
     // serially. (Tuned conservatively; the win is at thousands of renderables.)

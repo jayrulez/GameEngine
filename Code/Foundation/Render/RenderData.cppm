@@ -241,6 +241,10 @@ export namespace foundation::render
         // the renderer draws each submesh with submeshMaterials[matIdx]; else `material` covers the mesh.
         const RefPtr<materials::Material>* submeshMaterials = nullptr;
         u32 submeshMaterialCount = 0;
+        // A multi-material mesh whose slots draw in different categories (a pane's glass blended,
+        // its frame opaque) comes as one item per category: this item draws only the submeshes
+        // whose material is in its `category` (MeshSlotCategory).
+        bool categorySlots = false;
         // Material properties set for this mesh alone (borrowed from its owner for the frame), and
         // their version, bumped whenever they change. A name is a shader property's, or an effect
         // group's value as `Effect.Property` (`Wind.Strength`). A mesh with any draws alone (it never
@@ -284,6 +288,35 @@ export namespace foundation::render
         Explicit,
         Unison
     };
+
+    // The category a material draws in, the dispatch and sort key: Masked for an alpha-tested
+    // cut-out, or for an opaque material whose shader moves its vertices (it draws its depth with a
+    // program of its own, compiled apart from its forward one: the forward pass's equal test against
+    // the camera depth prepass would flicker where they differ, so it stays out of the prepass, as a
+    // fading mesh does); Transparent for a blend; else Opaque.
+    [[nodiscard]] inline RenderCategory CategoryForMaterial(const materials::Material* m) noexcept
+    {
+        if (m == nullptr)
+            return RenderCategories::Opaque;
+        switch (m->pipeline.blendMode)
+        {
+        case materials::BlendMode::Opaque:
+            return m->depthShaderName.IsEmpty() ? RenderCategories::Opaque : RenderCategories::Masked;
+        case materials::BlendMode::Masked:
+            return RenderCategories::Masked;
+        default:
+            return RenderCategories::Transparent;
+        }
+    }
+
+    // The category a mesh's slot draws in: its material's, an opaque one Masked while the mesh fades
+    // (the screen-door dither keeps it out of the depth prepass, whose depth would hide what shows
+    // through it).
+    [[nodiscard]] inline RenderCategory MeshSlotCategory(const materials::Material* m, f32 fade) noexcept
+    {
+        const RenderCategory c = CategoryForMaterial(m);
+        return (fade > 0.0f && c == RenderCategories::Opaque) ? RenderCategories::Masked : c;
+    }
 
     // An instanced-mesh set (a "MultiMesh"): one shared mesh and material drawn `instanceCount` times,
     // whose per-instance transforms live in a persistent GPU buffer owned by the renderer (keyed by

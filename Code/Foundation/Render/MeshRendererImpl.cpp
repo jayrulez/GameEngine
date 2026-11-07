@@ -1203,7 +1203,8 @@ namespace foundation::render
                 {
                     const auto* nd = static_cast<const MeshRenderData*>(items[j].data);
                     if (nd->multiMesh || nd->mesh != head->mesh || nd->material != head->material ||
-                        (nd->fade > 0.0f) != headFaded || nd->overrideCount > 0)
+                        (nd->fade > 0.0f) != headFaded || nd->overrideCount > 0 ||
+                        nd->categorySlots != head->categorySlots) // a split mesh's item draws some slots only
                     {
                         break;
                     }
@@ -1308,7 +1309,8 @@ namespace foundation::render
             while (j < items.Size())
             {
                 const auto* nd = static_cast<const MeshRenderData*>(items[j].data);
-                if (nd->multiMesh || nd->mesh != head->mesh || nd->material != head->material)
+                if (nd->multiMesh || nd->mesh != head->mesh || nd->material != head->material ||
+                    nd->categorySlots != head->categorySlots) // a split mesh's item draws some slots only
                 {
                     break;
                 }
@@ -1462,6 +1464,8 @@ namespace foundation::render
                     m = md.material;
                     slot = 0;
                 } // OOB/unresolved slot -> slot 0
+                if (md.categorySlots && MeshSlotCategory(m, md.fade) != md.category)
+                    continue; // another of this mesh's items draws it, in its own pass
                 emit(m, slot, mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride,
                      static_cast<u32>(sub.indexCount));
             }
@@ -1605,6 +1609,8 @@ namespace foundation::render
                 {
                     m = head.material;
                 } // OOB/unresolved slot -> slot 0
+                if (head.categorySlots && MeshSlotCategory(m, head.fade) != head.category)
+                    continue; // another of this mesh's items draws it, in its own pass
                 emit(m, mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride,
                      static_cast<u32>(sub.indexCount));
             }
@@ -1622,42 +1628,16 @@ namespace foundation::render
         u32 boneBase = 0;
         bool skinned = md.boneMatrices != nullptr && md.boneCount > 0 && md.mesh != nullptr &&
                        md.mesh->IsSkinned() && mesh.skinBuffer != nullptr;
-        // Masked casters cast holey shadows via the alpha-test fragment (needs the material set 2).
-        const DepthLikeChoice choice = DepthLikeFor(ctx, md.material, /*instanced*/ false, pick);
-        materials::PipelineConfig config = choice.config;
         if (skinned)
         {
-            const BoneSlot* s = m_boneStart.Find(md.boneMatrices);
-            if (s != nullptr)
+            if (const BoneSlot* s = m_boneStart.Find(md.boneMatrices))
             {
                 boneBase = s->base; // shared device pool (uploaded once this frame)
-                config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
-                config.shaderFlags |= shaders::ShaderFlags::Skinned;
             }
             else
             {
                 skinned = false;
             }
-        }
-        rhi::BindGroup* matSet = nullptr;
-        rhi::PipelineLayout* layout = m_shadowPipelineLayoutSingle;
-        if (choice.materialSet)
-        {
-            rhi::BindGroupLayout* set2 = m_materials->GetOrCreateLayout(*md.material);
-            layout = GetOrCreateShadowMaskedLayout(set2, /*instanced*/ false);
-            matSet = m_materials->PrepareInstance(*InstanceFor(md.material), set2);
-            if (layout == nullptr)
-            {
-                layout = m_shadowPipelineLayoutSingle;
-                matSet = nullptr;
-                config = pick ? PickConfigFor(ctx, false, false) : ShadowConfigFor(ctx, false, false);
-            }
-        }
-        rhi::RenderPipeline* pso = m_psoCache->GetPipeline(
-            config, layout, pick ? ctx.colorFormat : rhi::TextureFormat::Undefined);
-        if (pso == nullptr)
-        {
-            return;
         }
         const DynamicUniformRing::Range obj = m_objectRing.Allocate();
         if (!obj.ok)
@@ -1674,14 +1654,12 @@ namespace foundation::render
         *static_cast<GpuObject*>(obj.ptr) = od;
 
         ResolvedDraw d{};
-        d.pso = pso;
         d.viewSet = m_shadowViewBG;
         d.viewOffset = shadowViewOffset;
         d.viewDynamic = true; // set 0: light view
         d.drawSet = m_objectBG;
         d.drawOffset = obj.byteOffset;
-        d.drawDynamic = true;   // set 1: object UBO
-        d.materialSet = matSet; // set 2: the material (a cut-out, wind, or its own program)
+        d.drawDynamic = true; // set 1: object UBO
         d.vertexBuffer0 = mesh.vertexBuffer;
         d.vertexOffset0 = mesh.vertexOffset;
         if (skinned)
@@ -1694,23 +1672,12 @@ namespace foundation::render
         d.indexFormat = mesh.indexFormat;
         d.indexCount = mesh.indexCount;
         d.instanceCount = 1;
-        // A LOD chain: this view's selected level, one draw per submesh range (the whole-buffer
-        // path would cast every concatenated level's shadow at once).
-        if (md.mesh != nullptr && md.mesh->lodCount > 1)
-        {
-            const Span<const geometry::SubMesh> subs =
-                md.mesh->SubMeshesForLod(SelectLod(ctx, md));
-            const u64 stride = (mesh.indexFormat == rhi::IndexFormat::UInt16) ? 2u : 4u;
-            for (const geometry::SubMesh& sub : subs)
-            {
-                ResolvedDraw c = d;
-                c.indexOffset = mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride;
-                c.indexCount = static_cast<u32>(sub.indexCount);
-                out.PushBack(c);
-            }
-            return;
-        }
-        out.PushBack(d);
+        // Each submesh with its own slot's material, as the forward draws it (a masked slot cuts
+        // its holes in the prepass and the shadows), in this view's LOD level for a chain.
+        const bool chain = md.mesh != nullptr && md.mesh->lodCount > 1;
+        DepthLikeRanges(ctx, md.material, md.submeshMaterials, md.submeshMaterialCount,
+                        DepthLikeSubMeshes(ctx, md, chain), chain, /*instanced*/ false, pick, m_depthRanges, &md);
+        EmitDepthLike(ctx, d, mesh, Span<const DepthLikeRange>(m_depthRanges.Data(), m_depthRanges.Size()), /*instanced*/ false, pick, skinned, out);
     }
 
     void MeshRenderer::ResolveDepthInstanced(const RenderRecordContext& ctx, u32 shadowViewOffset,
@@ -1721,33 +1688,6 @@ namespace foundation::render
         const auto& head = *static_cast<const MeshRenderData*>(items[first].data);
         const bool skinned = head.boneMatrices != nullptr && head.mesh != nullptr &&
                              head.mesh->IsSkinned() && mesh.skinBuffer != nullptr;
-        const DepthLikeChoice choice = DepthLikeFor(ctx, head.material, /*instanced*/ true, pick);
-        materials::PipelineConfig config = choice.config;
-        if (skinned)
-        {
-            config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
-            config.shaderFlags |= shaders::ShaderFlags::Skinned;
-        }
-        rhi::BindGroup* matSet = nullptr;
-        rhi::PipelineLayout* layout = m_shadowPipelineLayoutInstanced;
-        if (choice.materialSet)
-        {
-            rhi::BindGroupLayout* set2 = m_materials->GetOrCreateLayout(*head.material);
-            layout = GetOrCreateShadowMaskedLayout(set2, /*instanced*/ true);
-            matSet = m_materials->PrepareInstance(*InstanceFor(head.material), set2);
-            if (layout == nullptr)
-            {
-                layout = m_shadowPipelineLayoutInstanced;
-                matSet = nullptr;
-                config = pick ? PickConfigFor(ctx, true, false) : ShadowConfigFor(ctx, true, false);
-            }
-        }
-        rhi::RenderPipeline* pso = m_psoCache->GetPipeline(
-            config, layout, pick ? ctx.colorFormat : rhi::TextureFormat::Undefined);
-        if (pso == nullptr)
-        {
-            return;
-        }
         const DynamicUniformRing::Range inst = m_instanceRing.AllocateRange(count);
         const DynamicUniformRing::Range offs = m_offsetsRing.AllocateRange(count);
         if (!inst.ok || !offs.ok)
@@ -1799,13 +1739,11 @@ namespace foundation::render
         }
 
         ResolvedDraw d{};
-        d.pso = pso;
         d.viewSet = m_shadowViewBG;
         d.viewOffset = shadowViewOffset;
         d.viewDynamic = true; // set 0: light view
         d.drawSet = m_instanceBG;
-        d.drawDynamic = false;  // set 1: instances (whole)
-        d.materialSet = matSet; // set 2: the material (a cut-out, wind, or its own program)
+        d.drawDynamic = false; // set 1: instances (whole)
         d.vertexBuffer0 = mesh.vertexBuffer;
         d.vertexOffset0 = mesh.vertexOffset;
         if (skinned)
@@ -1825,22 +1763,12 @@ namespace foundation::render
         d.indexFormat = mesh.indexFormat;
         d.indexCount = mesh.indexCount;
         d.instanceCount = count;
-        // LOD chain: one level for the whole instanced batch (the head's bounds), per-submesh draws.
-        if (head.mesh != nullptr && head.mesh->lodCount > 1)
-        {
-            const Span<const geometry::SubMesh> subs =
-                head.mesh->SubMeshesForLod(SelectLod(ctx, head));
-            const u64 stride = (mesh.indexFormat == rhi::IndexFormat::UInt16) ? 2u : 4u;
-            for (const geometry::SubMesh& sub : subs)
-            {
-                ResolvedDraw c = d;
-                c.indexOffset = mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride;
-                c.indexCount = static_cast<u32>(sub.indexCount);
-                out.PushBack(c);
-            }
-            return;
-        }
-        out.PushBack(d);
+        // Each submesh with its own slot's material; a LOD chain's one level for the whole batch
+        // (the head's bounds).
+        const bool chain = head.mesh != nullptr && head.mesh->lodCount > 1;
+        DepthLikeRanges(ctx, head.material, head.submeshMaterials, head.submeshMaterialCount,
+                        DepthLikeSubMeshes(ctx, head, chain), chain, /*instanced*/ true, pick, m_depthRanges, &head);
+        EmitDepthLike(ctx, d, mesh, Span<const DepthLikeRange>(m_depthRanges.Data(), m_depthRanges.Size()), /*instanced*/ true, pick, skinned, out);
     }
 
     void MeshRenderer::ResolveMultiMesh(const RenderRecordContext& ctx, u32 viewOffset,
@@ -1964,46 +1892,12 @@ namespace foundation::render
         {
             return;
         }
-        const DepthLikeChoice choice = DepthLikeFor(ctx, mm.material, /*instanced*/ true, pick);
-        materials::PipelineConfig config = choice.config;
-        if (skinned)
-        {
-            config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
-            config.shaderFlags |= shaders::ShaderFlags::Skinned;
-        }
-        rhi::BindGroup* matSet = nullptr;
-        rhi::PipelineLayout* layout = m_shadowPipelineLayoutInstanced;
-        if (choice.materialSet)
-        {
-            rhi::BindGroupLayout* set2 = m_materials->GetOrCreateLayout(*mm.material);
-            layout = GetOrCreateShadowMaskedLayout(set2, /*instanced*/ true);
-            matSet = m_materials->PrepareInstance(*InstanceFor(mm.material), set2);
-            if (layout == nullptr)
-            {
-                layout = m_shadowPipelineLayoutInstanced;
-                matSet = nullptr;
-                config = pick ? PickConfigFor(ctx, true, false) : ShadowConfigFor(ctx, true, false);
-                if (skinned)
-                {
-                    config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
-                    config.shaderFlags |= shaders::ShaderFlags::Skinned;
-                }
-            }
-        }
-        rhi::RenderPipeline* pso = m_psoCache->GetPipeline(
-            config, layout, pick ? ctx.colorFormat : rhi::TextureFormat::Undefined);
-        if (pso == nullptr)
-        {
-            return;
-        }
         ResolvedDraw d{};
-        d.pso = pso;
         d.viewSet = m_shadowViewBG;
         d.viewOffset = shadowViewOffset;
         d.viewDynamic = true; // set 0: light view
         d.drawSet = set->activeInstanceBG;
         d.drawDynamic = false; // set 1: this set's instances
-        d.materialSet = matSet;
         d.vertexBuffer0 = mesh.vertexBuffer;
         d.vertexOffset0 = mesh.vertexOffset;
         if (skinned)
@@ -2024,21 +1918,128 @@ namespace foundation::render
         d.indexFormat = mesh.indexFormat;
         d.indexCount = mesh.indexCount;
         d.instanceCount = set->count;
-        // LOD chain: one level for the whole set (its merged bounds), per-submesh draws.
-        if (mm.mesh != nullptr && mm.mesh->lodCount > 1)
+        // Each submesh with its own slot's material; a LOD chain's one level for the whole set (its
+        // merged bounds).
+        const bool chain = mm.mesh != nullptr && mm.mesh->lodCount > 1;
+        DepthLikeRanges(ctx, mm.material, mm.submeshMaterials, mm.submeshMaterialCount,
+                        DepthLikeSubMeshes(ctx, mm, chain), chain, /*instanced*/ true, pick, m_depthRanges, &mm);
+        EmitDepthLike(ctx, d, mesh, Span<const DepthLikeRange>(m_depthRanges.Data(), m_depthRanges.Size()), /*instanced*/ true, pick, skinned, out);
+    }
+
+    Span<const geometry::SubMesh> MeshRenderer::DepthLikeSubMeshes(const RenderRecordContext& ctx,
+                                                                   const MeshRenderData& md, bool chain)
+    {
+        if (md.mesh == nullptr)
+            return {};
+        if (chain)
+            return md.mesh->SubMeshesForLod(SelectLod(ctx, md));
+        if (md.submeshMaterialCount == 0)
+            return {}; // one material covers the mesh
+        return Span<const geometry::SubMesh>(md.mesh->subMeshes.Data(), md.mesh->subMeshes.Size());
+    }
+
+    void MeshRenderer::DepthLikeRanges(const RenderRecordContext& ctx, materials::Material* slot0,
+                                       const RefPtr<materials::Material>* slots, u32 slotCount,
+                                       Span<const geometry::SubMesh> subMeshes, bool chain, bool instanced,
+                                       bool pick, Array<DepthLikeRange>& out, const MeshRenderData* only)
+    {
+        const bool filter = only != nullptr && only->categorySlots;
+        out.Clear();
+        if (subMeshes.IsEmpty())
         {
-            const Span<const geometry::SubMesh> subs = mm.mesh->SubMeshesForLod(SelectLod(ctx, mm));
-            const u64 stride = (mesh.indexFormat == rhi::IndexFormat::UInt16) ? 2u : 4u;
-            for (const geometry::SubMesh& sub : subs)
-            {
-                ResolvedDraw c = d;
-                c.indexOffset = mesh.indexOffset + static_cast<u64>(sub.startIndex) * stride;
-                c.indexCount = static_cast<u32>(sub.indexCount);
-                out.PushBack(c);
-            }
+            out.PushBack(DepthLikeRange{slot0, 0, 0, true});
             return;
         }
-        out.PushBack(d);
+        for (const geometry::SubMesh& sub : subMeshes)
+        {
+            materials::Material* m = (slots != nullptr && sub.materialIndex >= 0 &&
+                                      static_cast<u32>(sub.materialIndex) < slotCount)
+                                         ? slots[sub.materialIndex].Get()
+                                         : nullptr;
+            if (m == nullptr)
+                m = slot0; // an unresolved slot draws as slot 0, as the forward does
+            if (filter && MeshSlotCategory(m, only->fade) != only->category)
+                continue; // another of the mesh's items draws it (in its own pass, or none)
+            out.PushBack(DepthLikeRange{m, static_cast<u32>(sub.startIndex), static_cast<u32>(sub.indexCount), false});
+        }
+        if (chain || filter || out.IsEmpty())
+            return; // a LOD level is its ranges (the buffer holds every level), as is a filtered mesh's
+        // One draw of the whole mesh when every range draws alike: one material, or the plain
+        // program with no material set for all (opaque slots), as most meshes' shadows are.
+        const DepthLikeChoice first = DepthLikeFor(ctx, out[0].material, instanced, pick);
+        bool alike = true;
+        for (usize i = 1; i < out.Size() && alike; ++i)
+        {
+            if (out[i].material == out[0].material)
+                continue;
+            const DepthLikeChoice other = DepthLikeFor(ctx, out[i].material, instanced, pick);
+            alike = !first.materialSet && !other.materialSet && other.config == first.config;
+        }
+        if (alike)
+        {
+            materials::Material* m = out[0].material;
+            out.Clear();
+            out.PushBack(DepthLikeRange{m, 0, 0, true});
+        }
+    }
+
+    bool MeshRenderer::DepthLikeDraw(const RenderRecordContext& ctx, materials::Material* material,
+                                     bool instanced, bool pick, bool skinned, ResolvedDraw& d)
+    {
+        const DepthLikeChoice choice = DepthLikeFor(ctx, material, instanced, pick);
+        materials::PipelineConfig config = choice.config;
+        const auto skin = [skinned](materials::PipelineConfig& c)
+        {
+            if (skinned)
+            {
+                c.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
+                c.shaderFlags |= shaders::ShaderFlags::Skinned;
+            }
+        };
+        skin(config);
+        rhi::PipelineLayout* const plain = instanced ? m_shadowPipelineLayoutInstanced : m_shadowPipelineLayoutSingle;
+        rhi::PipelineLayout* layout = plain;
+        rhi::BindGroup* matSet = nullptr;
+        if (choice.materialSet && material != nullptr)
+        {
+            rhi::BindGroupLayout* set2 = m_materials->GetOrCreateLayout(*material);
+            layout = GetOrCreateShadowMaskedLayout(set2, instanced);
+            matSet = m_materials->PrepareInstance(*InstanceFor(material), set2);
+            if (layout == nullptr)
+            {
+                // No layout over the material's set: the built-in program, without it.
+                layout = plain;
+                matSet = nullptr;
+                config = pick ? PickConfigFor(ctx, instanced, false) : ShadowConfigFor(ctx, instanced, false);
+                skin(config);
+            }
+        }
+        rhi::RenderPipeline* pso = m_psoCache->GetPipeline(
+            config, layout, pick ? ctx.colorFormat : rhi::TextureFormat::Undefined);
+        if (pso == nullptr)
+            return false;
+        d.pso = pso;
+        d.materialSet = matSet; // set 2: the material (a cut-out, wind, or its own program)
+        return true;
+    }
+
+    void MeshRenderer::EmitDepthLike(const RenderRecordContext& ctx, const ResolvedDraw& base,
+                                     const GpuMesh& mesh, Span<const DepthLikeRange> ranges,
+                                     bool instanced, bool pick, bool skinned, Array<ResolvedDraw>& out)
+    {
+        const u64 stride = (mesh.indexFormat == rhi::IndexFormat::UInt16) ? 2u : 4u;
+        for (const DepthLikeRange& range : ranges)
+        {
+            ResolvedDraw d = base;
+            if (!DepthLikeDraw(ctx, range.material, instanced, pick, skinned, d))
+                continue;
+            if (!range.whole)
+            {
+                d.indexOffset = mesh.indexOffset + static_cast<u64>(range.startIndex) * stride;
+                d.indexCount = range.indexCount;
+            }
+            out.PushBack(d);
+        }
     }
 
     MeshRenderer::DepthLikeChoice MeshRenderer::DepthLikeFor(const RenderRecordContext& ctx,
@@ -2166,8 +2167,9 @@ namespace foundation::render
         }
         materials::PipelineConfig config = ConfigFor(md, slot, ctx, instanced);
         // A slot of another blend class (a transparent slot on an opaque mesh) belongs to another
-        // pass, whose targets this one does not have: it keeps the mesh's pipeline.
-        if (config.colorTargetCount != base.colorTargetCount)
+        // pass, whose targets this one does not have: it keeps the mesh's pipeline. An item of a
+        // mesh split by category draws its own pass's slots alone, each with its own pipeline.
+        if (!md.categorySlots && config.colorTargetCount != base.colorTargetCount)
         {
             return base;
         }

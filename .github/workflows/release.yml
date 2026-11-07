@@ -133,7 +133,7 @@ jobs:
   windows:
     name: Editor dist + template (Windows x64)
     needs: guard
-    runs-on: windows-2022 # pinned so releases run on the same image CI exercises
+    runs-on: windows-latest # the image CI's Windows jobs build and test on (Visual Studio 2026's MSVC)
     permissions:
       contents: write # publishes release assets
     timeout-minutes: 180

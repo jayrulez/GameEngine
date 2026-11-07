@@ -262,8 +262,14 @@ jobs:
         with:
           version: 6.0.5
           actions-cache-folder: emsdk-cache
-      - name: Configure the wasm build (Release)
-        run: emcmake cmake -S . -B build/wasm-shipping -G Ninja -DCMAKE_BUILD_TYPE=Release
+      # The wasm-shipping preset (Release, shipping, the -Shipping output suffix the template script
+      # packages from); configured by hand without it, the player lands in another Bin folder.
+      - name: Configure the wasm build (the wasm-shipping preset)
+        run: |
+          # The preset finds the toolchain under $EMSDK; derive it from emcc when the action did not set it.
+          export EMSDK="${EMSDK:-$(cd "$(dirname "$(command -v emcc)")/../.." && pwd)}"
+          echo "EMSDK=$EMSDK"
+          cmake --preset wasm-shipping
       - name: Build web deployment template
         run: |
           VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"

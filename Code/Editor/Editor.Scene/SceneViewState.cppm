@@ -56,7 +56,8 @@ export namespace editor
             const f32 distance = radius / Sin(0.5f * camera.fovY);
             camera.position = center - camera.Forward() * distance;
             camera.focusDistance = distance; // an orbit turns about the scene's middle
-            camera.nearZ = Max(0.1f, 0.5f * (distance - radius));
+            // The near plane stays: the page's camera is the one the user then zooms in with, and a
+            // near plane pushed out to the bounds would cut away everything closer than it.
             camera.farZ = Max(camera.farZ, distance + 2.0f * radius);
             return true;
         }

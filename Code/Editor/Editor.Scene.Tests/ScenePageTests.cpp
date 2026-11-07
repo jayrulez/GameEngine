@@ -440,6 +440,7 @@ TEST_CASE("scene view state: a scene is framed whole in perspective from above, 
     CHECK(distance * Sin(0.5f * camera.fovY) >= Length(bounds.Extents()) - 0.01f);            // the bounds fit its view
     CHECK(camera.focusDistance == doctest::Approx(distance));                                 // an orbit turns about it
     CHECK(camera.farZ > distance + Length(bounds.Extents()));
+    CHECK(camera.nearZ == EditorCamera{}.nearZ); // zooming in afterwards still shows what is close
 }
 
 TEST_CASE("scene page: a scene with no saved view opens showing what is in it, not the origin")

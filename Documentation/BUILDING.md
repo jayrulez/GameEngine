@@ -29,7 +29,8 @@
   The MSVC that works is Visual Studio 2026's (toolset 14.51, compiler 19.51), which CI builds and
   tests with. Visual Studio 2022's (14.44, compiler 19.44) does not: a shared build fails to link
   one library's module constants from another (`LNK2001` on `Color32::Black` when `Image.dll`
-  links against Core). With both installed, `build-msvc.cmd` picks the newer toolset itself.
+  links against Core), so configuring with an MSVC older than 19.51 stops with an error naming the
+  one to install. With both installed, `build-msvc.cmd` picks the newer toolset itself.
 - A Vulkan 1.3 (or, on Windows, D3D12) capable GPU to run anything that draws.
 - For web builds, emsdk 6.0.5 with the project's response file patch applied; see
   [Guides/emscripten-windows.md](Guides/emscripten-windows.md).

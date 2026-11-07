@@ -76,6 +76,15 @@ if(ENGINE_SHARED_LIBS AND EMSCRIPTEN)
     message(FATAL_ERROR "ENGINE_SHARED_LIBS is not supported for Emscripten - the web "
                         "target is always a static single binary (shared-libraries.md).")
 endif()
+# The MSVC the engine builds and is tested with is Visual Studio 2026's (compiler 19.51). Visual
+# Studio 2022's (19.44) fails a shared build, unable to link one library's module constants from
+# another, so an older MSVC stops here rather than an hour into the build (BUILDING.md).
+# clang-cl reports itself as Clang and is not checked.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 19.51)
+    message(FATAL_ERROR "MSVC ${CMAKE_CXX_COMPILER_VERSION} is too old: the engine needs Visual "
+                        "Studio 2026's MSVC (19.51 or newer). Install it, or build with Clang 21. "
+                        "See Documentation/BUILDING.md.")
+endif()
 if(ENGINE_SHARED_LIBS)
     # Binaries and libraries land together in Bin/<cfg>/<plat>; $ORIGIN makes the
     # loader find sibling .so files without LD_LIBRARY_PATH.
